@@ -1,0 +1,15 @@
+{
+  "nombre": "Muchos a muchos",
+  "clases": [
+    { "id": "c1", "name": "Estudiante", "attributes": [
+      { "name": "registro", "dataType": "string", "pk": true, "required": true }]},
+    { "id": "c2", "name": "Materia",    "attributes": [
+      { "name": "sigla", "dataType": "string", "pk": true, "required": true }]}
+  ],
+  "relaciones": [
+    { "sourceClassId": "c1", "targetClassId": "c2", "kind": "ASSOCIATION",
+      "sourceRole": "estudiantes", "targetRole": "materias",
+      "sourceMultiplicity": "0..*", "targetMultiplicity": "0..*" }
+  ],
+  "esperado": "tabla puente estudiante_materia(estudiante_id, materia_id); @ManyToMany @JoinTable"
+}

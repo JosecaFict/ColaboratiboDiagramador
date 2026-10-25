@@ -1,0 +1,171 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Reflexiva y doble relacion - Regla 3",
+  "entities" : [
+    {
+      "name" : "Empleado",
+      "label" : "Empleado",
+      "path" : "/api/empleado",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "empleado"
+      ],
+      "fields" : [
+        {
+          "name" : "nombre",
+          "label" : "nombre",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nombre"
+          ]
+        },
+        {
+          "name" : "jefeId",
+          "label" : "jefe",
+          "type" : "reference",
+          "required" : false,
+          "unique" : false,
+          "target" : "Empleado",
+          "synonyms" : [
+            "jefe",
+            "empleado"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "jefe",
+          "target" : "Empleado",
+          "many" : false,
+          "field" : "jefeId"
+        },
+        {
+          "name" : "empleados",
+          "target" : "Empleado",
+          "many" : true,
+          "inverseOf" : "jefeId"
+        }
+      ]
+    },
+    {
+      "name" : "Vuelo",
+      "label" : "Vuelo",
+      "path" : "/api/vuelo",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "vuelo"
+      ],
+      "fields" : [
+        {
+          "name" : "codigo",
+          "label" : "codigo",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "codigo"
+          ]
+        },
+        {
+          "name" : "origenId",
+          "label" : "origen",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "Aeropuerto",
+          "synonyms" : [
+            "origen",
+            "aeropuerto"
+          ]
+        },
+        {
+          "name" : "destinoId",
+          "label" : "destino",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "Aeropuerto",
+          "synonyms" : [
+            "destino",
+            "aeropuerto"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "origen",
+          "target" : "Aeropuerto",
+          "many" : false,
+          "field" : "origenId"
+        },
+        {
+          "name" : "destino",
+          "target" : "Aeropuerto",
+          "many" : false,
+          "field" : "destinoId"
+        }
+      ]
+    },
+    {
+      "name" : "Aeropuerto",
+      "label" : "Aeropuerto",
+      "path" : "/api/aeropuerto",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "aeropuerto"
+      ],
+      "fields" : [
+        {
+          "name" : "iata",
+          "label" : "iata",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "iata"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "vuelos",
+          "target" : "Vuelo",
+          "many" : true,
+          "inverseOf" : "origenId"
+        },
+        {
+          "name" : "vuelos2",
+          "target" : "Vuelo",
+          "many" : true,
+          "inverseOf" : "destinoId"
+        }
+      ]
+    }
+  ]
+}

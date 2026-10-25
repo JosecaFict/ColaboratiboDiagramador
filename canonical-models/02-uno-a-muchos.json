@@ -1,0 +1,16 @@
+{
+  "nombre": "Uno a muchos",
+  "clases": [
+    { "id": "c1", "name": "Cliente",  "attributes": [
+      { "name": "nombre", "dataType": "string", "required": true }]},
+    { "id": "c2", "name": "Pedido",   "attributes": [
+      { "name": "fecha", "dataType": "datetime", "required": true },
+      { "name": "total", "dataType": "decimal",  "required": true }]}
+  ],
+  "relaciones": [
+    { "sourceClassId": "c1", "targetClassId": "c2", "kind": "ASSOCIATION",
+      "sourceRole": "cliente", "targetRole": "pedidos",
+      "sourceMultiplicity": "1", "targetMultiplicity": "0..*" }
+  ],
+  "esperado": "pedido.cliente_id FK NOT NULL + indice; @ManyToOne LAZY en Pedido, @OneToMany(mappedBy) en Cliente"
+}

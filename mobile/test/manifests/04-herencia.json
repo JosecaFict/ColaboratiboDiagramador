@@ -1,0 +1,151 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Herencia JOINED",
+  "entities" : [
+    {
+      "name" : "Persona",
+      "label" : "Persona",
+      "path" : "/api/persona",
+      "abstract" : true,
+      "actions" : [
+        "list",
+        "get",
+        "delete"
+      ],
+      "synonyms" : [
+        "persona"
+      ],
+      "fields" : [
+        {
+          "name" : "nombre",
+          "label" : "nombre",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nombre"
+          ]
+        },
+        {
+          "name" : "ci",
+          "label" : "ci",
+          "type" : "string",
+          "required" : false,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "ci"
+          ]
+        }
+      ],
+      "relations" : [ ]
+    },
+    {
+      "name" : "Empleado",
+      "label" : "Empleado",
+      "path" : "/api/empleado",
+      "abstract" : false,
+      "parent" : "Persona",
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "empleado"
+      ],
+      "fields" : [
+        {
+          "name" : "nombre",
+          "label" : "nombre",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nombre"
+          ]
+        },
+        {
+          "name" : "ci",
+          "label" : "ci",
+          "type" : "string",
+          "required" : false,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "ci"
+          ]
+        },
+        {
+          "name" : "cargo",
+          "label" : "cargo",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "cargo"
+          ]
+        }
+      ],
+      "relations" : [ ]
+    },
+    {
+      "name" : "Cliente",
+      "label" : "Cliente",
+      "path" : "/api/cliente",
+      "abstract" : false,
+      "parent" : "Persona",
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "cliente"
+      ],
+      "fields" : [
+        {
+          "name" : "nombre",
+          "label" : "nombre",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nombre"
+          ]
+        },
+        {
+          "name" : "ci",
+          "label" : "ci",
+          "type" : "string",
+          "required" : false,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "ci"
+          ]
+        },
+        {
+          "name" : "nit",
+          "label" : "nit",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nit"
+          ]
+        }
+      ],
+      "relations" : [ ]
+    }
+  ]
+}

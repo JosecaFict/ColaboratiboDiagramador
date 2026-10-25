@@ -1,0 +1,17 @@
+{
+  "nombre": "Herencia JOINED",
+  "clases": [
+    { "id": "c1", "name": "Persona", "isAbstract": true, "attributes": [
+      { "name": "nombre", "dataType": "string", "required": true },
+      { "name": "ci",     "dataType": "string", "unique": true }]},
+    { "id": "c2", "name": "Empleado", "attributes": [
+      { "name": "cargo", "dataType": "string" }]},
+    { "id": "c3", "name": "Cliente",  "attributes": [
+      { "name": "nit",   "dataType": "string" }]}
+  ],
+  "relaciones": [
+    { "sourceClassId": "c2", "targetClassId": "c1", "kind": "GENERALIZATION" },
+    { "sourceClassId": "c3", "targetClassId": "c1", "kind": "GENERALIZATION" }
+  ],
+  "esperado": "3 tablas con PK compartida; @Inheritance(JOINED). OJO: la clase ABSTRACTA si genera tabla bajo JOINED"
+}

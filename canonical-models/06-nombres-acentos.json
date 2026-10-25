@@ -1,0 +1,21 @@
+{
+  "nombre": "Nombres hostiles - Regla 8",
+  "comentario": "Este modelo rompe a un generador ingenuo. Es el mas probable el dia de la demo.",
+  "clases": [
+    { "id": "c1", "name": "Año Académico", "attributes": [
+      { "name": "descripción", "dataType": "string", "required": true },
+      { "name": "orden",       "dataType": "int" }]},
+    { "id": "c2", "name": "Niño", "attributes": [
+      { "name": "user",  "dataType": "string" },
+      { "name": "group", "dataType": "string" },
+      { "name": "nombre_completo_del_representante_legal_autorizado", "dataType": "string" }]},
+    { "id": "c3", "name": "Pez", "attributes": [
+      { "name": "especie", "dataType": "string" }]}
+  ],
+  "relaciones": [
+    { "sourceClassId": "c1", "targetClassId": "c2", "kind": "ASSOCIATION",
+      "sourceRole": "anioAcademico", "targetRole": "ninios",
+      "sourceMultiplicity": "1", "targetMultiplicity": "0..*" }
+  ],
+  "esperado": "tablas anio_academico, ninio, pez (NO 'pezs'); columnas descripcion, user_, group_; identificador truncado a 63 bytes con hash"
+}

@@ -1,0 +1,20 @@
+{
+  "nombre": "Clase asociativa (N:M con atributos)",
+  "clases": [
+    { "id": "c1", "name": "Estudiante",  "attributes": [
+      { "name": "registro", "dataType": "string", "pk": true }]},
+    { "id": "c2", "name": "Materia",     "attributes": [
+      { "name": "sigla", "dataType": "string", "pk": true }]},
+    { "id": "c3", "name": "Inscripcion", "erKind": "ASSOCIATIVE", "attributes": [
+      { "name": "fecha", "dataType": "date", "required": true },
+      { "name": "nota",  "dataType": "decimal" }]}
+  ],
+  "relaciones": [
+    { "sourceClassId": "c1", "targetClassId": "c3", "kind": "ASSOCIATION",
+      "sourceRole": "estudiante", "sourceMultiplicity": "1", "targetMultiplicity": "0..*" },
+    { "sourceClassId": "c2", "targetClassId": "c3", "kind": "ASSOCIATION",
+      "sourceRole": "materia",   "sourceMultiplicity": "1", "targetMultiplicity": "0..*" }
+  ],
+  "ambiguedad": "A-4: lectura OO (id surrogado) vs lectura DATOS (PK compuesta). Se pregunta una vez.",
+  "esperado": "entidad Inscripcion con id surrogado propio + 2 FK; NO @EmbeddedId"
+}

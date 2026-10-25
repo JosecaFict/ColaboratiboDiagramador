@@ -1,0 +1,41 @@
+# Java / Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins*
+mobile/android/.gradle/
+mobile/android/local.properties
+*.iml
+
+# IDE
+.idea/
+.vscode/
+nbproject/private/
+*.swp
+
+# Entorno
+.env
+.env.local
+
+# Artefactos generados por la herramienta
+/var/gen/
+generated/
+
+# Logs de correr backend/frontend en segundo plano
+run.log
+run.err.log
+vite.log
+vite.err.log
+
+# Claude Code: configuracion local de herramienta y arboles de trabajo
+.claude/

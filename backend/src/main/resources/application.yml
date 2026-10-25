@@ -1,0 +1,154 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: colabmodel
+
+  datasource:
+    # 127.0.0.1 evita que Windows resuelva localhost por IPv6 hacia una
+    # instancia nativa distinta del PostgreSQL publicado por Docker.
+    url: jdbc:postgresql://127.0.0.1:55432/colabmodel
+    username: colabmodel
+    password: colabmodel
+
+  jpa:
+    hibernate:
+      # ADR-009: Flyway crea el esquema, Hibernate SOLO valida.
+      # Si el mapeo JPA y el DDL no coinciden, la app no arranca. Test gratis.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  jackson:
+    default-property-inclusion: non_null
+
+  servlet:
+    multipart:
+      # Tiene que ser >= colabmodel.vision.max-bytes. Si fuera menor, el limite
+      # real lo pondria Spring con un 500 generico en vez del 400 explicado que
+      # devuelve ImagenDeEntrada, y el usuario no sabria que achicar la foto.
+      max-file-size: 8MB
+      max-request-size: 10MB
+
+colabmodel:
+  jwt:
+    # Cambiar en produccion. Minimo 32 bytes para HS256.
+    secret: "cambiar-esta-clave-secreta-de-al-menos-32-bytes-para-hs256"
+    expiration-minutes: 480
+  collab:
+    lock-ttl-seconds: 30
+    snapshot-every-ops: 200
+  ai:
+    # "claude", "gemini" u "ollama" (ADR-017). El resto del codigo no sabe
+    # cual esta activa: cambiar esto no toca ninguna otra clase.
+    proveedor: ollama
+    # La misma conexion sirve al prompt de texto y a la lectura de imagen
+    # (vision.nivel2.proveedor: claude). ADR-025.
+    claude:
+      api-key: "${ANTHROPIC_API_KEY:}"
+      # El Opus mas nuevo de uso general. Cambiarlo cambia texto e imagen juntos.
+      model: claude-opus-5
+      # low | medium | high | xhigh | max. Es la palanca de latencia: en Opus 5
+      # "low" ya rinde muy bien para traducir un pedido a comandos.
+      esfuerzo: low
+      # Beta: hasta ~2,5x mas rapido al generar, al doble de precio. Si la
+      # cuenta no lo tiene habilitado se apaga solo y sigue a velocidad normal.
+      modo-rapido: true
+      base-url: https://api.anthropic.com
+      timeout-ms: 60000
+    gemini:
+      # Clave del plan GRATUITO de Google AI Studio (aistudio.google.com).
+      # Va por variable de entorno, no escrita aca: este archivo esta en git.
+      api-key: "${GEMINI_API_KEY:}"
+      # Si la cuota gratuita del dia se agota (429), gemini-3.5-flash-lite
+      # tiene un limite mas alto y sirve igual para llamar herramientas.
+      model: gemini-3.8-flash
+      base-url: https://generativelanguage.googleapis.com/v1beta
+    ollama:
+      base-url: http://localhost:11434
+      # Modelo local inicial para una RTX 3070 de 8 GB. Primero se mide este
+      # 8B y solo despues se compara con un 9B si queda margen de VRAM.
+      # Debe reportar la capacidad "tools" al ejecutar:
+      #   ollama show qwen3:8b
+      model: qwen3:8b
+      # La UI puede elegir tambien qwen3.5:9b-q4_K_M. El catalogo del backend
+      # mantiene 8B con thinking y 9B sin thinking para evitar razonamiento circular.
+      contexto: 4096
+      temperatura: 0.1
+      # Hasta tres minutos por intento para disenos completos con el modelo 9B.
+      # Si el primer intento no usa la herramienta, la recuperacion estructurada
+      # dispone de su propio intento con el mismo limite.
+      timeout-ms: 180000
+  vision:
+    # Unico endpoint que acepta un binario arbitrario de afuera.
+    max-bytes: 8388608        # 8 MB del archivo comprimido
+    max-pixeles: 40000000     # ya descomprimido: corta la bomba de descompresion
+    max-lado: 1600            # se reduce a esto para acotar el costo de CPU
+    nivel2:
+      # Quien lee los recortes de texto (nivel 2b):
+      #   claude -> la API de Claude, con la clave de colabmodel.ai.claude.
+      #             Todos los recortes en UN pedido. Sin clave, no hay nivel 2b.
+      #   local  -> un modelo de vision local (url/modelo, abajo).
+      #   gemini -> Google AI Studio con la clave gratuita (bloque gemini, abajo).
+      #             Tambien manda TODOS los recortes en un solo pedido.
+      # En cualquiera de los dos casos, si falla la deteccion sale igual,
+      # con los textos sin leer.
+      proveedor: claude
+      # Solo para proveedor local: la API de chat compatible con OpenAI que
+      # sirven Ollama (http://localhost:11434) y llama.cpp. VACIO = sin nivel 2b.
+      url: "http://localhost:11434"
+      modelo: "qwen2.5vl:3b"
+      # Presupuesto TOTAL de la lectura, no de cada recorte. Al agotarse se
+      # devuelve lo leido hasta ahi con un aviso: media propuesta es util,
+      # una peticion que no vuelve no. Lo usan los dos proveedores; a Claude
+      # le sobra (una captura de 6 clases se lee en ~13 s).
+      # Solo Claude: recortes por pedido. 80 = un solo pedido, lo mas barato
+      # (captura de 6 clases: ~2300 tokens, ~13 s). 15 = varios pedidos en
+      # paralelo: ~10 s, pero ~50 % mas tokens (cada uno repite las consignas).
+      recortes-por-pedido: 80
+      #
+      # OJO CON ESTOS DOS NUMEROS (proveedor local; timeout-ms es solo suyo). Los 20000/8000 originales suponen una
+      # inferencia de ~1 s por recorte, que es lo que da una GPU. Medido en
+      # CPU pura (Ryzen 5 3500U, Ollama descarta la Vega 8 por integrada):
+      # 348 s POR RECORTE. Con 8000 de timeout no entra ni uno, y la propuesta
+      # sale igual de vacia que sin modelo, pero despues de hacer esperar.
+      #
+      # Asi que estan subidos para que en esta maquina se lea ALGO. No es una
+      # configuracion de trabajo: con 600 s de presupuesto entran uno o dos
+      # recortes, alcanza para ver el nivel 2 funcionando de punta a punta en
+      # un diagrama de dos clases, no para leer un diagrama de verdad.
+      #
+      # Volver a 20000/8000 en cuanto la inferencia baje de ~5 s por recorte:
+      # con OLLAMA_IGPU_ENABLE=1 si la Vega 8 llega a servir, o con un modelo
+      # remoto, donde ademas hay que dejar de preguntar recorte por recorte.
+      presupuesto-ms: 30000
+      timeout-ms: 420000
+      gemini:
+        # La MISMA clave gratuita que usa el modulo de IA: se pone una vez y
+        # sirve para el prompt de texto y para leer la foto. Con la clave
+        # puesta, el nivel 2 funciona sin modelo local.
+        api-key: "${GEMINI_API_KEY:}"
+        modelo: gemini-3.8-flash
+        base-url: https://generativelanguage.googleapis.com/v1beta
+        # TODOS los recortes van en UNA peticion (no uno por recorte como con
+        # el modelo local): el plan gratuito limita peticiones por minuto, y
+        # una foto de seis clases pasa las treinta preguntas sueltas.
+        max-recortes: 80
+        timeout-ms: 60000
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.uagrm.colabmodel: DEBUG

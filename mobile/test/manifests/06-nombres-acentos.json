@@ -1,0 +1,156 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Nombres hostiles - Regla 8",
+  "entities" : [
+    {
+      "name" : "AnioAcademico",
+      "label" : "Año Académico",
+      "path" : "/api/anio-academico",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "año académico"
+      ],
+      "fields" : [
+        {
+          "name" : "descripcion",
+          "label" : "descripción",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "descripción"
+          ]
+        },
+        {
+          "name" : "orden",
+          "label" : "orden",
+          "type" : "integer",
+          "required" : false,
+          "unique" : false,
+          "synonyms" : [
+            "orden"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "ninios",
+          "target" : "Ninio",
+          "many" : true,
+          "inverseOf" : "anioAcademicoId"
+        }
+      ]
+    },
+    {
+      "name" : "Ninio",
+      "label" : "Niño",
+      "path" : "/api/ninio",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "niño"
+      ],
+      "fields" : [
+        {
+          "name" : "user",
+          "label" : "user",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "user"
+          ]
+        },
+        {
+          "name" : "group",
+          "label" : "group",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "group"
+          ]
+        },
+        {
+          "name" : "nombreCompletoDelRepresentanteLegalAutorizado",
+          "label" : "nombre_completo_del_representante_legal_autorizado",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nombre completo del representante legal autorizado",
+            "nombre_completo_del_representante_legal_autorizado"
+          ]
+        },
+        {
+          "name" : "anioAcademicoId",
+          "label" : "anioAcademico",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "AnioAcademico",
+          "synonyms" : [
+            "anio academico",
+            "anioacademico",
+            "año académico"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "anioAcademico",
+          "target" : "AnioAcademico",
+          "many" : false,
+          "field" : "anioAcademicoId"
+        }
+      ]
+    },
+    {
+      "name" : "Pez",
+      "label" : "Pez",
+      "path" : "/api/pez",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "pez"
+      ],
+      "fields" : [
+        {
+          "name" : "especie",
+          "label" : "especie",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "especie"
+          ]
+        }
+      ],
+      "relations" : [ ]
+    }
+  ]
+}

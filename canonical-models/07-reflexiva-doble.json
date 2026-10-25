@@ -1,0 +1,24 @@
+{
+  "nombre": "Reflexiva y doble relacion - Regla 3",
+  "comentario": "Sin roles, la doble relacion genera dos columnas con el mismo nombre y NO compila.",
+  "clases": [
+    { "id": "c1", "name": "Empleado",   "attributes": [
+      { "name": "nombre", "dataType": "string", "required": true }]},
+    { "id": "c2", "name": "Vuelo",      "attributes": [
+      { "name": "codigo", "dataType": "string", "pk": true }]},
+    { "id": "c3", "name": "Aeropuerto", "attributes": [
+      { "name": "iata", "dataType": "string", "pk": true }]}
+  ],
+  "relaciones": [
+    { "sourceClassId": "c1", "targetClassId": "c1", "kind": "ASSOCIATION",
+      "sourceRole": "subordinados", "targetRole": "jefe",
+      "sourceMultiplicity": "0..*", "targetMultiplicity": "0..1" },
+    { "sourceClassId": "c2", "targetClassId": "c3", "kind": "ASSOCIATION",
+      "sourceRole": "vuelosSalida", "targetRole": "origen",
+      "sourceMultiplicity": "0..*", "targetMultiplicity": "1" },
+    { "sourceClassId": "c2", "targetClassId": "c3", "kind": "ASSOCIATION",
+      "sourceRole": "vuelosLlegada", "targetRole": "destino",
+      "sourceMultiplicity": "0..*", "targetMultiplicity": "1" }
+  ],
+  "esperado": "empleado.jefe_id (auto-FK); vuelo.origen_id y vuelo.destino_id (nombres derivados del ROL, no de la clase)"
+}

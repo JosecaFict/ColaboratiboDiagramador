@@ -1,0 +1,66 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Muchos a muchos",
+  "entities" : [
+    {
+      "name" : "Estudiante",
+      "label" : "Estudiante",
+      "path" : "/api/estudiante",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "estudiante"
+      ],
+      "fields" : [
+        {
+          "name" : "registro",
+          "label" : "registro",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "registro"
+          ]
+        }
+      ],
+      "relations" : [ ]
+    },
+    {
+      "name" : "Materia",
+      "label" : "Materia",
+      "path" : "/api/materia",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "materia"
+      ],
+      "fields" : [
+        {
+          "name" : "sigla",
+          "label" : "sigla",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "sigla"
+          ]
+        }
+      ],
+      "relations" : [ ]
+    }
+  ]
+}

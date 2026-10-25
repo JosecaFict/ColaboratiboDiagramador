@@ -1,0 +1,154 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Clase asociativa (N:M con atributos)",
+  "entities" : [
+    {
+      "name" : "Estudiante",
+      "label" : "Estudiante",
+      "path" : "/api/estudiante",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "estudiante"
+      ],
+      "fields" : [
+        {
+          "name" : "registro",
+          "label" : "registro",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "registro"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "inscripcions",
+          "target" : "Inscripcion",
+          "many" : true,
+          "inverseOf" : "estudianteId"
+        }
+      ]
+    },
+    {
+      "name" : "Materia",
+      "label" : "Materia",
+      "path" : "/api/materia",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "materia"
+      ],
+      "fields" : [
+        {
+          "name" : "sigla",
+          "label" : "sigla",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "sigla"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "inscripcions",
+          "target" : "Inscripcion",
+          "many" : true,
+          "inverseOf" : "materiaId"
+        }
+      ]
+    },
+    {
+      "name" : "Inscripcion",
+      "label" : "Inscripcion",
+      "path" : "/api/inscripcion",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "inscripcion"
+      ],
+      "fields" : [
+        {
+          "name" : "fecha",
+          "label" : "fecha",
+          "type" : "date",
+          "required" : true,
+          "unique" : false,
+          "synonyms" : [
+            "fecha"
+          ]
+        },
+        {
+          "name" : "nota",
+          "label" : "nota",
+          "type" : "decimal",
+          "required" : false,
+          "unique" : false,
+          "synonyms" : [
+            "nota"
+          ]
+        },
+        {
+          "name" : "estudianteId",
+          "label" : "estudiante",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "Estudiante",
+          "synonyms" : [
+            "estudiante"
+          ]
+        },
+        {
+          "name" : "materiaId",
+          "label" : "materia",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "Materia",
+          "synonyms" : [
+            "materia"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "estudiante",
+          "target" : "Estudiante",
+          "many" : false,
+          "field" : "estudianteId"
+        },
+        {
+          "name" : "materia",
+          "target" : "Materia",
+          "many" : false,
+          "field" : "materiaId"
+        }
+      ]
+    }
+  ]
+}

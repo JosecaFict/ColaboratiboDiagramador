@@ -1,0 +1,100 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Uno a muchos",
+  "entities" : [
+    {
+      "name" : "Cliente",
+      "label" : "Cliente",
+      "path" : "/api/cliente",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "cliente"
+      ],
+      "fields" : [
+        {
+          "name" : "nombre",
+          "label" : "nombre",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nombre"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "pedidos",
+          "target" : "Pedido",
+          "many" : true,
+          "inverseOf" : "clienteId"
+        }
+      ]
+    },
+    {
+      "name" : "Pedido",
+      "label" : "Pedido",
+      "path" : "/api/pedido",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "pedido"
+      ],
+      "fields" : [
+        {
+          "name" : "fecha",
+          "label" : "fecha",
+          "type" : "datetime",
+          "required" : true,
+          "unique" : false,
+          "synonyms" : [
+            "fecha"
+          ]
+        },
+        {
+          "name" : "total",
+          "label" : "total",
+          "type" : "decimal",
+          "required" : true,
+          "unique" : false,
+          "synonyms" : [
+            "total"
+          ]
+        },
+        {
+          "name" : "clienteId",
+          "label" : "cliente",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "Cliente",
+          "synonyms" : [
+            "cliente"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "cliente",
+          "target" : "Cliente",
+          "many" : false,
+          "field" : "clienteId"
+        }
+      ]
+    }
+  ]
+}

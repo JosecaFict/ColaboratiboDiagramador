@@ -1,0 +1,249 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Biblioteca",
+  "entities" : [
+    {
+      "name" : "Libro",
+      "label" : "Libro",
+      "path" : "/api/libro",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "libro"
+      ],
+      "fields" : [
+        {
+          "name" : "titulo",
+          "label" : "título",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "título"
+          ]
+        },
+        {
+          "name" : "autor",
+          "label" : "autor",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "autor"
+          ]
+        },
+        {
+          "name" : "isbn",
+          "label" : "isbn",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "isbn"
+          ]
+        },
+        {
+          "name" : "anioPublicacion",
+          "label" : "añoPublicación",
+          "type" : "integer",
+          "required" : false,
+          "unique" : false,
+          "min" : 1450,
+          "max" : 2100,
+          "synonyms" : [
+            "año publicación",
+            "añopublicación"
+          ]
+        },
+        {
+          "name" : "precio",
+          "label" : "precio",
+          "type" : "decimal",
+          "required" : false,
+          "unique" : false,
+          "min" : 0,
+          "synonyms" : [
+            "precio"
+          ]
+        },
+        {
+          "name" : "estado",
+          "label" : "estado",
+          "type" : "enum",
+          "required" : true,
+          "unique" : false,
+          "literals" : [
+            "DISPONIBLE",
+            "EN_PRESTAMO",
+            "DE_BAJA"
+          ],
+          "synonyms" : [
+            "estado"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "prestamos",
+          "target" : "Prestamo",
+          "many" : true,
+          "inverseOf" : "libroId"
+        }
+      ]
+    },
+    {
+      "name" : "Socio",
+      "label" : "Socio",
+      "path" : "/api/socio",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "socio"
+      ],
+      "fields" : [
+        {
+          "name" : "nombre",
+          "label" : "nombre",
+          "type" : "string",
+          "required" : true,
+          "unique" : false,
+          "maxLength" : 255,
+          "synonyms" : [
+            "nombre"
+          ]
+        },
+        {
+          "name" : "email",
+          "label" : "email",
+          "type" : "string",
+          "required" : false,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "email"
+          ]
+        },
+        {
+          "name" : "activo",
+          "label" : "activo",
+          "type" : "boolean",
+          "required" : false,
+          "unique" : false,
+          "synonyms" : [
+            "activo"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "prestamos",
+          "target" : "Prestamo",
+          "many" : true,
+          "inverseOf" : "socioId"
+        }
+      ]
+    },
+    {
+      "name" : "Prestamo",
+      "label" : "Préstamo",
+      "path" : "/api/prestamo",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "préstamo"
+      ],
+      "fields" : [
+        {
+          "name" : "fechaPrestamo",
+          "label" : "fechaPrestamo",
+          "type" : "date",
+          "required" : true,
+          "unique" : false,
+          "synonyms" : [
+            "fecha prestamo",
+            "fechaprestamo"
+          ]
+        },
+        {
+          "name" : "fechaDevolucion",
+          "label" : "fechaDevolucion",
+          "type" : "date",
+          "required" : false,
+          "unique" : false,
+          "synonyms" : [
+            "fecha devolucion",
+            "fechadevolucion"
+          ]
+        },
+        {
+          "name" : "horaRetiro",
+          "label" : "horaRetiro",
+          "type" : "datetime",
+          "required" : false,
+          "unique" : false,
+          "synonyms" : [
+            "hora retiro",
+            "horaretiro"
+          ]
+        },
+        {
+          "name" : "libroId",
+          "label" : "libro",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "Libro",
+          "synonyms" : [
+            "libro"
+          ]
+        },
+        {
+          "name" : "socioId",
+          "label" : "socio",
+          "type" : "reference",
+          "required" : true,
+          "unique" : false,
+          "target" : "Socio",
+          "synonyms" : [
+            "socio"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "libro",
+          "target" : "Libro",
+          "many" : false,
+          "field" : "libroId"
+        },
+        {
+          "name" : "socio",
+          "target" : "Socio",
+          "many" : false,
+          "field" : "socioId"
+        }
+      ]
+    }
+  ]
+}

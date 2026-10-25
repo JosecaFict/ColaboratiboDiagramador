@@ -1,0 +1,90 @@
+{
+  "manifestVersion" : 1,
+  "app" : "Uno a uno",
+  "entities" : [
+    {
+      "name" : "Usuario",
+      "label" : "Usuario",
+      "path" : "/api/usuario",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "usuario"
+      ],
+      "fields" : [
+        {
+          "name" : "email",
+          "label" : "email",
+          "type" : "string",
+          "required" : true,
+          "unique" : true,
+          "maxLength" : 255,
+          "synonyms" : [
+            "email"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "perfil",
+          "target" : "Perfil",
+          "many" : false,
+          "inverseOf" : "usuarioId"
+        }
+      ]
+    },
+    {
+      "name" : "Perfil",
+      "label" : "Perfil",
+      "path" : "/api/perfil",
+      "abstract" : false,
+      "actions" : [
+        "list",
+        "get",
+        "create",
+        "update",
+        "delete"
+      ],
+      "synonyms" : [
+        "perfil"
+      ],
+      "fields" : [
+        {
+          "name" : "bio",
+          "label" : "bio",
+          "type" : "string",
+          "required" : false,
+          "unique" : false,
+          "synonyms" : [
+            "bio"
+          ]
+        },
+        {
+          "name" : "usuarioId",
+          "label" : "usuario",
+          "type" : "reference",
+          "required" : true,
+          "unique" : true,
+          "target" : "Usuario",
+          "synonyms" : [
+            "usuario"
+          ]
+        }
+      ],
+      "relations" : [
+        {
+          "name" : "usuario",
+          "target" : "Usuario",
+          "many" : false,
+          "field" : "usuarioId"
+        }
+      ]
+    }
+  ]
+}

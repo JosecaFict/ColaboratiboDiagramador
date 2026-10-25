@@ -1,0 +1,15 @@
+{
+  "nombre": "Uno a uno",
+  "clases": [
+    { "id": "c1", "name": "Usuario", "attributes": [
+      { "name": "email", "dataType": "string", "pk": true, "required": true, "unique": true }]},
+    { "id": "c2", "name": "Perfil", "attributes": [
+      { "name": "bio", "dataType": "text", "required": false }]}
+  ],
+  "relaciones": [
+    { "sourceClassId": "c1", "targetClassId": "c2", "kind": "ASSOCIATION",
+      "sourceRole": "usuario", "targetRole": "perfil",
+      "sourceMultiplicity": "1", "targetMultiplicity": "1" }
+  ],
+  "esperado": "perfil.usuario_id UNIQUE NOT NULL; @OneToOne en Perfil"
+}
