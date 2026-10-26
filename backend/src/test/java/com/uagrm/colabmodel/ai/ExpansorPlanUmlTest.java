@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ExpansorPlanUmlTest {
 
@@ -39,6 +40,45 @@ class ExpansorPlanUmlTest {
                 .containsExactly("classes", "relations", "audit");
         assertThat(esquema.path("properties").path("classes").path("items")
                 .path("properties").path("attributes").path("minItems").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void una_sola_clase_se_disena_sin_relaciones() throws Exception {
+        var plan = mapper.readTree("""
+                {"classes":[{"name":"Producto","historica":false,"attributes":[
+                  {"name":"nombre","dataType":"string","required":true,"unique":false,"pk":false},
+                  {"name":"precio","dataType":"decimal","required":true,"unique":false,"pk":false}]}],
+                 "relations":[],"audit":["Producto aislado","Precio obligatorio"]}
+                """);
+        var comando = new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan);
+
+        assertThat(ProveedorOllama.errorEstructuralDelPlan(comando)).isNull();
+        assertThat(ExpansorPlanUml.expandir(new RespuestaIA(List.of(comando), "")).comandos())
+                .extracting(ComandoPropuestoIA::tipo)
+                .containsExactly("CREATE_CLASS", "ADD_ATTRIBUTE", "ADD_ATTRIBUTE");
+    }
+
+    @Test
+    void varias_clases_sueltas_siguen_siendo_un_plan_incompleto() throws Exception {
+        var plan = mapper.readTree("""
+                {"classes":[
+                  {"name":"Paciente","attributes":[{"name":"nombre","dataType":"string","required":true,"unique":false,"pk":false}]},
+                  {"name":"Cita","attributes":[{"name":"fecha","dataType":"datetime","required":true,"unique":false,"pk":false}]}
+                ],"relations":[],"audit":["a","b"]}
+                """);
+        var comando = new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan);
+
+        assertThat(ProveedorOllama.errorEstructuralDelPlan(comando)).contains("ninguna relacion");
+        assertThatThrownBy(() -> ExpansorPlanUml.expandir(new RespuestaIA(List.of(comando), "")))
+                .hasMessageContaining("ninguna relacion");
+    }
+
+    @Test
+    void la_herramienta_pide_declarar_si_cada_clase_es_historica() {
+        var clase = EsquemaPlanUml.herramienta().parametros().path("properties").path("classes").path("items");
+
+        assertThat(clase.path("properties").path("historica").path("type").asText()).isEqualTo("boolean");
+        assertThat(clase.path("required")).extracting(n -> n.asText()).contains("historica");
     }
 
     @Test

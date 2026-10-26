@@ -26,10 +26,15 @@ final class EsquemaPlanUml {
 
         ObjectNode clase = objeto();
         propiedades(clase).set("name", texto("Nombre PascalCase singular, sin tildes"));
+        ObjectNode historica = booleano();
+        historica.put("description", "true si cada instancia registra un hecho ocurrido en el tiempo que debe "
+                + "conservarse (una venta, una cita, un pago, un prestamo, una inscripcion); false si es una "
+                + "entidad que perdura (cliente, producto, curso)");
+        propiedades(clase).set("historica", historica);
         ObjectNode atributos = arreglo(atributo);
         atributos.put("minItems", 1);
         propiedades(clase).set("attributes", atributos);
-        requeridos(clase, "name", "attributes");
+        requeridos(clase, "name", "historica", "attributes");
 
         ObjectNode relacion = objeto();
         propiedades(relacion).set("source", texto("Nombre exacto de la clase origen"));
@@ -46,8 +51,9 @@ final class EsquemaPlanUml {
         ObjectNode raiz = objeto();
         ObjectNode clases = arreglo(clase);
         clases.put("minItems", 1);
+        // Sin minItems: una sola clase nueva puede no relacionarse con nada.
+        // Varias clases sueltas se rechazan en ProveedorOllama.errorEstructuralDelPlan.
         ObjectNode relaciones = arreglo(relacion);
-        relaciones.put("minItems", 1);
         propiedades(raiz).set("classes", clases);
         propiedades(raiz).set("relations", relaciones);
         ObjectNode auditoria = arreglo(texto("Observacion breve de diseno"));
@@ -59,10 +65,11 @@ final class EsquemaPlanUml {
                 "Propone UN modelo UML conceptual completo en una sola llamada. Incluye todas las clases con al menos "
                         + "un atributo y todas las relaciones con multiplicidad en ambos extremos. Los atributos solo "
                         + "representan datos propios; nunca simulan asociaciones ni usan tipos de otras clases. "
-                        + "Las entidades historicas (prestamos, reservas, eventos) se relacionan con ASSOCIATION: "
-                        + "AGGREGATION y COMPOSITION no representan reglas de borrado o conservacion. "
-                        + "Book [1] -- [0..*] Copy se expresa source=Book, target=Copy, "
-                        + "sourceMultiplicity=1, targetMultiplicity=0..*.", raiz);
+                        + "Marca historica=true en las clases que registran hechos en el tiempo; se relacionan "
+                        + "con sus participantes mediante ASSOCIATION: AGGREGATION y COMPOSITION no representan "
+                        + "reglas de borrado o conservacion. En COMPOSITION y AGGREGATION source es el todo y "
+                        + "target la parte. Cliente [1] -- [0..*] Pedido se expresa source=Cliente, "
+                        + "target=Pedido, sourceMultiplicity=1, targetMultiplicity=0..*.", raiz);
     }
 
     private static ObjectNode objeto() {

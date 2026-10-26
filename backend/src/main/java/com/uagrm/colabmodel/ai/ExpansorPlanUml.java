@@ -26,8 +26,8 @@ final class ExpansorPlanUml {
         if (!p.path("classes").isArray() || p.path("classes").isEmpty()) {
             throw new IllegalArgumentException("El plan UML no contiene clases");
         }
-        if (!p.path("relations").isArray() || p.path("relations").isEmpty()) {
-            throw new IllegalArgumentException("El plan UML no contiene relaciones");
+        if (p.path("classes").size() > 1 && p.path("relations").isEmpty()) {
+            throw new IllegalArgumentException("El plan UML trae varias clases pero ninguna relacion");
         }
         List<ComandoPropuestoIA> comandos = new ArrayList<>();
         for (JsonNode clase : p.path("classes")) {

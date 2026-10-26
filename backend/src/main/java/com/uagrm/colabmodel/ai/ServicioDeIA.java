@@ -99,14 +99,17 @@ public class ServicioDeIA {
             case MODIFICAR -> EsquemaDeComandos.herramientas();
         };
         RespuestaIA respuesta = proveedor.generar(new SolicitudIA(prompt, modo, contexto, relaciones, herramientas, modelo));
+        java.util.Set<String> historicas = java.util.Set.of();
         if (modo == ModoIA.DISENAR) {
             respuesta = revisarPlan(prompt, respuesta, contexto, relaciones, modelo);
-            respuesta = NormalizadorPlanUml.normalizar(respuesta, prompt);
+            respuesta = NormalizadorPlanUml.normalizar(respuesta);
+            historicas = NormalizadorPlanUml.clasesHistoricas(respuesta);
             respuesta = ExpansorPlanUml.expandir(respuesta);
         }
 
         return validar(diagramId, origin, respuesta, existentes, atributosPorClase, metodosPorClase,
-                relacionesExistentes, modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo);
+                relacionesExistentes, modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo,
+                historicas);
     }
 
     /**
@@ -135,7 +138,8 @@ public class ServicioDeIA {
                 Para cada relacion aplica esta regla sin excepciones: la multiplicidad junto a una clase indica
                 cuantas instancias DE ESA CLASE puede tener una instancia del extremo contrario. Verifica la lectura
                 en ambos sentidos antes de responder. Las entidades de evento o historial normalmente deben conectar
-                al menos al actor y al objeto involucrado. Comprueba que la auditoria describa exactamente las
+                al menos al actor y al objeto involucrado; marca historica=true solo en las clases que registran
+                hechos en el tiempo. Comprueba que la auditoria describa exactamente las
                 relaciones realmente incluidas. Conserva lo correcto y no agregues funciones fuera del alcance.
                 """.formatted(requisito, plan.parametros().toPrettyString());
         try {
@@ -160,7 +164,8 @@ public class ServicioDeIA {
     private PropuestaDeIA validar(UUID diagramId, Origin origin, RespuestaIA respuesta, List<UmlClass> existentes,
                                   Map<UUID, List<UmlAttribute>> atributosPorClase,
                                   Map<UUID, List<UmlMethod>> metodosPorClase,
-                                  List<UmlRelationship> relacionesExistentes, String modelo) {
+                                  List<UmlRelationship> relacionesExistentes, String modelo,
+                                  java.util.Set<String> historicas) {
         ResolutorDeReferencias resolutor = new ResolutorDeReferencias(existentes, atributosPorClase,
                 metodosPorClase, relacionesExistentes);
 
@@ -204,7 +209,7 @@ public class ServicioDeIA {
                 .map(v -> new PropuestaDeIA.ComandoAceptado(v.tipo(), v.payload(), v.resumen()))
                 .toList();
 
-        List<String> advertencias = AuditorDePropuestaIA.auditar(aceptados);
+        List<String> advertencias = AuditorDePropuestaIA.auditar(aceptados, historicas);
         return new PropuestaDeIA(diagramId, origin, aceptados, List.copyOf(rechazados), descartadosPorTope,
                 advertencias, respuesta.comandos().size(), respuesta.notaDelModelo(), modelo, null);
     }

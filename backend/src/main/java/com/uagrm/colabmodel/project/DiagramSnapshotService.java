@@ -183,14 +183,12 @@ public class DiagramSnapshotService {
                     .collect(Collectors.toMap(UmlClass::getId, UmlClass::getName));
             List<CorreccionPreGeneracion> resultado = new ArrayList<>();
             for (UmlRelationship r : m.relaciones()) {
-                String sugerido = nombreCanonicoRelacion(
-                        nombres.get(r.getSourceClassId()), nombres.get(r.getTargetClassId()));
-                if (sugerido == null || sugerido.equals(r.getName())) continue;
-                if (nombreProblematico(r.getName()) || nombreCanonicoConocido(r.getName())) {
-                    resultado.add(new CorreccionPreGeneracion(r.getId(), "UPDATE_RELATION", sugerido,
-                            "Renombrar la relación \"" + (r.getName() == null ? "sin nombre" : r.getName())
-                                    + "\" a \"" + sugerido + "\"."));
-                }
+                String sugerido = nombreSugerido(r.getName(), r.getKind().name(),
+                        nombres.get(r.getTargetClassId()), r.getTargetMultiplicity(), r.getTargetRole());
+                if (sugerido == null) continue;
+                resultado.add(new CorreccionPreGeneracion(r.getId(), "UPDATE_RELATION", sugerido,
+                        "Renombrar la relación \"" + (r.getName() == null || r.getName().isBlank()
+                                ? "sin nombre" : r.getName()) + "\" a \"" + sugerido + "\"."));
             }
             return List.copyOf(resultado);
         });
@@ -198,32 +196,54 @@ public class DiagramSnapshotService {
 
     public record CorreccionPreGeneracion(UUID relationId, String type, String name, String descripcion) { }
 
-    private static boolean nombreProblematico(String nombre) {
+    /**
+     * Nombre propuesto para una relación sin nombre o con uno de relleno
+     * ("association", "relatesTo", "relacionaConX"...), o null si el nombre
+     * actual ya dice algo. No conoce ningún dominio: usa el rol del destino
+     * si lo hay, y si no "tiene" + el destino, en plural cuando son muchos.
+     */
+    static String nombreSugerido(String actual, String kind, String destino, String multiplicidadDestino,
+                                 String rolDestino) {
+        if ("GENERALIZATION".equals(kind) || "DEPENDENCY".equals(kind)) return null;
+        if (!nombreDeRelleno(actual) || destino == null || destino.isBlank()) return null;
+        String sugerido;
+        if (rolDestino != null && !rolDestino.isBlank()) {
+            sugerido = camel(rolDestino, false);
+        } else {
+            boolean muchos = multiplicidadDestino != null && multiplicidadDestino.contains("*");
+            sugerido = "tiene" + (muchos ? plural(camel(destino, true)) : camel(destino, true));
+        }
+        return sugerido.equals(actual) ? null : sugerido;
+    }
+
+    private static boolean nombreDeRelleno(String nombre) {
         if (nombre == null || nombre.isBlank()) return true;
         String n = normal(nombre);
-        return n.contains("oggetto") || n.contains("belong") || n.contains("hasto")
-                || n.contains("relatesto") || n.contains("association");
+        return n.equals("association") || n.equals("asociacion") || n.equals("relation")
+                || n.equals("relacion") || n.equals("relationship") || n.equals("relatesto")
+                || n.equals("belongsto") || n.equals("hasto") || n.startsWith("relacionacon");
     }
 
-    private static boolean nombreCanonicoConocido(String nombre) {
-        if (nombre == null) return false;
-        String n = normal(nombre);
-        return n.equals("tieneautores") || n.equals("tieneejemplares") || n.equals("tienecopias")
-                || n.equals("realizaprestamos") || n.equals("registraprestamos")
-                || n.equals("recibereservas") || n.equals("tienereservas") || n.equals("solicitareservas");
+    private static String camel(String valor, boolean pascal) {
+        String[] partes = Normalizer.normalize(valor, Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Za-z0-9]+", " ").trim().split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < partes.length; i++) {
+            if (partes[i].isEmpty()) continue;
+            boolean mayuscula = pascal || i > 0;
+            sb.append(mayuscula ? Character.toUpperCase(partes[i].charAt(0)) : Character.toLowerCase(partes[i].charAt(0)))
+                    .append(partes[i].substring(1));
+        }
+        return sb.toString();
     }
 
-    private static String nombreCanonicoRelacion(String origen, String destino) {
-        String par = normal(origen) + "->" + normal(destino);
-        return switch (par) {
-            case "obra->autor" -> "tieneAutores";
-            case "obra->ejemplar", "obra->copia", "libro->ejemplar", "libro->copia" -> "tieneEjemplares";
-            case "usuario->prestamo" -> "realizaPrestamos";
-            case "ejemplar->prestamo", "copia->prestamo" -> "registraPrestamos";
-            case "obra->reserva", "libro->reserva" -> "recibeReservas";
-            case "usuario->reserva" -> "solicitaReservas";
-            default -> null;
-        };
+    /** Plural regular del español: Cita -> Citas, Autor -> Autores, Luz -> Luces. */
+    private static String plural(String nombre) {
+        if (nombre.isEmpty()) return nombre;
+        char ultima = Character.toLowerCase(nombre.charAt(nombre.length() - 1));
+        if (ultima == 's') return nombre;
+        if (ultima == 'z') return nombre.substring(0, nombre.length() - 1) + "ces";
+        return nombre + ("aeiou".indexOf(ultima) >= 0 ? "s" : "es");
     }
 
     private static String normal(String valor) {

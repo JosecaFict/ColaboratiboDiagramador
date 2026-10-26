@@ -6,6 +6,7 @@ import com.uagrm.colabmodel.modelcore.command.CommandType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -57,11 +58,49 @@ class AuditorDePropuestaIATest {
         List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
                 aceptado(CommandType.CREATE_CLASS, copia), aceptado(CommandType.CREATE_CLASS, prestamo),
                 aceptado(CommandType.ADD_ATTRIBUTE, codigo), aceptado(CommandType.ADD_ATTRIBUTE, fecha),
-                aceptado(CommandType.CREATE_RELATION, relacion)));
+                aceptado(CommandType.CREATE_RELATION, relacion)), Set.of("Préstamo"));
 
         assertThat(avisos).anyMatch(a -> a.contains("composicion") && a.contains("historica"));
         assertThat(avisos).anyMatch(a -> a.contains("Préstamo") && a.contains("tildes"));
         assertThat(avisos).anyMatch(a -> a.contains("codigoInventario") && a.contains("clave natural"));
+    }
+
+    @Test
+    void reconoce_un_hecho_historico_por_su_forma_y_no_por_su_nombre() {
+        // Una Cita con fecha que apunta a UN Paciente y a UN Medico, con la
+        // multiplicidad del lado de la Cita mal puesta en 1.
+        ObjectNode paciente = clase("paciente", "Paciente");
+        ObjectNode medico = clase("medico", "Medico");
+        ObjectNode cita = clase("cita", "Cita");
+        ObjectNode fecha = J.objectNode().put("classId", "cita").put("name", "fecha").put("dataType", "datetime");
+        ObjectNode conPaciente = J.objectNode().put("sourceClassId", "paciente").put("targetClassId", "cita")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "1");
+        ObjectNode conMedico = J.objectNode().put("sourceClassId", "medico").put("targetClassId", "cita")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, paciente), aceptado(CommandType.CREATE_CLASS, medico),
+                aceptado(CommandType.CREATE_CLASS, cita), aceptado(CommandType.ADD_ATTRIBUTE, fecha),
+                aceptado(CommandType.CREATE_RELATION, conPaciente), aceptado(CommandType.CREATE_RELATION, conMedico)));
+
+        assertThat(avisos).anyMatch(a -> a.contains("entidad historica Cita") && a.contains("0..*"));
+    }
+
+    @Test
+    void una_clase_con_fecha_no_es_historica_si_no_registra_un_hecho() {
+        // Persona tiene fechaNacimiento, pero tiene MUCHOS pedidos: no es un evento.
+        ObjectNode persona = clase("persona", "Persona");
+        ObjectNode pedido = clase("pedido", "Pedido");
+        ObjectNode nacimiento = J.objectNode().put("classId", "persona").put("name", "fechaNacimiento")
+                .put("dataType", "date");
+        ObjectNode relacion = J.objectNode().put("sourceClassId", "persona").put("targetClassId", "pedido")
+                .put("kind", "COMPOSITION").put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, persona), aceptado(CommandType.CREATE_CLASS, pedido),
+                aceptado(CommandType.ADD_ATTRIBUTE, nacimiento), aceptado(CommandType.CREATE_RELATION, relacion)));
+
+        assertThat(avisos).noneMatch(a -> a.contains("historica"));
     }
 
     @Test
