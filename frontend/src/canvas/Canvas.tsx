@@ -24,7 +24,11 @@ interface Props {
   notacionCardinalidad?: NotacionCardinalidad
   /** Guarda los quiebres de una linea. Arreglo vacio = volver a recta. */
   onMoverQuiebres?: (relationId: string, puntos: Punto[]) => void
+  /** Resalte de un diff de versiones: id de clase o relacion -> que le paso. No toca el modelo. */
+  resaltados?: Record<string, 'agregado' | 'eliminado' | 'modificado'>
 }
+
+const COLOR_RESALTE = { agregado: '#16a34a', eliminado: '#dc2626', modificado: '#d97706' } as const
 
 export type NotacionCardinalidad = 'UML' | 'CHEN'
 
@@ -177,7 +181,7 @@ function recortar(texto: string, ancho: number): string {
 export function Canvas({
   view, classes, relationships, layout, locks, onSelect, onMove,
   relacionSeleccionada, onSelectRelation, modoConector, onConectar,
-  notacionCardinalidad = 'UML', onMoverQuiebres,
+  notacionCardinalidad = 'UML', onMoverQuiebres, resaltados,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const zonaRef = useRef<HTMLDivElement>(null)
@@ -831,8 +835,8 @@ export function Canvas({
           return (
             <g key={r.id} className={onSelectRelation ? 'relacion' : undefined}>
               <polyline points={trazo} fill="none"
-                        stroke={elegida ? '#1d4ed8' : '#64748b'}
-                        strokeWidth={elegida ? 2.5 : total && view === 'CHEN' ? 3 : 1.5}
+                        stroke={elegida ? '#1d4ed8' : resaltados?.[r.id] ? COLOR_RESALTE[resaltados[r.id]] : '#64748b'}
+                        strokeWidth={elegida || resaltados?.[r.id] ? 2.5 : total && view === 'CHEN' ? 3 : 1.5}
                         strokeDasharray={n.punteada ? '6 4' : undefined}
                         markerStart={n.inicio} markerEnd={n.fin} />
 
@@ -949,6 +953,13 @@ export function Canvas({
           return (
             <g key={c.id} onMouseDown={(e) => alPresionar(e, c.id)}
                className={arrastre?.id === c.id ? 'entidad arrastrando' : 'entidad'}>
+              {resaltados?.[c.id] && (
+                <rect x={l.x - 5} y={l.y - 5} width={l.width + 10} height={alto + 10} rx={6}
+                      fill={COLOR_RESALTE[resaltados[c.id]]} fillOpacity={0.14}
+                      stroke={COLOR_RESALTE[resaltados[c.id]]} strokeWidth={2.5} pointerEvents="none">
+                  <title>{resaltados[c.id]}</title>
+                </rect>
+              )}
               <rect x={l.x} y={l.y} width={l.width} height={alto} rx={3}
                     fill="#fff" stroke={bloqueadaPor ? '#dc2626' : '#334155'} strokeWidth={2} />
               <rect x={l.x} y={l.y} width={l.width} height={28} rx={3} fill="#e2e8f0" />

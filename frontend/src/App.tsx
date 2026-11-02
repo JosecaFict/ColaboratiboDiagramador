@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import { Canvas, type NotacionCardinalidad } from './canvas/Canvas'
 import { PanelRelacion } from './panel/PanelRelacion'
@@ -18,6 +18,14 @@ import { detectarDesdeImagen, type DeteccionPropuesta } from './contracts/vision
 import {
   PanelAmbiguedades, type Ambiguedad, type Lectura,
 } from './ambiguity/PanelAmbiguedades'
+import { crearCliente } from './auth/cliente'
+import { VistaDocumental } from './documental/VistaDocumental'
+import { leerDocumental, consultaDeAlmacen, mensajeDocumental } from './documental/api'
+import type { Almacen, ModeloDocumental } from './documental/tipos'
+import { PanelVersiones } from './versiones/PanelVersiones'
+import { crearApiSimulada, crearApiVersiones, usarApiSimulada, type ApiVersiones } from './versiones/api'
+import type { EstadoDeCambio } from './versiones/diff'
+import { hashDe } from './auth/ruta'
 import { ColabClient, historicaAAplicada, type OperacionHistorica } from './collab/wsClient'
 import {
   editaEnSitio, entradaDe, entradaDeDecision, HistorialLocal, type EntradaSinConfirmar,
@@ -31,9 +39,11 @@ import { esEmbebible, esEnumeracion } from './contracts/command'
 import type {
   AppliedOperation, CommandType, NotationView, RelationKind, UmlRelationship,
 } from './contracts/command'
-import { ETIQUETA_DE_ROL, esSoloLectura, type Rol } from './auth/permisos'
+import { ETIQUETA_DE_ROL, esSoloLectura, permisosDe, type Rol } from './auth/permisos'
 import type { Sesion } from './auth/sesion'
-import { VistaIA } from './ai/VistaIA'
+import { VistaIA, type OpcionesDeLoteIA } from './ai/VistaIA'
+import { EsperaDeLotes, type ResultadoDeLote } from './ai/esperaDeLotes'
+import type { AvisoIA } from './ai/historial'
 
 /**
  * La vista Chen se saco de circulacion: se trabaja solo con UML.
@@ -42,11 +52,12 @@ import { VistaIA } from './ai/VistaIA'
  * NO se fueron con ella: se editan desde el panel de propiedades y siguen
  * alimentando las reglas 11 y 12 de la Vista Logica.
  */
-type VistaEditor = NotationView | 'AI'
+type VistaEditor = NotationView | 'AI' | 'DOCUMENTAL'
 const VISTAS: { id: VistaEditor; label: string; nota: string }[] = [
   { id: 'CLASS',    label: 'Clases (UML)',   nota: 'Metodos, visibilidad, herencia' },
   { id: 'LOGICAL',  label: 'Logico',         nota: 'Tablas, PK y FK derivadas de las 12 reglas de mapeo' },
   { id: 'PHYSICAL', label: 'Fisico (DDL)',   nota: 'PostgreSQL: se edita, se verifica y se confirma antes de generar' },
+  { id: 'DOCUMENTAL', label: 'Documental', nota: 'MongoDB: colecciones, documentos incrustados y referencias, derivadas del mismo modelo' },
   { id: 'AI',       label: 'IA',             nota: 'Consulta, revisa y propone cambios con contexto del modelo' },
 ]
 
@@ -125,6 +136,13 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
   const [revisionDecisiones, setRevisionDecisiones] = useState(0)
   /** Sube solo cuando el esquema derivado PUEDE haber cambiado. */
   const [revisionEsquema, setRevisionEsquema] = useState(0)
+  const [documental, setDocumental] = useState<ModeloDocumental | null>(null)
+  const [errorDocumental, setErrorDocumental] = useState<string | null>(null)
+  /** Versiones (ADR-037): el panel, el aviso de commits ajenos y el resalte de un diff en el lienzo. */
+  const [verVersiones, setVerVersiones] = useState(false)
+  const [revisionVersiones, setRevisionVersiones] = useState(0)
+  const [resaltados, setResaltados] = useState<Record<string, EstadoDeCambio> | null>(null)
+  const [almacen, setAlmacen] = useState<Almacen>('postgres')
   const [generando, setGenerando] = useState(false)
   const [resumen, setResumen] = useState<ResumenGeneracion | null>(null)
   const [errorGeneracion, setErrorGeneracion] = useState<string | null>(null)
@@ -148,6 +166,14 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
    * crean una sola vez, asi que leen esto de un ref y no de un estado.
    */
   const loteEsperadoRef = useRef<string | null>(null)
+  /** Lotes de la IA que esperan la respuesta del bus: la marca de aplicada depende de ella (T-04). */
+  const lotesIARef = useRef(new EsperaDeLotes())
+  /** Quien escucha el historial compartido de la IA (la VistaIA, si esta abierta). */
+  const oyentesIARef = useRef(new Set<(aviso: AvisoIA) => void>())
+  const suscribirAvisosIA = useCallback((alAviso: (aviso: AvisoIA) => void) => {
+    oyentesIARef.current.add(alAviso)
+    return () => { oyentesIARef.current.delete(alAviso) }
+  }, [])
   const seleccionadaRef = useRef<string | null>(null)
   const clienteRef = useRef<ColabClient | null>(null)
   /**
@@ -172,6 +198,27 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
 
   /** Toda lectura REST va firmada: el snapshot, la Vista Logica y el generador. */
   const auth = () => ({ Authorization: 'Bearer ' + tokenRef.current })
+
+  /**
+   * La API de versiones. Por defecto va al servidor; con VITE_VERSIONES_SIMULADAS=1
+   * usa una en memoria (el frente B puede no estar listo). Se crea una vez por
+   * diagrama abierto: la simulada guarda su estado en la instancia.
+   */
+  const modeloRef = useRef(modelo)
+  modeloRef.current = modelo
+  const apiVersiones = useMemo<ApiVersiones>(() => {
+    if (!usarApiSimulada()) return crearApiVersiones(crearCliente(() => tokenRef.current))
+    const simulada = crearApiSimulada({
+      autor: { id: usuario.userId, nombre: usuario.fullName },
+      actual: () => ({
+        diagramaId: diagramId, seq: clienteRef.current?.seqActual() ?? 0,
+        modelo: { classes: modeloRef.current.classes, relationships: modeloRef.current.relationships },
+      }),
+    })
+    // Solo en modo simulado: sin esto no hay como editar una rama para provocar conflictos de merge.
+    ;(window as unknown as { __versionesSim?: unknown }).__versionesSim = simulada.depurar
+    return simulada
+  }, [diagramId])
 
   useEffect(() => {
     let vivo = true
@@ -211,6 +258,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         onOp: (op) => {
           // Solo lo que el servidor acepto entra a la pila de deshacer.
           historialRef.current?.confirmar(op.opId)
+          lotesIARef.current.confirmar(op.opId)
           setOps((prev) => [op, ...prev].slice(0, 40))
           setModelo((prev) => aplicarOperacion(prev, op))
           if (tocaEsquema(op)) setRevisionEsquema((n) => n + 1)
@@ -227,6 +275,8 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         // Antes esto solo mostraba "Resincronizando..." y no resincronizaba.
         // Ahora el cliente recupera lo perdido solo; aca solo se muestra.
         onResincronizando: setResincronizando,
+        onVersion: () => setRevisionVersiones((n) => n + 1),
+        onIA: (aviso) => oyentesIARef.current.forEach((oyente) => oyente(aviso as AvisoIA)),
         onLock: (l) =>
           setLocks((prev) => {
             const next = { ...prev }
@@ -240,6 +290,8 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
           // Primero: todo rechazo propio deja de estar "en viaje" en el historial.
           // Un deshacer rechazado dice QUE no se pudo deshacer, no solo por que.
           const deHistorial = historialRef.current?.rechazar(r)
+          // El rechazo de un lote de la IA lo muestra la VistaIA, junto a la propuesta.
+          if (r.opId && lotesIARef.current.rechazar(r.opId, r.message)) return
           if (r.opId && r.opId === loteEsperadoRef.current) {
             loteEsperadoRef.current = null
             setEnvioImportacion({ tipo: 'rechazado', mensaje: `${r.reason}: ${r.message}` })
@@ -301,6 +353,17 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       .then((r) => r.json())
       .then((m) => { if (vivo) setLogica(m) })
       .catch(() => { if (vivo) setError('No se pudo derivar la vista logica.') })
+    return () => { vivo = false }
+  }, [vista, diagramId, revisionEsquema, revisionDecisiones])
+
+  // La Vista Documental (ADR-035) es hermana de la Logica: se deriva en el
+  // servidor y se vuelve a pedir cuando el esquema puede haber cambiado.
+  useEffect(() => {
+    if (vista !== 'DOCUMENTAL' || !diagramId) return
+    let vivo = true
+    leerDocumental(crearCliente(() => tokenRef.current), diagramId)
+      .then((m) => { if (vivo) { setDocumental(m); setErrorDocumental(null) } })
+      .catch((e) => { if (vivo) setErrorDocumental(mensajeDocumental(e)) })
     return () => { vivo = false }
   }, [vista, diagramId, revisionEsquema, revisionDecisiones])
 
@@ -474,9 +537,17 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     })
   }
 
-  const enviarLoteIA = (comandos: Plan['comandos'], descripcion: string) => {
+  /**
+   * Un lote de la IA. `origin` es la modalidad del pedido (TEXT o VOICE) e
+   * `interaccionId` el turno del historial que aplica, para que el servidor
+   * pueda comprobarlo en el log antes de marcarlo. Resuelve cuando el bus responde.
+   */
+  const enviarLoteIA = (comandos: Plan['comandos'], descripcion: string,
+                        opciones: OpcionesDeLoteIA = { origin: 'TEXT' }): Promise<ResultadoDeLote> => {
     const cliente = clienteRef.current
-    if (!cliente || !diagramId || !comandos.length) return
+    if (!cliente || !diagramId || !comandos.length) {
+      return Promise.resolve({ estado: 'rechazado', opId: '', mensaje: 'No hay conexión con el diagrama.' })
+    }
     const opId = uuid()
     let nuevas = 0
     const comandosConLayout = comandos.map((comando) => {
@@ -491,11 +562,20 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         },
       }
     })
-    const payload = { descripcion, comandos: comandosConLayout }
+    const payload = opciones.interaccionId
+      ? { descripcion, comandos: comandosConLayout, interaccionIA: opciones.interaccionId }
+      : { descripcion, comandos: comandosConLayout }
     historial.enviado(opId, entradaDe(modelo, 'BATCH', payload))
-    cliente.enviarComando({
-      opId, diagramId, baseSeq: cliente.seqActual(), type: 'BATCH', origin: 'TEXT', payload,
-    })
+    const respuesta = lotesIARef.current.esperar(opId)
+    try {
+      cliente.enviarComando({
+        opId, diagramId, baseSeq: cliente.seqActual(), type: 'BATCH', origin: opciones.origin, payload,
+      })
+    } catch {
+      // Sin socket, STOMP no publica: el lote no salio, no hay que esperar al plazo.
+      lotesIARef.current.rechazar(opId, 'Se perdió la conexión antes de enviar los cambios.')
+    }
+    return respuesta
   }
 
   const cerrarImportacion = () => {
@@ -638,13 +718,13 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     return null
   }
 
-  const abrirGeneracion = async () => {
+  const abrirGeneracion = async (almacenElegido: Almacen = almacen) => {
     if (!diagramId) return
     setGenerando(true)
     setResumen(null)
     setErrorGeneracion(null)
     try {
-      const r = await fetch(`/api/v1/diagrams/${diagramId}/codegen/resumen`, { headers: auth() })
+      const r = await fetch(`/api/v1/diagrams/${diagramId}/codegen/resumen${consultaDeAlmacen(almacenElegido)}`, { headers: auth() })
       if (!r.ok) throw new Error(String(r.status))
       setResumen(await r.json())
     } catch {
@@ -664,8 +744,9 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     if (!diagramId || !resumen) return
     setDescargando(true)
     try {
-      const confirmada = resumen.confirmacion?.vigente ? `?esquema=${resumen.hashEsquema}` : ''
-      const r = await fetch(`/api/v1/diagrams/${diagramId}/codegen${confirmada}`, { headers: auth() })
+      // La confirmacion de la base (ADR-032) es del DDL de PostgreSQL: en MongoDB no hay esquema que confirmar.
+      const confirmada = almacen === 'postgres' && resumen.confirmacion?.vigente ? `?esquema=${resumen.hashEsquema}` : ''
+      const r = await fetch(`/api/v1/diagrams/${diagramId}/codegen${confirmada || consultaDeAlmacen(almacen)}`, { headers: auth() })
       if (r.status === 409) {
         setErrorGeneracion('La base cambió desde que se confirmó: revisala otra vez en la Vista Física.')
         return
@@ -695,7 +776,10 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     enviarLoteIA(resumen.correcciones.map((c) => ({
       type: 'UPDATE_RELATION' as const,
       payload: { relationId: c.relationId, name: c.name },
-    })), 'Correcciones seguras previas a generar Spring Boot')
+    })), 'Correcciones seguras previas a generar Spring Boot').then((r) => {
+      // El rechazo de un lote de la IA ya no pasa por la barra general: aca no hay VistaIA que lo muestre.
+      if (r.estado === 'rechazado') setError(r.mensaje)
+    })
     setGenerando(false)
   }
 
@@ -807,7 +891,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       <Toolbar
         disabled={!conectado || !diagramId || !puedeEditar}
         puedeGenerar={conectado && !!diagramId}
-        onGenerar={abrirGeneracion}
+        onGenerar={() => { void abrirGeneracion() }}
         ambiguedadesPendientes={ambiguedades?.filter((a) => !a.decidida).length ?? 0}
         onAmbiguedades={() => setVerAmbiguedades(true)}
         onImportar={() => setImportando(true)}
@@ -835,7 +919,16 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
           </button>
         ))}
         <span className="nota">{VISTAS.find((v) => v.id === vista)?.nota}</span>
-        {vista !== 'AI' && <label className="notacion" title="Solo cambia como se MUESTRAN: lo guardado no se toca">
+        <button className="tb-btn pestanas-versiones" onClick={() => setVerVersiones(true)}
+                title="Guardar versiones, compararlas, crear ramas y hacer merge">
+          Versiones
+        </button>
+        {resaltados && (
+          <button className="tb-btn" onClick={() => setResaltados(null)} title="Quitar el resalte del diff en el lienzo">
+            Quitar resalte
+          </button>
+        )}
+        {vista !== 'AI' && vista !== 'DOCUMENTAL' && <label className="notacion" title="Solo cambia como se MUESTRAN: lo guardado no se toca">
           Cardinalidad
           <select value={notacionCardinalidad}
                   onChange={(e) => setNotacionCardinalidad(e.target.value as NotacionCardinalidad)}>
@@ -889,6 +982,22 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         />
       )}
 
+      {verVersiones && (
+        <PanelVersiones
+          diagramaId={diagramId}
+          api={apiVersiones}
+          puedeEscribir={permisosDe(rol).editarModelo}
+          revision={revisionVersiones}
+          onResaltar={(r) => { setResaltados(r); if (r) setVista('CLASS') }}
+          onAbrirRama={(id) => {
+            // Las ramas de la simulacion no existen en el servidor: abrirlas daria "sin acceso".
+            if (usarApiSimulada()) { setError('Modo simulado: la rama existe solo en memoria, no se puede abrir como diagrama.'); return }
+            window.location.hash = hashDe({ tipo: 'diagrama', proyectoId: proyecto.id, diagramaId: id })
+          }}
+          onCerrar={() => setVerVersiones(false)}
+        />
+      )}
+
       {generando && (
         <PanelGeneracion
           resumen={resumen}
@@ -897,6 +1006,8 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
           onDescargar={descargarZip}
           onAplicarCorrecciones={aplicarCorreccionesPreGeneracion}
           onIrAFisica={() => { setGenerando(false); setVista('PHYSICAL') }}
+          almacen={almacen}
+          onAlmacen={(a) => { setAlmacen(a); void abrirGeneracion(a) }}
           onCerrar={() => setGenerando(false)}
         />
       )}
@@ -904,10 +1015,13 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       <main className="cuerpo">
         <div className={puedeEditar ? 'lienzo-wrap' : 'lienzo-wrap solo-lectura'}>
           {vista === 'AI' ? (
-            <VistaIA diagramId={diagramId} token={token} modelo={modelo} conectado={conectado}
-                     puedeEditar={puedeEditarModelo} usuario={usuario.fullName} onAplicar={enviarLoteIA} />
+            <VistaIA diagramId={diagramId} proyectoId={proyecto.id} token={token} modelo={modelo} conectado={conectado}
+                     puedeEditar={puedeEditarModelo} usuarioId={usuario.userId} usuario={usuario.fullName} rol={rol} onAplicar={enviarLoteIA}
+                     suscribirAvisos={suscribirAvisosIA} />
           ) : vista === 'LOGICAL' ? (
             <VistaLogica modelo={logica} />
+          ) : vista === 'DOCUMENTAL' ? (
+            <VistaDocumental modelo={documental} error={errorDocumental} />
           ) : vista === 'PHYSICAL' ? (
             <VistaFisica
               diagramId={diagramId!}
@@ -937,6 +1051,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
                     modoConector={puedeEditar && herramientaRelacion}
                     onConectar={puedeEditar ? conectar : undefined}
                     notacionCardinalidad={notacionCardinalidad}
+                    resaltados={resaltados ?? undefined}
                     onMoverQuiebres={puedeEditar ? moverQuiebres : undefined} />
           )}
         </div>

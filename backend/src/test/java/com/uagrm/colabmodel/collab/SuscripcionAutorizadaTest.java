@@ -65,7 +65,7 @@ class SuscripcionAutorizadaTest {
 
     @Test
     void un_no_miembro_no_se_suscribe_a_ningun_topico_de_un_diagrama_ajeno() {
-        for (String tema : new String[]{"ops", "presence", "locks"}) {
+        for (String tema : new String[]{"ops", "presence", "locks", "versions", "ai"}) {
             Message<?> pedido = suscripcion(extrano, "s-x", "sub-" + tema, "/topic/diagram/" + diagramaId + "/" + tema);
 
             assertThatThrownBy(() -> interceptor.preSend(pedido, canal))
@@ -85,6 +85,34 @@ class SuscripcionAutorizadaTest {
             assertThat(interceptor.preSend(pedido, canal)).isSameAs(pedido);
             assertThat(sesiones.estaSuscrita("s-" + miembro.getFullName(),
                     "/topic/diagram/" + diagramaId + "/ops")).isTrue();
+        }
+    }
+
+    /**
+     * El aviso de commit nuevo (ADR-037). Antes de agregarlo al patron, el
+     * SUBSCRIBE del historial cortaba la conexion entera con un ERROR y el
+     * editor quedaba "Sin conexion".
+     */
+    @Test
+    void los_tres_roles_se_suscriben_al_aviso_de_versiones() {
+        for (AppUser miembro : new AppUser[]{ana, beto, carla}) {
+            String destino = "/topic/diagram/" + diagramaId + "/versions";
+            Message<?> pedido = suscripcion(miembro, "s-v-" + miembro.getFullName(), "sub-v", destino);
+
+            assertThat(interceptor.preSend(pedido, canal)).isSameAs(pedido);
+            assertThat(sesiones.estaSuscrita("s-v-" + miembro.getFullName(), destino)).isTrue();
+        }
+    }
+
+    /** El historial compartido de la IA (T-04): lo lee quien lee el diagrama, VIEWER incluido. */
+    @Test
+    void los_tres_roles_se_suscriben_al_historial_de_la_ia() {
+        for (AppUser miembro : new AppUser[]{ana, beto, carla}) {
+            String destino = "/topic/diagram/" + diagramaId + "/ai";
+            Message<?> pedido = suscripcion(miembro, "s-ia-" + miembro.getFullName(), "sub-ia", destino);
+
+            assertThat(interceptor.preSend(pedido, canal)).isSameAs(pedido);
+            assertThat(sesiones.estaSuscrita("s-ia-" + miembro.getFullName(), destino)).isTrue();
         }
     }
 

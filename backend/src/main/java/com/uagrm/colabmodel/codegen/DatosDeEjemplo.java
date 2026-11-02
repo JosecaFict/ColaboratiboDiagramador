@@ -47,6 +47,15 @@ final class DatosDeEjemplo {
      * @return el script, o null si no hubo ninguna tabla segura de sembrar
      */
     static String sql(ModeloLogico logico, Set<String> conEntity) {
+        return sql(logico, conEntity, Set.of());
+    }
+
+    /**
+     * @param abstractas tablas de clases abstractas. No se siembran: una fila
+     *                   suya sin la de una subclase es un objeto que Java no
+     *                   puede construir, y listar la raiz daba 500 (JOINED).
+     */
+    static String sql(ModeloLogico logico, Set<String> conEntity, Set<String> abstractas) {
         Map<String, ModeloLogico.Tabla> porNombre = new LinkedHashMap<>();
         for (ModeloLogico.Tabla t : logico.tablas()) porNombre.put(t.nombre(), t);
 
@@ -54,7 +63,9 @@ final class DatosDeEjemplo {
         List<String> salteadas = new ArrayList<>();
         for (ModeloLogico.Tabla t : logico.tablas()) {
             if (!conEntity.contains(t.nombre())) continue;
-            String motivo = porQueNoSeSiembra(t);
+            String motivo = abstractas.contains(t.nombre())
+                    ? "es de una clase abstracta: sus filas las crean sus subclases"
+                    : porQueNoSeSiembra(t);
             if (motivo == null) sembrables.add(t);
             else salteadas.add(t.nombre() + ": " + motivo);
         }

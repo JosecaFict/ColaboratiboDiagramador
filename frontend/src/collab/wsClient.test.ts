@@ -97,3 +97,55 @@ describe('ColabClient: orden y huecos', () => {
     c.desactivar()
   })
 })
+
+describe('suscripcion a /versions rechazada por el servidor', () => {
+  it('no se trata como perdida de acceso y se deja de pedir', () => {
+    const rechazos: string[] = []
+    const c = new ColabClient('d1', 't', { onCanalRechazado: (m) => rechazos.push(m) })
+
+    const eraVersiones = c.alErrorDeCanal('Destino no permitido: /topic/diagram/abc/versions')
+    expect(eraVersiones).toBe(true)
+    expect(c.tieneVersionesEnVivo()).toBe(false)
+    expect(rechazos).toEqual([])
+  })
+
+  it('cualquier otro rechazo sigue avisando a la raiz, tambien despues', () => {
+    const rechazos: string[] = []
+    const c = new ColabClient('d1', 't', { onCanalRechazado: (m) => rechazos.push(m) })
+
+    expect(c.alErrorDeCanal('No sos miembro de este proyecto')).toBe(false)
+    c.alErrorDeCanal('Destino no permitido: /topic/diagram/abc/versions')
+    expect(c.alErrorDeCanal('No sos miembro de este proyecto')).toBe(false)
+    expect(rechazos).toEqual(['No sos miembro de este proyecto', 'No sos miembro de este proyecto'])
+    expect(c.tieneVersionesEnVivo()).toBe(false)
+  })
+
+  it('si /versions se rechaza una segunda vez ya no se le da trato especial', () => {
+    const rechazos: string[] = []
+    const c = new ColabClient('d1', 't', { onCanalRechazado: (m) => rechazos.push(m) })
+    c.alErrorDeCanal('Destino no permitido: /topic/diagram/abc/versions')
+    expect(c.alErrorDeCanal('Destino no permitido: /topic/diagram/abc/versions')).toBe(false)
+    expect(rechazos).toHaveLength(1)
+  })
+})
+
+describe('suscripcion a /ai rechazada por un backend sin el historial compartido (T-04)', () => {
+  it('se deja de pedir sin tratarse como perdida de acceso', () => {
+    const rechazos: string[] = []
+    const c = new ColabClient('d1', 't', { onCanalRechazado: (m) => rechazos.push(m) })
+
+    expect(c.alErrorDeCanal('Destino no permitido: /topic/diagram/abc/ai')).toBe(true)
+    expect(c.tieneIAEnVivo()).toBe(false)
+    expect(c.tieneVersionesEnVivo()).toBe(true)
+    expect(rechazos).toEqual([])
+  })
+
+  it('un mensaje que solo menciona /api no se confunde con el topico /ai', () => {
+    const rechazos: string[] = []
+    const c = new ColabClient('d1', 't', { onCanalRechazado: (m) => rechazos.push(m) })
+
+    expect(c.alErrorDeCanal('Fallo /api/v1/diagrams')).toBe(false)
+    expect(c.tieneIAEnVivo()).toBe(true)
+    expect(rechazos).toHaveLength(1)
+  })
+})

@@ -1,4 +1,5 @@
 import type { ConfirmacionEsquema } from '../physical/esquema'
+import { ETIQUETA_DE_ALMACEN, type Almacen } from '../documental/tipos'
 
 /** Espejo de DiagramRestController.ResumenGeneracion. */
 export interface ResumenGeneracion {
@@ -24,6 +25,9 @@ interface Props {
   onIrAFisica: () => void
   onCerrar: () => void
   onAplicarCorrecciones: () => void
+  /** PostgreSQL o MongoDB (ADR-035): se manda como `?store=`. */
+  almacen: Almacen
+  onAlmacen: (a: Almacen) => void
 }
 
 /**
@@ -39,7 +43,7 @@ interface Props {
  * sin confirmar se puede bajar igual. Pero lo dice antes, y la accion
  * principal pasa a ser ir a revisarla.
  */
-export function PanelGeneracion({ resumen, error, descargando, onDescargar, onIrAFisica, onCerrar, onAplicarCorrecciones }: Props) {
+export function PanelGeneracion({ resumen, error, descargando, onDescargar, onIrAFisica, onCerrar, onAplicarCorrecciones, almacen, onAlmacen }: Props) {
   const confirmada = resumen?.confirmacion?.vigente === true
   return (
     <div className="modal-fondo" onClick={onCerrar}>
@@ -48,6 +52,22 @@ export function PanelGeneracion({ resumen, error, descargando, onDescargar, onIr
           <strong>Generar backend Spring Boot</strong>
           <button className="modal-cerrar" onClick={onCerrar} title="Cerrar">×</button>
         </header>
+
+        <label className="gen-almacen">
+          Base de datos
+          <select value={almacen} onChange={(e) => onAlmacen(e.target.value as Almacen)} disabled={descargando}>
+            {(Object.keys(ETIQUETA_DE_ALMACEN) as Almacen[]).map((a) => (
+              <option key={a} value={a}>{ETIQUETA_DE_ALMACEN[a]}</option>
+            ))}
+          </select>
+        </label>
+        {almacen === 'mongo' && (
+          <p className="tenue">
+            Variante documental: las composiciones van incrustadas y el resto por referencia.
+            Las rutas y el manifiesto son los mismos, así que la app móvil no nota la diferencia.
+            La revisión del esquema SQL no aplica.
+          </p>
+        )}
 
         {error && <p className="modal-error">{error}</p>}
 
@@ -70,7 +90,7 @@ export function PanelGeneracion({ resumen, error, descargando, onDescargar, onIr
               </p>
             )}
 
-            {resumen.entidades > 0 && (confirmada ? (
+            {resumen.entidades > 0 && almacen === 'postgres' && (confirmada ? (
               <p className="gen-base ok">
                 <strong>Base confirmada</strong> por {resumen.confirmacion!.por ?? 'alguien del equipo'}{' '}
                 (operación #{resumen.confirmacion!.seq}). El zip lleva exactamente ese DDL, el mismo que
@@ -114,7 +134,7 @@ export function PanelGeneracion({ resumen, error, descargando, onDescargar, onIr
             </details>
 
             <footer>
-              {confirmada || resumen.entidades === 0 ? (
+              {almacen === 'mongo' || confirmada || resumen.entidades === 0 ? (
                 <button className="tb-btn tb-primario" disabled={descargando} onClick={onDescargar}>
                   {descargando ? 'Empaquetando…' : 'Descargar ZIP'}
                 </button>

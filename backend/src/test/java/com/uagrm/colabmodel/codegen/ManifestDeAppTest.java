@@ -188,6 +188,10 @@ class ManifestDeAppTest {
         private final List<UmlRelationship> relaciones = new ArrayList<>();
 
         static ProyectoGenerado generar() {
+            return generar(GeneradorSpringBoot.Opciones.por("Biblioteca"));
+        }
+
+        static ProyectoGenerado generar(GeneradorSpringBoot.Opciones opciones) {
             Biblioteca b = new Biblioteca();
             UmlClass estado = b.clase("EstadoLibro");
             estado.setStereotype(Enumeraciones.ESTEREOTIPO);
@@ -222,8 +226,7 @@ class ManifestDeAppTest {
             b.relacion(libro, prestamo, "libro");
             b.relacion(socio, prestamo, "socio");
 
-            return GeneradorSpringBoot.generar(GeneradorSpringBoot.Opciones.por("Biblioteca"),
-                    b.clases, b.atributos, List.of(), b.relaciones);
+            return GeneradorSpringBoot.generar(opciones, b.clases, b.atributos, List.of(), b.relaciones);
         }
 
         private UmlClass clase(String nombre) {

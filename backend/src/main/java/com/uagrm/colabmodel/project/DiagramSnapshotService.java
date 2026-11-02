@@ -161,12 +161,31 @@ public class DiagramSnapshotService {
      */
     @Transactional(readOnly = true)
     public Optional<ProyectoGenerado> codigoDe(UUID diagramId) {
+        return codigoDe(diagramId, GeneradorSpringBoot.Almacen.POSTGRES);
+    }
+
+    /** Lo mismo, con la base elegida (ADR-035): PostgreSQL o MongoDB. */
+    @Transactional(readOnly = true)
+    public Optional<ProyectoGenerado> codigoDe(UUID diagramId, GeneradorSpringBoot.Almacen almacen) {
         return diagrams.findById(diagramId).map(d -> {
             Modelo m = leer(d.getId());
             return GeneradorSpringBoot.generar(
-                    GeneradorSpringBoot.Opciones.por(d.getName()),
+                    GeneradorSpringBoot.Opciones.por(d.getName(), almacen),
                     m.clases(), m.atributos(), m.metodos(), m.relaciones(),
                     decisionesDe(diagramId));
+        });
+    }
+
+    /**
+     * La Vista Documental (ADR-035): como guarda este diagrama la variante
+     * MongoDB. Sale del mismo analisis que el zip de esa variante.
+     */
+    @Transactional(readOnly = true)
+    public Optional<com.uagrm.colabmodel.modelcore.mapping.ModeloDocumental> documentalDe(UUID diagramId) {
+        return diagrams.findById(diagramId).map(d -> {
+            Modelo m = leer(d.getId());
+            return GeneradorSpringBoot.documental(d.getName(), m.clases(), m.atributos(), m.metodos(),
+                    m.relaciones(), decisionesDe(diagramId));
         });
     }
 

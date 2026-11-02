@@ -234,9 +234,9 @@ class GeneradorSpringBootTest {
         // y en app-manifest.json. Si no coincidiera, el `inverseOf` del
         // manifiesto seguiria apuntando a una ruta que no existe.
         assertThat(p.archivos().get(BASE_JAVA + "web/PedidoController.java"))
-                .contains("public List<PedidoDto> listar(@RequestParam(required = false) UUID clienteId)")
-                .contains("if (clienteId != null) return servicio.listarPorCliente(clienteId);")
-                .contains("return servicio.listar();");
+                .contains("@RequestParam(required = false) UUID clienteId")
+                .contains("clienteId != null ? servicio.listarPorCliente(clienteId, page, size, sort)")
+                .contains("servicio.listar(page, size, sort)");
     }
 
     @Test
@@ -247,20 +247,21 @@ class GeneradorSpringBootTest {
         // N+1 que la Regla 7 ya habia cerrado.
         assertThat(p.archivos().get(BASE_JAVA + "repository/PedidoRepository.java"))
                 .contains("@EntityGraph(attributePaths = { \"cliente\" })")
-                .contains("List<Pedido> findByCliente_Id(UUID clienteId);");
+                .contains("List<Pedido> findByCliente_Id(UUID clienteId, Sort orden);")
+                .contains("Page<Pedido> findByCliente_Id(UUID clienteId, Pageable pagina);");
         assertThat(p.archivos().get(BASE_JAVA + "service/PedidoService.java"))
-                .contains("public List<PedidoDto> listarPorCliente(UUID clienteId)")
-                .contains("repositorio.findByCliente_Id(clienteId)");
+                .contains("public Pagina<PedidoDto> listarPorCliente(UUID clienteId, Integer page, Integer size, String sort)")
+                .contains("repositorio.findByCliente_Id(clienteId, orden)");
     }
 
     @Test
     void una_entidad_sin_fk_no_gana_filtros_que_nadie_puede_usar() {
         ProyectoGenerado p = generar("02-uno-a-muchos.json");
 
-        // Cliente no tiene FK propia: su listado sigue sin parametros.
+        // Cliente no tiene FK propia: su listado solo acepta pagina y orden.
         assertThat(p.archivos().get(BASE_JAVA + "web/ClienteController.java"))
-                .contains("public List<ClienteDto> listar() {")
-                .doesNotContain("@RequestParam");
+                .contains("@RequestParam(required = false) String sort) {")
+                .doesNotContain("UUID clienteId");
         assertThat(p.archivos().get(BASE_JAVA + "service/ClienteService.java"))
                 .doesNotContain("listarPor");
     }
@@ -275,7 +276,7 @@ class GeneradorSpringBootTest {
         assertThat(p.archivos().get(BASE_JAVA + "web/ManejadorDeErrores.java"))
                 .contains("@ExceptionHandler(MethodArgumentNotValidException.class)")
                 .contains("e.getBindingResult().getFieldErrors()")
-                .contains("\"error\", \"Hay campos invalidos\", \"errores\", errores")
+                .contains("error(HttpStatus.BAD_REQUEST, \"Hay campos invalidos\", errores)")
                 // Y un uuid mal escrito en la URL o en un filtro conserva la
                 // misma forma de respuesta que el resto de la API.
                 .contains("@ExceptionHandler(MethodArgumentTypeMismatchException.class)");
@@ -453,7 +454,7 @@ class GeneradorSpringBootTest {
         // Lo que se afirma es el TIPO que sale, no la firma completa: el
         // listado lleva filtros por FK desde que el frontend los necesito.
         assertThat(controlador)
-                .contains("public List<PedidoDto> listar(")
+                .contains("public ResponseEntity<List<PedidoDto>> listar(")
                 .contains("public PedidoDto obtener(")
                 .contains("ResponseEntity<PedidoDto> crear(")
                 .doesNotContain("import com.uagrm.generado.domain.");
@@ -466,7 +467,7 @@ class GeneradorSpringBootTest {
 
         assertThat(servicio)
                 .contains("@Transactional(readOnly = true)")
-                .contains("public List<PedidoDto> listar()")
+                .contains("public Pagina<PedidoDto> listar(Integer page, Integer size, String sort)")
                 .contains("static PedidoDto aDto(Pedido e)")
                 // La asociacion sale como id; leer el id de un proxy LAZY no lo inicializa.
                 .contains("e.getCliente() == null ? null : e.getCliente().getId()")

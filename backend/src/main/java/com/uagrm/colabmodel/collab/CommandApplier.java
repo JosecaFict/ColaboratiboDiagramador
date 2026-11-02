@@ -93,6 +93,19 @@ public class CommandApplier {
                 .orElseThrow(() -> new CommandRejectedException(
                         command.opId(), RejectionReason.NOT_FOUND, "El diagrama no existe"));
 
+        // Un lote calculado contra un estado (restaurar, mergear: ADR-037)
+        // dice contra que seq se calculo. Si en el medio entro otra edicion,
+        // aplicarlo dejaria otra cosa que la pedida: se rechaza sin tocar nada.
+        // Se mira aca, en el hilo unico del diagrama (ADR-005), y no antes de
+        // mandarlo, porque antes siempre queda una ventana.
+        if (command.type() == CommandType.BATCH && command.payload().has("seqEsperado")
+                && command.payload().get("seqEsperado").asLong() != diagram.getCurrentSeq()) {
+            throw new CommandRejectedException(command.opId(), RejectionReason.STALE,
+                    "El diagrama cambio mientras se preparaba el cambio (seq "
+                            + command.payload().get("seqEsperado").asLong() + " -> " + diagram.getCurrentSeq()
+                            + "). Volve a intentar: no se aplico nada.");
+        }
+
         // El efecto se aplica ANTES de consumir seq: si se rechaza, no se gasta
         // numero de secuencia ni queda un registro de operacion sin efecto real.
         aplicarEfecto(command, userId);
