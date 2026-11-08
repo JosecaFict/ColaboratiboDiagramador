@@ -273,8 +273,8 @@ final class NormalizadorPlanUml {
             cambios += ponerSiCambio(r, cancelacionOrigen ? "targetMultiplicity" : "sourceMultiplicity", "1");
             String extremo = cancelacionOrigen ? "sourceMultiplicity" : "targetMultiplicity";
             String actual = r.path(extremo).asText();
-            if (actual.equals("1")) cambios += ponerSiCambio(r, extremo, "0..1");
-            else if (actual.equals("1..*")) cambios += ponerSiCambio(r, extremo, "0..*");
+            // Una reserva se cancela a lo sumo una vez (turismo 2026-11-08: el modelo puso 0..*).
+            cambios += ponerSiCambio(r, extremo, "0..1");
         }
         return cambios;
     }
@@ -1095,6 +1095,15 @@ final class NormalizadorPlanUml {
         for (JsonNode claseNodo : plan.path("classes")) {
             ObjectNode clase = (ObjectNode) claseNodo;
             Set<String> vecinas = relacionadas.getOrDefault(clase.path("name").asText(), Set.of());
+            // Los roles del otro extremo tambien son referencias: Animal.madreId repite la recursiva rol madre.
+            String esta = clase.path("name").asText();
+            Set<String> roles = new HashSet<>();
+            for (JsonNode r : plan.path("relations")) {
+                if (!esAsociacion(r)) continue;
+                if (esta.equals(r.path("source").asText())) roles.add(normal(r.path("targetRole").asText()));
+                if (esta.equals(r.path("target").asText())) roles.add(normal(r.path("sourceRole").asText()));
+            }
+            roles.remove("");
             ArrayNode atributos = (ArrayNode) clase.path("attributes");
             for (int i = atributos.size() - 1; i >= 0; i--) {
                 JsonNode atributo = atributos.get(i);
@@ -1105,7 +1114,9 @@ final class NormalizadorPlanUml {
                 boolean duplicada = vecinas.stream().map(NormalizadorPlanUml::normal)
                         .map(n -> n.replace("_", ""))
                         .anyMatch(relacionada -> esReferenciaA(nombre, relacionada)
-                                || (uuid && nombre.startsWith(relacionada)));
+                                || (uuid && nombre.startsWith(relacionada)))
+                        || roles.stream().anyMatch(rol -> nombre.equals(rol + "id") || nombre.equals("id" + rol)
+                                || (uuid && nombre.equals(rol)));
                 if (duplicada) {
                     atributos.remove(i);
                     retiradas++;

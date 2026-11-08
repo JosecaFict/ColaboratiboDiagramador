@@ -232,6 +232,34 @@ class CorrectorEstructuralPlanTest {
         assertThat(ValidadorPlanFinal.revisar(r)).noneMatch(h -> h.contains("TitularReserva"));
     }
 
+    // --- tercera ronda (2026-11-08) ---
+
+    @Test
+    void ganaderia_padre_id_y_madre_id_repiten_las_recursivas_y_se_retiran() throws Exception {
+        ObjectNode plan = plan("""
+                Animal: fechaNacimiento:date, madreId:uuid, padreId:uuid, tipoId:string
+                Lote: codigo:string
+                ---
+                Lote 1 -- 0..* Animal
+                Animal 0..* -- 0..1 Animal roles=descendientes/padre
+                Animal 0..* -- 0..1 Animal roles=descendientes/madre
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, "Ganaderia: animales y parentesco con padre y madre.").comandos().getFirst().parametros();
+        assertThat(atributos(p, "Animal")).doesNotContain("madreId", "padreId").contains("fechaNacimiento", "tipoId");
+    }
+
+    @Test
+    void turismo_una_reserva_tiene_a_lo_sumo_una_cancelacion() throws Exception {
+        ObjectNode plan = plan("""
+                Reserva: fechaCreacion:datetime
+                Cancelacion: fechaCancelacion:datetime, motivo:text
+                ---
+                Reserva 1 -- 0..* Cancelacion
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, TURISMO).comandos().getFirst().parametros();
+        assertThat(relaciones(p)).contains("Reserva 1 -- 0..1 Cancelacion");
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {
