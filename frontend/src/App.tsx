@@ -34,6 +34,8 @@ import type {
 import { ETIQUETA_DE_ROL, esSoloLectura, type Rol } from './auth/permisos'
 import type { Sesion } from './auth/sesion'
 import { VistaIA } from './ai/VistaIA'
+import { ChatFlotante } from './ai/ChatFlotante'
+import { useAsistenteIA } from './ai/useAsistenteIA'
 
 /**
  * La vista Chen se saco de circulacion: se trabaja solo con UML.
@@ -498,6 +500,9 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     })
   }
 
+  // Un solo asistente para la vista de IA y el chat flotante: la conversacion sobrevive al cambiar de vista.
+  const asistente = useAsistenteIA({ diagramId, token, modelo, onAplicar: enviarLoteIA })
+
   const cerrarImportacion = () => {
     loteEsperadoRef.current = null
     setEnvioImportacion(null)
@@ -904,8 +909,8 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       <main className="cuerpo">
         <div className={puedeEditar ? 'lienzo-wrap' : 'lienzo-wrap solo-lectura'}>
           {vista === 'AI' ? (
-            <VistaIA diagramId={diagramId} token={token} modelo={modelo} conectado={conectado}
-                     puedeEditar={puedeEditarModelo} usuario={usuario.fullName} onAplicar={enviarLoteIA} />
+            <VistaIA asistente={asistente} modelo={modelo} conectado={conectado}
+                     puedeEditar={puedeEditarModelo} usuario={usuario.fullName} />
           ) : vista === 'LOGICAL' ? (
             <VistaLogica modelo={logica} />
           ) : vista === 'PHYSICAL' ? (
@@ -1036,6 +1041,9 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
           </ul>
         </aside>
       </main>
+      {/* El asistente flotante acompaña al diagrama; en la vista completa de IA ya está todo a la vista. */}
+      {vista !== 'AI' && <ChatFlotante asistente={asistente} conectado={conectado}
+        puedeEditar={puedeEditarModelo} onVerDetalle={() => setVista('AI')} />}
     </div>
   )
 }
