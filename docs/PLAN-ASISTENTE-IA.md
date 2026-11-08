@@ -103,6 +103,6 @@ Se anotan en la tabla del final, siempre con la GPU libre (sin juegos ni overlay
 
 | Fase | Fecha | PROCESSOR | Disenar (s, promedio) | Llamadas por Disenar | Tokens/s | Exito (x/15) | Asistente (s) | Notas |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| 0 - linea base | | | | | | | - | |
-| 1 - Ollama | | | | | | | - | |
+| 0 - linea base | 2026-11-07 | 12%/88% CPU/GPU (6.4 GB) | 134 (43+37+54) | 3 | | 1 corrida academico | - | Sin variables OLLAMA_*; VRAM ocupada por otras apps (7.1 GB). Diseno ~70 %: COMPOSITION, Detalle->Periodo, Prerrequisito N:M |
+| 1 - Ollama | 2026-11-08 | 100% GPU (5.6 GB) | 106 (34+26+38+8) | 4 | | 1 corrida academico | - | Flash attention + KV q8_0, apps cerradas. ~30 % mas rapido por llamada. Diseno: corrige Prerrequisito, pero creditos/cargaHoraria pasan a Asignatura |
 | 2-3 - asistente | | | | | | | | |
