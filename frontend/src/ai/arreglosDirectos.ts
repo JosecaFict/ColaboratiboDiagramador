@@ -10,7 +10,12 @@ import type { ComandoAceptadoIA } from './tipos'
 export interface ArregloDirecto {
   etiqueta: string
   cambios: ComandoAceptadoIA[]
+  /** La opcion mas probable: viene preelegida, el usuario puede cambiarla antes de aplicar. */
+  sugerido?: boolean
 }
+
+// Registros que se acumulan en el tiempo: del lado de uno de ellos va 0..*.
+const REGISTRO = /^(prestamo|venta|compra|pedido|pago|reserva|movimiento|transferencia|cita|inscripcion|factura|cuota)/i
 
 const normal = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 // Las palabras de "forma" (Detalle, Asignacion...) no indican de que concepto se trata.
@@ -51,7 +56,46 @@ export function arreglosDirectos(hallazgo: string, modelo: EstadoModelo): Arregl
       .map((c) => ({ c, afinidad: palabras(c.name).some((p) => propias.includes(p)) ? 0
         : complemento?.test(c.name) ? 1 : 2 }))
       .sort((a, b) => a.afinidad - b.afinidad || a.c.name.localeCompare(b.c.name))
-      .map(({ c }) => ({ etiqueta: `Conectar con ${c.name}`, cambios: [crear(clase.id, c.id, '0..*', '1')] }))
+      .map(({ c, afinidad }, i) => ({ etiqueta: `Conectar con ${c.name}`, cambios: [crear(clase.id, c.id, '0..*', '1')],
+        sugerido: i === 0 && afinidad < 2 }))
+  }
+
+  // Prestamo no identifica al cliente prestatario: una unica respuesta.
+  const prestatario = hallazgo.match(/(\w+) no identifica al cliente prestatario/)
+  if (prestatario) {
+    const prestamo = porNombre(prestatario[1]), cliente = modelo.classes.find((c) => /^cliente$/i.test(c.name))
+    return prestamo && cliente && !vecinas(prestamo.id).has(cliente.id)
+      ? [{ etiqueta: `Conectar con ${cliente.name}`, cambios: [crear(prestamo.id, cliente.id, '0..*', '1')] }] : []
+  }
+
+  // Transferencia no registra el importe: se agrega el dato, una unica respuesta.
+  const importe = hallazgo.match(/(\w+) no registra el importe/)
+  if (importe) {
+    const clase = porNombre(importe[1])
+    return clase ? [{ etiqueta: `Agregar importe (decimal) a ${clase.name}`, cambios: [{ tipo: 'ADD_ATTRIBUTE', payload: {
+      attributeId: uuid(), classId: clase.id, name: 'importe', dataType: 'decimal', required: true, unique: false, pk: false },
+      resumen: `Agregar atributo importe (decimal) a ${clase.name}` }] }] : []
+  }
+
+  // La relacion Prestamo [1] - [1] Cliente es uno a uno: se elige de que lado van varios.
+  const unoAUno = hallazgo.match(/relacion (\w+) \[1\] - \[1\] (\w+) es uno a uno/)
+  if (unoAUno) {
+    const a = porNombre(unoAUno[1]), b = porNombre(unoAUno[2])
+    const r = a && b && modelo.relationships.find((x) => (x.sourceClassId === a.id && x.targetClassId === b.id)
+      || (x.sourceClassId === b.id && x.targetClassId === a.id))
+    if (!a || !b || !r) return []
+    const varios = (muchos: string, uno: string) => ({
+      etiqueta: `Un ${nombre(uno)} tiene varios ${nombre(muchos)}`,
+      cambios: [{ tipo: 'UPDATE_RELATION' as const,
+        payload: { relationId: r.id, sourceMultiplicity: r.sourceClassId === muchos ? '0..*' : '1',
+          targetMultiplicity: r.targetClassId === muchos ? '0..*' : '1' },
+        resumen: `Cambiar ${nombre(muchos)} - ${nombre(uno)}: un ${nombre(uno)} tiene 0..* ${nombre(muchos)}` }],
+    })
+    // Primero el registro que se acumula (un Cliente tiene varios Prestamo).
+    const opciones = REGISTRO.test(b.name) && !REGISTRO.test(a.name) ? [varios(b.id, a.id), varios(a.id, b.id)]
+      : [varios(a.id, b.id), varios(b.id, a.id)]
+    const hayRegistro = REGISTRO.test(a.name) !== REGISTRO.test(b.name)
+    return opciones.map((o, i) => ({ ...o, sugerido: i === 0 && hayRegistro }))
   }
 
   // Titular no identifica al titular mediante una asociacion con [Cliente]: una unica respuesta.
@@ -74,8 +118,10 @@ export function arreglosDirectos(hallazgo: string, modelo: EstadoModelo): Arregl
   if (dueno) {
     const hijo = porNombre(dueno[1])
     if (!hijo) return []
+    // El paquete es el dueño mas general del itinerario: se sugiere, la salida queda como alternativa.
     return modelo.classes.filter((c) => /^(paquete|salida)/i.test(c.name) && !vecinas(hijo.id).has(c.id))
-      .map((c) => ({ etiqueta: `Pertenece a ${c.name}`, cambios: [crear(c.id, hijo.id, '1', '0..*')] }))
+      .sort((x, y) => (/^paquete/i.test(x.name) ? 0 : 1) - (/^paquete/i.test(y.name) ? 0 : 1))
+      .map((c, i) => ({ etiqueta: `Pertenece a ${c.name}`, cambios: [crear(c.id, hijo.id, '1', '0..*')], sugerido: i === 0 }))
   }
 
   // Reserva no permite multiples viajeros: la relacion directa pasa a 1..* junto al viajero.

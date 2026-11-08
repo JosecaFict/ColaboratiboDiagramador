@@ -55,6 +55,26 @@ describe('arreglos directos', () => {
       .toBe('Conectar con ServicioTuristico')
   })
 
+  it('banco: prestatario, importe y uno a uno tienen arreglo directo', () => {
+    const banco: EstadoModelo = { diagramId: 'd', layout: {},
+      classes: ['Cliente', 'Prestamo', 'Transferencia'].map(clase),
+      relationships: [rel('p1', 'Prestamo', 'Cliente', '1', '1')] }
+    const [importe] = arreglosDirectos('Transferencia no registra el importe de la operacion solicitada.', banco)
+    expect(importe.cambios[0]).toMatchObject({ tipo: 'ADD_ATTRIBUTE',
+      payload: { classId: 'Transferencia', name: 'importe', dataType: 'decimal' } })
+    const opciones = arreglosDirectos('La relacion Prestamo [1] - [1] Cliente es uno a uno; verifica que no deba conservar multiples instancias historicas.', banco)
+    expect(opciones[0]).toMatchObject({ etiqueta: 'Un Cliente tiene varios Prestamo', sugerido: true })
+    expect(opciones[0].cambios[0].payload).toMatchObject({ relationId: 'p1', sourceMultiplicity: '0..*', targetMultiplicity: '1' })
+    const sinCliente: EstadoModelo = { ...banco, relationships: [] }
+    expect(arreglosDirectos('Prestamo no identifica al cliente prestatario, directamente o mediante una participacion explicita.', sinCliente)[0]
+      .cambios[0].payload).toMatchObject({ sourceClassId: 'Prestamo', targetClassId: 'Cliente', sourceMultiplicity: '0..*' })
+  })
+
+  it('el itinerario sugiere pertenecer al paquete', () => {
+    const [primera] = arreglosDirectos('Itinerario no identifica el paquete o la salida al que pertenece', turismo)
+    expect(primera).toMatchObject({ etiqueta: 'Pertenece a Paquete', sugerido: true })
+  })
+
   it('un hallazgo desconocido no inventa arreglos', () => {
     expect(arreglosDirectos('Los creditos requeridos por cada plan no tienen contexto', turismo)).toEqual([])
   })

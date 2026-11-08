@@ -219,9 +219,9 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
     setPanel('recomendaciones')
   }
 
-  /** Solo se preelige un arreglo cuando es la unica respuesta posible. */
+  /** Se preelige el arreglo cuando es la unica respuesta o la opcion sugerida; el usuario la revisa antes de aplicar. */
   const unicosArreglos = (ids: number[], titulos: string[]) => Object.fromEntries(ids.flatMap((id, i) =>
-    arreglosDirectos(titulos[i], modelo).length === 1 ? [[id, 0]] : [])) as Record<number, number>
+    ((o) => o.length === 1 || o[0]?.sugerido)(arreglosDirectos(titulos[i], modelo)) ? [[id, 0]] : [])) as Record<number, number>
 
   const aplicar = () => {
     if (!ultimaPropuesta) return
@@ -347,7 +347,7 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
                   return nuevo
                 })}>
                   <option value="">— elegí una opción (o dejá que la IA lo intente, menos confiable) —</option>
-                  {opcionesPorRecomendacion.get(r.id)!.map((o, i) => <option key={o.etiqueta} value={i}>{o.etiqueta}</option>)}
+                  {opcionesPorRecomendacion.get(r.id)!.map((o, i) => <option key={o.etiqueta} value={i}>{o.etiqueta}{o.sugerido ? " (sugerido)" : ""}</option>)}
                 </select>
               </label>}
               {r.accion && arreglosElegidos[r.id] === undefined && <label className="ia-accion"><b>Acción para la IA</b>
