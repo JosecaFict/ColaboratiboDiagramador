@@ -209,6 +209,34 @@ class ServicioDeRecomendacionesTest {
     }
 
     @Test
+    void los_borrados_que_nadie_pidio_se_descartan_y_una_relacion_recreada_tambien() {
+        // Banco y turismo, 2026-11-08: ante "Corrige en el diagrama: ..." el modelo borro
+        // Titular-Cuenta y borro y recreo DetalleReserva-Reserva.
+        var titularCuenta = mapper.createObjectNode().put("relationId", "r-titular");
+        var detalleReserva = mapper.createObjectNode().put("relationId", "r-detalle");
+        var recreada = mapper.createObjectNode().put("sourceClassId", "reserva").put("targetClassId", "detalle");
+        var nueva = mapper.createObjectNode().put("sourceClassId", "titular").put("targetClassId", "cliente");
+        var p = new PropuestaDeIA(diagramId, Origin.TEXT, List.of(
+                new PropuestaDeIA.ComandoAceptado(com.uagrm.colabmodel.modelcore.command.CommandType.DELETE_RELATION, titularCuenta, "Borrar Titular-Cuenta"),
+                new PropuestaDeIA.ComandoAceptado(com.uagrm.colabmodel.modelcore.command.CommandType.DELETE_RELATION, detalleReserva, "Borrar DetalleReserva-Reserva"),
+                new PropuestaDeIA.ComandoAceptado(com.uagrm.colabmodel.modelcore.command.CommandType.CREATE_RELATION, recreada, "Crear Reserva-DetalleReserva"),
+                new PropuestaDeIA.ComandoAceptado(com.uagrm.colabmodel.modelcore.command.CommandType.CREATE_RELATION, nueva, "Crear Titular-Cliente")),
+                List.of(), List.of(), List.of(), 4, "", "qwen", null);
+        var corregir = List.of(new RecomendacionesIA.Recomendacion(1, "Titular", "ALTA", "ESTRUCTURA", "", List.of(), "",
+                "Corrige en el diagrama: La clase asociativa Titular no conecta sus dos extremos o roles.", "VERIFICADO"));
+        Map<String, Set<String>> extremos = Map.of("r-titular", Set.of("titular", "cuenta"), "r-detalle", Set.of("detalle", "reserva"));
+
+        var filtrada = ServicioDeRecomendaciones.sinBorradosNoPedidos(p, corregir, id -> extremos.getOrDefault(id, Set.of()));
+
+        assertThat(filtrada.aceptados()).extracting(PropuestaDeIA.ComandoAceptado::resumen).containsExactly("Crear Titular-Cliente");
+        assertThat(filtrada.rechazados()).hasSize(3);
+
+        var borrar = List.of(new RecomendacionesIA.Recomendacion(1, "Duplicada", "ALTA", "RELACION", "", List.of(), "",
+                "Elimina la relacion duplicada Titular-Cuenta", "VERIFICADO"));
+        assertThat(ServicioDeRecomendaciones.sinBorradosNoPedidos(p, borrar, id -> Set.of())).isSameAs(p);
+    }
+
+    @Test
     void aplicar_sin_recomendaciones_es_un_error_del_pedido() {
         var s = servicio(mock(ProveedorDeIA.class), mock(ServicioDeIA.class));
         assertThatThrownBy(() -> s.proponerAplicacion(diagramId, List.of(), Origin.TEXT, null))

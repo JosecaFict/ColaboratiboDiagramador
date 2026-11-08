@@ -235,7 +235,57 @@ public class ServicioDeRecomendaciones {
         if (elegidas == null || elegidas.isEmpty()) {
             throw new IllegalArgumentException("Elegi al menos una recomendacion para aplicar");
         }
-        return servicioDeIA.generar(diagramId, pedidoDeAplicacion(elegidas), origin, ModoIA.MODIFICAR, modelo);
+        PropuestaDeIA propuesta = servicioDeIA.generar(diagramId, pedidoDeAplicacion(elegidas), origin, ModoIA.MODIFICAR, modelo);
+        return sinBorradosNoPedidos(propuesta, elegidas, this::extremosDe);
+    }
+
+    private static final java.util.regex.Pattern PIDE_BORRAR =
+            java.util.regex.Pattern.compile("elimin|borr|quit|retir|mov|sobra|duplic|redundan|reemplaz|sustitu");
+
+    /**
+     * Banco, 2026-11-08: ante "Titular no conecta sus dos extremos", el modelo borro la
+     * relacion Titular-Cuenta, que era correcta. Si ninguna correccion elegida pide borrar,
+     * los borrados se descartan; una relacion borrada y recreada entre las mismas clases
+     * (turismo: DetalleReserva-Reserva) se descarta entera para no duplicarla.
+     */
+    static PropuestaDeIA sinBorradosNoPedidos(PropuestaDeIA p, List<RecomendacionesIA.Recomendacion> elegidas,
+                                              java.util.function.Function<String, Set<String>> extremosDeRelacion) {
+        boolean pideBorrar = elegidas.stream().anyMatch(r -> PIDE_BORRAR.matcher(
+                (Objects.toString(r.accion(), "") + " " + Objects.toString(r.problema(), "")).toLowerCase(Locale.ROOT)).find());
+        if (pideBorrar) return p;
+        Set<Set<String>> recreadas = new HashSet<>();
+        for (var c : p.aceptados()) if (c.tipo() == com.uagrm.colabmodel.modelcore.command.CommandType.DELETE_RELATION) {
+            Set<String> extremos = extremosDeRelacion.apply(c.payload().path("relationId").asText());
+            if (!extremos.isEmpty()) recreadas.add(extremos);
+        }
+        List<PropuestaDeIA.ComandoAceptado> aceptados = new ArrayList<>();
+        List<PropuestaDeIA.ComandoRechazado> rechazados = new ArrayList<>(p.rechazados());
+        for (int i = 0; i < p.aceptados().size(); i++) {
+            var c = p.aceptados().get(i);
+            boolean borrado = switch (c.tipo()) {
+                case DELETE_CLASS, DELETE_RELATION, REMOVE_ATTRIBUTE, REMOVE_METHOD -> true;
+                default -> false;
+            };
+            boolean recreada = c.tipo() == com.uagrm.colabmodel.modelcore.command.CommandType.CREATE_RELATION
+                    && recreadas.contains(new HashSet<>(List.of(c.payload().path("sourceClassId").asText(),
+                    c.payload().path("targetClassId").asText())));
+            if (borrado || recreada) rechazados.add(new PropuestaDeIA.ComandoRechazado(i, c.tipo().name(),
+                    "Se descarto: la correccion elegida no pide borrar ni recrear elementos (" + c.resumen() + ")."));
+            else aceptados.add(c);
+        }
+        if (aceptados.size() == p.aceptados().size()) return p;
+        return new PropuestaDeIA(p.diagramId(), p.origin(), aceptados, rechazados, p.descartadosPorTope(),
+                p.advertencias(), p.propuestosPorElModelo(), p.notaDelModelo(), p.modelo(), p.interaccionId());
+    }
+
+    private Set<String> extremosDe(String relationId) {
+        try {
+            return relationships.findById(UUID.fromString(relationId))
+                    .map(r -> (Set<String>) new HashSet<>(List.of(r.getSourceClassId().toString(), r.getTargetClassId().toString())))
+                    .orElse(Set.of());
+        } catch (IllegalArgumentException e) {
+            return Set.of();
+        }
     }
 
     static String pedidoDeAplicacion(List<RecomendacionesIA.Recomendacion> elegidas) {
