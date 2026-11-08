@@ -175,7 +175,7 @@ class ServicioDeRecomendacionesTest {
         var d = new ServicioDeRecomendaciones.Diagrama(clases,
                 atributos.stream().collect(java.util.stream.Collectors.groupingBy(UmlAttribute::getClassId)),
                 relaciones, clases.stream().collect(java.util.stream.Collectors.toMap(UmlClass::getId, UmlClass::getName)));
-        var hallazgos = ServicioDeRecomendaciones.hallazgosEstructurales(d);
+        var hallazgos = RevisorDeterministico.revisar(d, null).stream().map(RevisorDeterministico.Hallazgo::texto).toList();
 
         assertThat(hallazgos).anyMatch(h -> h.startsWith("Cliente tiene 2 atributos marcados como clave primaria"))
                 .anyMatch(h -> h.equals("Pedido no tiene clave primaria."))
@@ -194,7 +194,8 @@ class ServicioDeRecomendacionesTest {
         when(servicioDeIA.generar(eq(diagramId), anyString(), eq(Origin.TEXT), eq(ModoIA.MODIFICAR), eq("qwen")))
                 .thenReturn(esperada);
         var elegidas = List.of(new RecomendacionesIA.Recomendacion(1, "t", "ALTA", "ATRIBUTO", "", List.of(),
-                "Dependen del plan", "Mover el atributo creditos (int) de Asignatura a DetallePlanAsignatura"));
+                "Dependen del plan", "Mover el atributo creditos (int) de Asignatura a DetallePlanAsignatura",
+                RecomendacionesIA.ORIGEN_MODELO));
 
         var propuesta = servicio(mock(ProveedorDeIA.class), servicioDeIA)
                 .proponerAplicacion(diagramId, elegidas, Origin.TEXT, "qwen");

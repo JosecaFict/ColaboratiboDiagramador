@@ -6,7 +6,6 @@ import com.uagrm.colabmodel.modelcore.metamodel.*;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -23,7 +22,6 @@ import java.util.stream.Collectors;
 @Service
 public class ServicioDeRecomendaciones {
 
-    private static final Set<String> CON_MULTIPLICIDAD = Set.of("ASSOCIATION", "AGGREGATION", "COMPOSITION");
 
     private final ProveedorDeIA proveedor;
     private final UmlClassRepository classes;
@@ -55,20 +53,40 @@ public class ServicioDeRecomendaciones {
         if (d.clases().isEmpty()) {
             throw new IllegalArgumentException("El diagrama esta vacio: primero aplica un diseno o agrega clases");
         }
-        List<String> hallazgos = hallazgosEstructurales(d);
+        List<RevisorDeterministico.Hallazgo> hallazgos = RevisorDeterministico.revisar(d, requisito);
+        List<String> textos = hallazgos.stream().map(RevisorDeterministico.Hallazgo::texto).toList();
         String nombreModelo = modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo;
         List<ReglasDelRequisito.Regla> reglas = ReglasDelRequisito.extraer(requisito);
         if (!reglas.isEmpty()) return verificarReglas(diagramId, requisito, reglas, hallazgos, d, modelo, nombreModelo);
 
-        RespuestaIA respuesta = proveedor.generar(new SolicitudIA(pedido(requisito, hallazgos), ModoIA.RECOMENDAR,
+        RespuestaIA respuesta = proveedor.generar(new SolicitudIA(pedido(requisito, textos), ModoIA.RECOMENDAR,
                 contexto(d), relacionesEnContexto(d), List.of(EsquemaRecomendaciones.herramienta()), modelo));
         JsonNode salida = respuesta.comandos().stream()
                 .filter(c -> EsquemaRecomendaciones.NOMBRE.equals(c.tipo()))
                 .map(ComandoPropuestoIA::parametros).findFirst()
                 .orElseThrow(() -> new ProveedorIAException("El modelo no devolvio recomendaciones"
                         + (respuesta.notaDelModelo().isBlank() ? "" : ": " + respuesta.notaDelModelo())));
-        return new RecomendacionesIA(diagramId, salida.path("resumen").asText(""),
-                depurar(salida.path("recomendaciones"), d), List.of(), hallazgos, nombreModelo);
+        List<RecomendacionesIA.Recomendacion> todas = new ArrayList<>(verificadas(hallazgos));
+        todas.addAll(depurar(salida.path("recomendaciones"), d));
+        return new RecomendacionesIA(diagramId, salida.path("resumen").asText(""), numerar(todas), List.of(),
+                textos, nombreModelo);
+    }
+
+    /** Los hallazgos del revisor determinista, como recomendaciones aplicables y marcadas como verificadas. */
+    private static List<RecomendacionesIA.Recomendacion> verificadas(List<RevisorDeterministico.Hallazgo> hallazgos) {
+        return hallazgos.stream().map(h -> new RecomendacionesIA.Recomendacion(0, h.texto(), h.gravedad(),
+                h.categoria(), "", h.elementos(), h.texto(), "Corregir: " + h.texto(),
+                RecomendacionesIA.ORIGEN_VERIFICADO)).toList();
+    }
+
+    /** De la mas grave a la menos grave y, a igual gravedad, lo verificado antes que lo sugerido por el modelo. */
+    private static List<RecomendacionesIA.Recomendacion> numerar(List<RecomendacionesIA.Recomendacion> todas) {
+        List<RecomendacionesIA.Recomendacion> numeradas = new ArrayList<>();
+        todas.stream().sorted(Comparator.<RecomendacionesIA.Recomendacion>comparingInt(r -> rangoDeGravedad(r.gravedad()))
+                        .thenComparing(r -> !r.origen().equals(RecomendacionesIA.ORIGEN_VERIFICADO)))
+                .forEach(r -> numeradas.add(new RecomendacionesIA.Recomendacion(numeradas.size() + 1, r.titulo(),
+                        r.gravedad(), r.categoria(), r.regla(), r.elementos(), r.problema(), r.accion(), r.origen())));
+        return List.copyOf(numeradas);
     }
 
     /**
@@ -77,7 +95,8 @@ public class ServicioDeRecomendaciones {
      * reutiliza el prefijo ya procesado y cada regla extra cuesta pocos segundos.
      */
     private RecomendacionesIA verificarReglas(UUID diagramId, String requisito, List<ReglasDelRequisito.Regla> reglas,
-                                              List<String> hallazgos, Diagrama d, String modelo, String nombreModelo) {
+                                              List<RevisorDeterministico.Hallazgo> hallazgos, Diagrama d,
+                                              String modelo, String nombreModelo) {
         String comun = "REQUISITO DEL USUARIO (contexto):\n" + requisito.trim()
                 + new SolicitudIA("", ModoIA.VERIFICAR, contexto(d), relacionesEnContexto(d), List.of())
                         .mensajeParaElModelo();
@@ -98,19 +117,13 @@ public class ServicioDeRecomendaciones {
             verificaciones.add(resultado.verificacion());
             if (resultado.recomendacion() != null) recomendaciones.add(resultado.recomendacion());
         }
-        for (String h : hallazgos) recomendaciones.add(new RecomendacionesIA.Recomendacion(0, h, "MEDIA",
-                categoriaDe(h), "", elementosCitados(h, d), h, "Corregir: " + h));
-
-        List<RecomendacionesIA.Recomendacion> numeradas = new ArrayList<>();
-        recomendaciones.stream().sorted(Comparator.comparingInt(r -> rangoDeGravedad(r.gravedad())))
-                .forEach(r -> numeradas.add(new RecomendacionesIA.Recomendacion(numeradas.size() + 1, r.titulo(),
-                        r.gravedad(), r.categoria(), r.regla(), r.elementos(), r.problema(), r.accion())));
+        recomendaciones.addAll(verificadas(hallazgos));
         long cumplen = verificaciones.stream().filter(v -> v.estado().equals("CUMPLE")).count();
         String resumen = "Se verificaron " + verificaciones.size() + " reglas del requisito: " + cumplen + " se cumplen, "
                 + (verificaciones.size() - cumplen) + " no se cumplen o no se pudieron verificar. "
-                + hallazgos.size() + " hallazgo(s) estructural(es).";
-        return new RecomendacionesIA(diagramId, resumen, List.copyOf(numeradas), List.copyOf(verificaciones),
-                hallazgos, nombreModelo);
+                + hallazgos.size() + " hallazgo(s) verificado(s) sin IA.";
+        return new RecomendacionesIA(diagramId, resumen, numerar(recomendaciones), List.copyOf(verificaciones),
+                hallazgos.stream().map(RevisorDeterministico.Hallazgo::texto).toList(), nombreModelo);
     }
 
     record Evaluacion(RecomendacionesIA.Verificacion verificacion, RecomendacionesIA.Recomendacion recomendacion) { }
@@ -147,7 +160,7 @@ public class ServicioDeRecomendaciones {
         for (String v : validos) for (String parte : v.split("-")) clases.add(parte);
         return new Evaluacion(verificacion, new RecomendacionesIA.Recomendacion(0, "Regla " + regla.numero()
                 + " no se cumple", regla.seccion() == ReglasDelRequisito.Seccion.NEGOCIO ? "ALTA" : "MEDIA",
-                "REQUISITO", regla.texto(), List.copyOf(clases), explicacion, accion));
+                "REQUISITO", regla.texto(), List.copyOf(clases), explicacion, accion, RecomendacionesIA.ORIGEN_MODELO));
     }
 
     /** Clase, Clase.atributo o ClaseA-ClaseB, con el nombre exacto del diagrama; null si no existe. */
@@ -175,18 +188,6 @@ public class ServicioDeRecomendaciones {
         return d.atributos().getOrDefault(clase.getId(), List.of()).stream()
                 .filter(a -> a.getName().equalsIgnoreCase(partes[1].trim())).findFirst()
                 .map(a -> clase.getName() + "." + a.getName()).orElse(null);
-    }
-
-    private static String categoriaDe(String hallazgo) {
-        if (hallazgo.contains("clave primaria")) return "CLAVE";
-        if (hallazgo.contains("atributo")) return "ATRIBUTO";
-        if (hallazgo.contains("multiplicidad")) return "MULTIPLICIDAD";
-        return "RELACION";
-    }
-
-    private static List<String> elementosCitados(String texto, Diagrama d) {
-        return d.clases().stream().map(UmlClass::getName)
-                .filter(n -> texto.matches("(?s).*\\b" + Pattern.quote(n) + "\\b.*")).toList();
     }
 
     /** Las recomendaciones elegidas, convertidas en UNA propuesta MODIFICAR para revisar y confirmar. */
@@ -267,60 +268,6 @@ public class ServicioDeRecomendaciones {
         return sb.toString();
     }
 
-    /**
-     * Comprobaciones que no necesitan IA y valen para cualquier dominio. Son
-     * ciertas siempre, asi que el modelo las recibe como hechos y no como sospechas.
-     */
-    static List<String> hallazgosEstructurales(Diagrama d) {
-        List<String> hallazgos = new ArrayList<>();
-        Map<UUID, Set<UUID>> vecinas = new HashMap<>();
-        for (UmlRelationship r : d.relaciones()) {
-            vecinas.computeIfAbsent(r.getSourceClassId(), k -> new HashSet<>()).add(r.getTargetClassId());
-            vecinas.computeIfAbsent(r.getTargetClassId(), k -> new HashSet<>()).add(r.getSourceClassId());
-        }
-        for (UmlClass c : d.clases()) {
-            List<UmlAttribute> atributos = d.atributos().getOrDefault(c.getId(), List.of());
-            if (atributos.isEmpty()) hallazgos.add(c.getName() + " no tiene atributos.");
-            List<String> pks = atributos.stream().filter(UmlAttribute::isPk).map(UmlAttribute::getName).toList();
-            if (!atributos.isEmpty() && pks.isEmpty()) hallazgos.add(c.getName() + " no tiene clave primaria.");
-            if (pks.size() > 1) hallazgos.add(c.getName() + " tiene " + pks.size() + " atributos marcados como clave "
-                    + "primaria (" + String.join(", ", pks) + "); si no es una clave compuesta intencional, deja uno "
-                    + "como pk y los demas como unique.");
-            if (d.clases().size() > 1 && !vecinas.containsKey(c.getId())) hallazgos.add(c.getName() + " esta desconectada.");
-            for (UmlAttribute a : atributos) {
-                String n = a.getName().toLowerCase(Locale.ROOT);
-                if (a.isPk() || !(n.endsWith("id") && n.length() > 2)) continue;
-                String base = n.endsWith("_id") ? n.substring(0, n.length() - 3) : n.substring(0, n.length() - 2);
-                vecinas.getOrDefault(c.getId(), Set.of()).stream().map(id -> nombre(d, id))
-                        .filter(v -> v.toLowerCase(Locale.ROOT).equals(base)).findFirst()
-                        .ifPresent(v -> hallazgos.add(c.getName() + "." + a.getName() + " duplica la asociacion con "
-                                + v + "; en un modelo conceptual la referencia ya la expresa la asociacion."));
-            }
-        }
-        Set<String> vistas = new HashSet<>();
-        for (UmlRelationship r : d.relaciones()) {
-            String s = nombre(d, r.getSourceClassId()), t = nombre(d, r.getTargetClassId());
-            String kind = r.getKind().name();
-            if (CON_MULTIPLICIDAD.contains(kind) && (vacio(r.getSourceMultiplicity()) || vacio(r.getTargetMultiplicity())))
-                hallazgos.add("La relacion " + s + " - " + t + " no tiene multiplicidad en ambos extremos.");
-            String clave = (s.compareTo(t) <= 0 ? s + "|" + t + "|" + texto(r.getSourceRole()) + "|" + texto(r.getTargetRole())
-                    : t + "|" + s + "|" + texto(r.getTargetRole()) + "|" + texto(r.getSourceRole())) + "|" + kind;
-            if (!vistas.add(clave)) hallazgos.add("Hay relaciones " + kind + " repetidas entre " + s + " y " + t
-                    + " sin roles que las distingan.");
-            if (CON_MULTIPLICIDAD.contains(kind) && muchos(r.getSourceMultiplicity()) && muchos(r.getTargetMultiplicity()))
-                hallazgos.add("La relacion " + s + " - " + t + " es muchos a muchos; si la participacion tiene datos "
-                        + "propios, conviene una clase asociativa.");
-        }
-        return List.copyOf(hallazgos);
-    }
-
-    private static boolean vacio(String s) { return s == null || s.isBlank(); }
-
-    private static String texto(String s) { return s == null ? "" : s; }
-
-    private static boolean muchos(String m) {
-        return m != null && (m.equals("*") || m.endsWith("..*"));
-    }
 
     /**
      * La salida del modelo es tan sospechosa como un archivo importado: se
@@ -366,7 +313,7 @@ public class ServicioDeRecomendaciones {
                     EsquemaRecomendaciones.GRAVEDADES.contains(gravedad) ? gravedad : "MEDIA",
                     EsquemaRecomendaciones.CATEGORIAS.contains(categoria) ? categoria : "OTRO",
                     r.path("regla").asText("").trim(), List.copyOf(elementos), r.path("problema").asText("").trim(),
-                    r.path("accion").asText().trim()));
+                    r.path("accion").asText().trim(), RecomendacionesIA.ORIGEN_MODELO));
         }
         return List.copyOf(resultado);
     }

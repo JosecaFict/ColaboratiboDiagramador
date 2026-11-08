@@ -17,12 +17,18 @@ public record RecomendacionesIA(UUID diagramId, String resumen, List<Recomendaci
                                 List<Verificacion> verificaciones, List<String> hallazgosEstructurales,
                                 String modelo) {
 
+    /** Comprobado por codigo sobre el diagrama: es un hecho. */
+    public static final String ORIGEN_VERIFICADO = "VERIFICADO";
+    /** Opinion del modelo de lenguaje: conviene revisarla antes de aplicar. */
+    public static final String ORIGEN_MODELO = "MODELO";
+
     /**
      * @param elementos solo los que existen en el diagrama: sirven para
      *                  resaltarlos en el lienzo, y un nombre inventado no resalta nada
+     * @param origen    {@link #ORIGEN_VERIFICADO} o {@link #ORIGEN_MODELO}
      */
     public record Recomendacion(int id, String titulo, String gravedad, String categoria, String regla,
-                                List<String> elementos, String problema, String accion) { }
+                                List<String> elementos, String problema, String accion, String origen) { }
 
     /** @param estado CUMPLE, NO_CUMPLE o NO_VERIFICABLE (el modelo cito elementos que no existen) */
     public record Verificacion(int numero, String regla, String seccion, String estado,
