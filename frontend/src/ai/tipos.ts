@@ -1,6 +1,38 @@
 import type { CommandType } from '../contracts/command'
 
-export type ModoIA = 'CONSULTAR' | 'REVISAR' | 'DISENAR' | 'MODIFICAR'
+export type ModoIA = 'CONSULTAR' | 'REVISAR' | 'DISENAR' | 'MODIFICAR' | 'RECOMENDAR'
+
+/** Respuesta de POST /ai/recomendaciones (RecomendacionesIA en el backend). */
+export interface RecomendacionIA {
+  id: number
+  titulo: string
+  gravedad: 'ALTA' | 'MEDIA' | 'BAJA'
+  categoria: string
+  regla: string
+  elementos: string[]
+  problema: string
+  accion: string
+  /** VERIFICADO: comprobado por codigo. MODELO: opinion del modelo, revisarla. */
+  origen: 'VERIFICADO' | 'MODELO'
+}
+
+export interface VerificacionIA {
+  numero: number
+  regla: string
+  seccion: string
+  estado: 'CUMPLE' | 'NO_CUMPLE' | 'NO_VERIFICABLE'
+  evidencia: string[]
+  explicacion: string
+}
+
+export interface RecomendacionesIA {
+  diagramId: string
+  resumen: string
+  recomendaciones: RecomendacionIA[]
+  verificaciones: VerificacionIA[]
+  hallazgosEstructurales: string[]
+  modelo: string | null
+}
 
 export interface ComandoAceptadoIA {
   tipo: CommandType
@@ -27,6 +59,7 @@ export interface MensajeIA {
   texto: string
   modo: ModoIA
   propuesta?: PropuestaIA
+  recomendaciones?: RecomendacionesIA
   usuario?: string
 }
 

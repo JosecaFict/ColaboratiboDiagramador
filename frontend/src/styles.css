@@ -880,6 +880,28 @@ input.fis-col { font-family: ui-monospace, monospace; }
 .ia-auditoria strong { display: block; margin-bottom: 5px; }
 .ia-auditoria ul { margin: 0; padding-left: 17px; }
 .ia-auditoria li + li { margin-top: 4px; }
+.ia-pestanas { gap: 6px; justify-content: flex-start !important; }
+.ia-pestanas button { padding: 6px 10px; border: 1px solid transparent; border-radius: 7px; background: none;
+  color: var(--ia-suave); font-size: 12px; font-weight: 600; cursor: pointer; }
+.ia-pestanas button.activo { border-color: var(--ia-linea); background: var(--ia-lila-suave); color: #4d35bf; }
+.ia-recomendaciones { padding: 10px 14px; overflow-y: auto; }
+.ia-recomendacion { margin-bottom: 9px; padding: 10px 11px; border: 1px solid #edf0f4; border-left-width: 3px; border-radius: 8px; }
+.ia-recomendacion.verificada { border-left-color: #2f8f5b; }
+.ia-recomendacion.sugerida { border-left-color: #b98a1e; border-style: solid dashed dashed solid; }
+.ia-recomendacion.inactivo { opacity: .6; }
+.ia-recomendacion input { margin: 2px 0 0; accent-color: var(--ia-lila); }
+.ia-recomendacion strong { display: block; font-size: 11px; line-height: 1.4; font-weight: 600; color: #354057; }
+.ia-recomendacion p { margin: 6px 0 0 24px; font-size: 10.5px; line-height: 1.45; color: #4a556b; }
+.ia-recomendacion small { display: block; margin: 5px 0 0 24px; font-size: 9.5px; color: var(--ia-suave); }
+.ia-accion b { color: #354057; }
+.ia-etiquetas { display: flex !important; gap: 5px; margin-bottom: 4px; }
+.ia-etiquetas em { font-style: normal; font-size: 8.5px; font-weight: 700; padding: 1px 6px; border-radius: 99px; letter-spacing: .03em; }
+.ia-gravedad.alta { background: #fde8e8; color: #a32020; }
+.ia-gravedad.media { background: #fff3dc; color: #8b5a10; }
+.ia-gravedad.baja { background: #eef1f6; color: #4a556b; }
+.verificada .ia-origen { background: #e4f4ea; color: #1f6d43; }
+.sugerida .ia-origen { background: #fdf3dd; color: #7a5a10; }
+.ia-auditoria summary { cursor: pointer; }
 .ia-aplicar { margin-top: auto; padding: 14px 16px 17px; border-top: 1px solid var(--ia-linea); }
 .ia-aplicar button { width: 100%; padding: 9px; }.ia-aplicar small { display: block; margin-top: 7px; text-align: center; color: var(--ia-suave); font-size: 9px; }
 

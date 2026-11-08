@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { EstadoModelo } from '../canvas/applyOperation'
 import type { CambioDelLote } from '../importacion/propuesta'
-import type { EntradaHistorialIA, EstadoIA, MensajeIA, ModoIA, PropuestaIA } from './tipos'
+import type { EntradaHistorialIA, EstadoIA, MensajeIA, ModoIA, PropuestaIA, RecomendacionesIA } from './tipos'
+import { elegidas, etiquetaOrigen, ordenarRecomendaciones, seleccionInicial, textoDeRecomendaciones } from './recomendaciones'
 
 interface Props {
   diagramId: string
@@ -19,13 +20,18 @@ const MODOS: { id: ModoIA; nombre: string; descripcion: string }[] = [
   { id: 'REVISAR', nombre: 'Revisar', descripcion: 'Detecta riesgos y decisiones débiles' },
   { id: 'DISENAR', nombre: 'Diseñar', descripcion: 'Propone una estructura UML nueva' },
   { id: 'MODIFICAR', nombre: 'Modificar', descripcion: 'Convierte el pedido en cambios precisos' },
+  { id: 'RECOMENDAR', nombre: 'Recomendar', descripcion: 'Revisa el diagrama y propone mejoras aplicables' },
 ]
+
+/** En Recomendar, el texto es el requisito a verificar; este pedido revisa solo la estructura. */
+const REVISION_SIN_REQUISITO = 'Revisa el diagrama actual'
 
 const INICIALES: Record<ModoIA, string[]> = {
   CONSULTAR: ['¿Qué representa este modelo?', 'Explícame sus relaciones principales'],
   REVISAR: ['Revisa claves y cardinalidades', 'Busca problemas de normalización'],
   DISENAR: ['Diseña el núcleo de una biblioteca', 'Propón clases para registrar préstamos'],
   MODIFICAR: ['Agrega una clase Pago relacionada con Pedido', 'Añade fechas de auditoría'],
+  RECOMENDAR: [REVISION_SIN_REQUISITO],
 }
 
 function IconoIA() {
@@ -57,6 +63,8 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
   const [estadoIA, setEstadoIA] = useState<EstadoIA | null>(null)
   const [cargandoHistorial, setCargandoHistorial] = useState(true)
   const [modeloIA, setModeloIA] = useState(() => localStorage.getItem('colabmodel.ai.modelo') ?? '')
+  const [seleccionRec, setSeleccionRec] = useState<Set<number>>(new Set())
+  const [panel, setPanel] = useState<'cambios' | 'recomendaciones'>('cambios')
 
   useEffect(() => {
     let vivo = true
@@ -99,31 +107,76 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
   const atributos = useMemo(() => modelo.classes.reduce((n, c) => n + c.attributes.length, 0), [modelo.classes])
   const ultimaPropuesta = [...mensajes].reverse().find((m) => m.propuesta?.aceptados.length)?.propuesta
 
+  const ultimasRecomendaciones = [...mensajes].reverse().find((m) => m.recomendaciones)?.recomendaciones
+  const recomendacionesOrdenadas = useMemo(
+    () => ordenarRecomendaciones(ultimasRecomendaciones?.recomendaciones ?? []), [ultimasRecomendaciones])
+
+  const pedirIA = async (url: string, cuerpo: unknown) => {
+    const r = await fetch(`/api/v1/diagrams/${diagramId}/ai/${url}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(cuerpo),
+    })
+    const respuesta = await r.json().catch(() => null)
+    if (!r.ok) throw new Error(respuesta?.mensaje ?? `La IA respondió con HTTP ${r.status}.`)
+    return respuesta
+  }
+
+  const recibirPropuesta = (propuesta: PropuestaIA, modoRespuesta: ModoIA) => {
+    setMensajes((m) => [...m, {
+      id: uuid(), autor: 'asistente', modo: modoRespuesta, propuesta,
+      texto: textoDeRespuesta(propuesta, modoRespuesta),
+    }])
+    setSeleccion(Object.fromEntries(propuesta.aceptados.map((_, i) => [String(i), true])))
+    setEdiciones(Object.fromEntries(propuesta.aceptados.map((c, i) => [String(i), { ...c.payload }])))
+    setPanel('cambios')
+  }
+
   const enviar = async (pedido = texto) => {
     const limpio = pedido.trim()
-    if (!limpio || consultando) return
-    const mensaje: MensajeIA = { id: uuid(), autor: 'usuario', texto: limpio, modo }
+    const recomendar = modo === 'RECOMENDAR'
+    if ((!limpio && !recomendar) || consultando) return
+    const mensaje: MensajeIA = { id: uuid(), autor: 'usuario', texto: limpio || REVISION_SIN_REQUISITO, modo }
     setMensajes((m) => [...m, mensaje])
     setTexto('')
     setConsultando(true)
     setError(null)
     try {
-      const r = await fetch(`/api/v1/diagrams/${diagramId}/ai/propuestas`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: limpio, origin: 'TEXT', modo, modelo: modeloIA || undefined }),
-      })
-      const cuerpo = await r.json().catch(() => null)
-      if (!r.ok) throw new Error(cuerpo?.mensaje ?? `La IA respondió con HTTP ${r.status}.`)
-      const propuesta = cuerpo as PropuestaIA
-      setMensajes((m) => [...m, {
-        id: uuid(), autor: 'asistente', modo, propuesta,
-        texto: textoDeRespuesta(propuesta, modo),
-      }])
-      setSeleccion(Object.fromEntries(propuesta.aceptados.map((_, i) => [String(i), true])))
-      setEdiciones(Object.fromEntries(propuesta.aceptados.map((c, i) => [String(i), { ...c.payload }])))
+      if (recomendar) {
+        // El texto, si lo hay, es el requisito cuyas reglas se verifican contra el diagrama.
+        const requisito = limpio && limpio !== REVISION_SIN_REQUISITO ? limpio : undefined
+        const recomendaciones = await pedirIA('recomendaciones',
+          { requisito, modelo: modeloIA || undefined }) as RecomendacionesIA
+        setMensajes((m) => [...m, {
+          id: uuid(), autor: 'asistente', modo, recomendaciones,
+          texto: textoDeRecomendaciones(recomendaciones),
+        }])
+        setSeleccionRec(seleccionInicial(recomendaciones.recomendaciones))
+        setPanel('recomendaciones')
+      } else {
+        recibirPropuesta(await pedirIA('propuestas',
+          { prompt: limpio, origin: 'TEXT', modo, modelo: modeloIA || undefined }) as PropuestaIA, modo)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo consultar al asistente.')
+    } finally {
+      setConsultando(false)
+    }
+  }
+
+  /** Las recomendaciones elegidas pasan a una propuesta MODIFICAR; nada se aplica sin confirmar. */
+  const convertirRecomendaciones = async () => {
+    const lista = elegidas(recomendacionesOrdenadas, seleccionRec)
+    if (!lista.length || consultando) return
+    setMensajes((m) => [...m, { id: uuid(), autor: 'usuario', modo: 'RECOMENDAR',
+      texto: `Aplicar ${lista.length} ${lista.length === 1 ? 'recomendación' : 'recomendaciones'}: ${lista.map((r) => r.titulo).join('; ')}` }])
+    setConsultando(true)
+    setError(null)
+    try {
+      recibirPropuesta(await pedirIA('recomendaciones/propuesta',
+        { recomendaciones: lista, origin: 'TEXT', modelo: modeloIA || undefined }) as PropuestaIA, 'MODIFICAR')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron convertir las recomendaciones en cambios.')
     } finally {
       setConsultando(false)
     }
@@ -211,16 +264,57 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
         {error && <div className="ia-error" role="alert"><strong>No se pudo completar la consulta.</strong><span>{error}</span></div>}
         <form className="ia-compositor" onSubmit={(e) => { e.preventDefault(); void enviar() }}>
           <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3}
-            placeholder={`${MODOS.find((m) => m.id === modo)?.nombre}: escribí una instrucción sobre el diagrama…`}
+            placeholder={modo === 'RECOMENDAR'
+              ? 'Recomendar: pegá el requisito para verificarlo regla por regla, o dejalo vacío para revisar solo la estructura…'
+              : `${MODOS.find((m) => m.id === modo)?.nombre}: escribí una instrucción sobre el diagrama…`}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void enviar() } }}/>
-          <div><span>Enter envía · Shift + Enter agrega una línea</span><button disabled={!texto.trim() || consultando || !conectado}>Enviar</button></div>
+          <div><span>Enter envía · Shift + Enter agrega una línea</span><button disabled={(!texto.trim() && modo !== 'RECOMENDAR') || consultando || !conectado}>{modo === 'RECOMENDAR' ? 'Revisar' : 'Enviar'}</button></div>
         </form>
       </div>
 
       <aside className="ia-propuesta">
-        <header><h3>Cambios propuestos</h3><span>{ultimaPropuesta?.aceptados.length ?? 0}</span></header>
-        {!ultimaPropuesta && <div className="ia-propuesta-vacia"><p>Cuando la IA sugiera cambios, aparecerán aquí antes de tocar el modelo.</p><small>Nada se aplica sin tu confirmación.</small></div>}
-        {ultimaPropuesta && <>
+        {ultimasRecomendaciones ? <header className="ia-pestanas" role="tablist">
+          <button role="tab" aria-selected={panel === 'recomendaciones'} className={panel === 'recomendaciones' ? 'activo' : ''}
+            onClick={() => setPanel('recomendaciones')}>Recomendaciones <span>{recomendacionesOrdenadas.length}</span></button>
+          <button role="tab" aria-selected={panel === 'cambios'} className={panel === 'cambios' ? 'activo' : ''}
+            onClick={() => setPanel('cambios')}>Cambios <span>{ultimaPropuesta?.aceptados.length ?? 0}</span></button>
+        </header> : <header><h3>Cambios propuestos</h3><span>{ultimaPropuesta?.aceptados.length ?? 0}</span></header>}
+        {ultimasRecomendaciones && panel === 'recomendaciones' && <>
+          {!recomendacionesOrdenadas.length && <div className="ia-propuesta-vacia"><p>No hay recomendaciones: el diagrama pasó la revisión.</p></div>}
+          <div className="ia-recomendaciones">{recomendacionesOrdenadas.map((r) => {
+            const marcada = seleccionRec.has(r.id)
+            return <div key={r.id} className={`ia-recomendacion ${r.origen === 'VERIFICADO' ? 'verificada' : 'sugerida'} ${marcada ? '' : 'inactivo'}`}>
+              <label className="ia-cambio-cabecera">
+                <input type="checkbox" checked={marcada} onChange={(e) => setSeleccionRec((s) => {
+                  const nueva = new Set(s)
+                  if (e.target.checked) nueva.add(r.id); else nueva.delete(r.id)
+                  return nueva
+                })}/>
+                <span>
+                  <span className="ia-etiquetas">
+                    <em className={`ia-gravedad ${r.gravedad.toLowerCase()}`}>{r.gravedad}</em>
+                    <em className="ia-origen">{etiquetaOrigen(r)}</em>
+                  </span>
+                  <strong>{r.titulo}</strong>
+                </span>
+              </label>
+              {r.problema && r.problema !== r.titulo && <p>{r.problema}</p>}
+              {r.accion && <p className="ia-accion"><b>Acción:</b> {r.accion}</p>}
+              {!!r.elementos.length && <small>Afecta a: {r.elementos.join(', ')}</small>}
+            </div>
+          })}</div>
+          {!!ultimasRecomendaciones.verificaciones.length && <details className="ia-auditoria">
+            <summary><strong>Reglas del requisito ({ultimasRecomendaciones.verificaciones.filter((v) => v.estado === 'CUMPLE').length}/{ultimasRecomendaciones.verificaciones.length} se cumplen)</strong></summary>
+            <ul>{ultimasRecomendaciones.verificaciones.map((v) => <li key={v.numero}>
+              {v.estado === 'CUMPLE' ? '✔' : v.estado === 'NO_CUMPLE' ? '✘' : '?'} R{v.numero}: {v.regla}</li>)}</ul>
+          </details>}
+          <div className="ia-aplicar"><button onClick={() => void convertirRecomendaciones()}
+            disabled={!puedeEditar || !conectado || consultando || !seleccionRec.size}>
+            Convertir {seleccionRec.size || ''} en cambios</button>
+            <small>{puedeEditar ? 'La IA prepara los cambios; los revisás en la pestaña Cambios antes de aplicar.' : 'Tu rol es de solo lectura.'}</small></div>
+        </>}
+        {panel === 'cambios' && !ultimaPropuesta && <div className="ia-propuesta-vacia"><p>Cuando la IA sugiera cambios, aparecerán aquí antes de tocar el modelo.</p><small>Nada se aplica sin tu confirmación.</small></div>}
+        {panel === 'cambios' && ultimaPropuesta && <>
           <div className="ia-cambios">{ultimaPropuesta.aceptados.map((c, i) => {
             const p = ediciones[String(i)] ?? c.payload
             const activo = seleccion[String(i)] !== false
