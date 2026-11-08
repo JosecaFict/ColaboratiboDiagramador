@@ -1,15 +1,39 @@
-# Casos de uso del hito LCA
+# Casos de uso de ColabModel
 
-**ColabModel** · v1.3 · 21/09/2026 · Fase RUP: **Elaboración** (CU-01, CU-04, CU-05) y **Construcción** (CU-06)
+**ColabModel** · v2.0 · 08/11/2026 · Fase RUP: **Elaboración** (CU-01, CU-04, CU-05) y **Construcción** (CU-02, CU-03, CU-06 a CU-12)
 
 El plan RUP (`SAD.md`) define el criterio de salida de Elaboración así:
-**CU-01, CU-04 y CU-05 funcionando de punta a punta.** Hasta esta versión esos
-tres identificadores existían solo como criterio; no estaban escritos en
-ningún lado. Este documento los fija.
+**CU-01, CU-04 y CU-05 funcionando de punta a punta.** La v1.3 escribió esos
+tres y CU-06. La v2.0 agrega los ocho que el producto ya hacía sin estar
+escritos: la IA, la importación, la Vista Física, las versiones, la exportación
+XMI, la consola del backend generado y las dos pantallas de la app móvil.
 
-> **Sobre la numeración.** El equipo fijó estos tres casos de uso el
-> 13/09/2026, eligiendo los que ejercitan la arquitectura completa. Los números
-> 02 y 03 no se definen acá porque no forman parte del hito.
+> **Sobre la numeración.** El equipo fijó CU-01, CU-04 y CU-05 el 13/09/2026,
+> eligiendo los que ejercitan la arquitectura completa, y dejó libres el 02 y el
+> 03. La v2.0 los usa para la IA y la importación, que son las otras dos formas
+> de escribir el modelo. Los números ya publicados no cambian.
+
+## Mapa de casos de uso
+
+| CU | Nombre | Pieza | Actor principal | Fase |
+|---|---|---|---|---|
+| [CU-01](#cu-01--modelar-el-diagrama-de-clases-en-colaboración) | Modelar el diagrama de clases en colaboración | P1 | Modelador | Elaboración |
+| [CU-02](#cu-02--diseñar-el-modelo-con-la-ia) | Diseñar el modelo con la IA | P1 | Modelador | Construcción |
+| [CU-03](#cu-03--importar-un-diagrama) | Importar un diagrama (imagen, XMI, SQL o JSON) | P1 | Modelador | Construcción |
+| [CU-04](#cu-04--derivar-el-modelo-lógico) | Derivar el modelo lógico | P1 | Observador o Modelador | Elaboración |
+| [CU-05](#cu-05--generar-el-backend-spring-boot) | Generar el backend Spring Boot | P1 → P2 | Observador o Modelador | Elaboración |
+| [CU-06](#cu-06--gestionar-proyectos-miembros-y-roles) | Gestionar proyectos, miembros y roles | P1 | Propietario | Construcción |
+| [CU-07](#cu-07--editar-y-confirmar-la-vista-física) | Editar y confirmar la Vista Física | P1 | Modelador | Construcción |
+| [CU-08](#cu-08--versionar-el-diagrama) | Versionar el diagrama | P1 | Modelador | Construcción |
+| [CU-09](#cu-09--exportar-el-diagrama-a-xmi) | Exportar el diagrama a XMI | P1 | Observador o Modelador | Construcción |
+| [CU-10](#cu-10--probar-el-backend-generado-desde-su-consola) | Probar el backend generado desde su consola | P2 | Usuario del backend generado | Construcción |
+| [CU-11](#cu-11--registrar-y-consultar-datos-por-voz) | Registrar y consultar datos por voz | P3 | Usuario de la app móvil | Construcción |
+| [CU-12](#cu-12--seguir-un-diagrama-en-vivo-desde-el-teléfono) | Seguir un diagrama en vivo desde el teléfono | P3 | Miembro del proyecto | Construcción |
+
+**Criterio de agrupación.** Un caso de uso es un objetivo del usuario, no una
+pantalla. Por eso registrarse e iniciar sesión van dentro de CU-06, la Vista
+Documental (MongoDB) dentro de CU-04, deshacer y rehacer dentro de CU-01, y las
+tres fuentes de importación (imagen, archivo y disposición de EA) dentro de CU-03.
 
 Cada caso lleva, además de la especificación RUP, dos secciones que el hito
 exige y que una especificación común no trae:
@@ -30,6 +54,9 @@ exige y que una especificación común no trae:
 | **Observador** | Miembro con rol VIEWER | Leer todo: proyecto, diagramas, miembros, Vista Lógica, Física, ambigüedades y código generado. No puede escribir; puede abandonar el proyecto |
 | **No miembro** | Usuario autenticado que no está en el proyecto | Nada: recibe 403 en todo, y tampoco puede suscribirse a los tópicos de sus diagramas |
 | **Sistema de destino** | Maven + JDK 21 en la máquina del usuario | Compilar el proyecto generado |
+| **Proveedor de IA** | Ollama (local o en Colab), Claude o Gemini, según `colabmodel.ai.proveedor` | Proponer cambios al modelo (CU-02) y leer los textos de una imagen (CU-03). Nunca escribe: solo propone |
+| **Usuario del backend generado** | Quien arranca el proyecto que salió de CU-05. No es un usuario de ColabModel | Usar la consola y la API REST del backend generado (CU-10) |
+| **Usuario de la app móvil** | Quien usa la app Flutter en su teléfono | Hablarle al backend generado (CU-11) y, con una cuenta de ColabModel, mirar diagramas en vivo (CU-12) |
 
 Los roles son **por proyecto**: no hay rol por diagrama ni administrador global (ADR-026).
 
@@ -189,6 +216,199 @@ que podía duplicar operaciones. **Corrección:** ver A10 y A11.
   intenta editar no se guarda para enviarlo después. Recuperar lo que hicieron
   **los demás** sí funciona (A10).
 
+### Ampliaciones posteriores a la v1.3
+
+- **Deshacer y rehacer** (ADR-027, 029 y 030): Ctrl+Z y Ctrl+Y (o Ctrl+Shift+Z) deshacen y rehacen lo que hizo
+  **esta pestaña**, mandando por el bus el comando inverso con su precondición. Si
+  otro cambió lo mismo después, el deshacer se rechaza en vez de pisarlo. Un lote
+  entero (una importación de CU-03 o una propuesta de CU-02) se deshace con un solo
+  Ctrl+Z. Evidencia: `historialLocal.test.ts` (33 casos).
+- **Lease propio para relaciones** (ADR-028): editar una relación ya no bloquea las
+  dos clases que une.
+
+---
+
+## CU-02 · Diseñar el modelo con la IA
+
+**Resumen.** Un modelador le pide a la IA, por texto o por voz, que diseñe,
+modifique, revise o explique el diagrama. La IA **propone**; el equipo ve la
+propuesta en un chat compartido y un modelador la aplica como un solo cambio.
+
+**Qué valida de la arquitectura.** Que la IA no sea un segundo camino de
+escritura (ADR-002): lo aceptado entra por el bus como un `BATCH` (ADR-016), con
+permisos, locks y secuencia. Que el proveedor sea intercambiable y el tope lo
+imponga el servidor (ADR-017), y que la IA degrade en vez de romper (ADR-012).
+
+**Actor principal:** Modelador. **Secundarios:** Observador (lee el chat) y
+Proveedor de IA.
+
+### Precondiciones
+
+1. El usuario es miembro del proyecto y tiene el diagrama abierto.
+2. El proveedor configurado responde. Con Ollama, el modelo es uno del catálogo
+   (`qwen3:8b` o `qwen3.5:9b-q4_K_M`), en local o por un túnel a Colab.
+
+### Flujo básico
+
+1. El modelador abre la pestaña **IA**. El cliente pide `GET /ai/estado`
+   (proveedor, modelo y tamaño de contexto) y `GET /ai/historial`, y se suscribe a
+   `/topic/diagram/{id}/ai`.
+2. Elige el **modo**: *Consultar*, *Revisar*, *Diseñar* o *Modificar*, y con Ollama
+   el modelo.
+3. Escribe el pedido, o lo **dicta** con el micrófono (origen `VOICE`).
+4. El cliente envía `POST /api/v1/diagrams/{id}/ai/propuestas`.
+5. El servidor arma el contexto con el diagrama actual, la memoria del chat del
+   equipo, **quién pregunta** y con qué rol (sale del JWT, no del cuerpo), y la
+   configuración del proyecto. Comprueba que entre en el contexto del modelo
+   **antes** de llamarlo.
+6. El proveedor responde. En *Diseñar* devuelve un plan UML que el servidor
+   normaliza y expande. En *Modificar* devuelve comandos del catálogo. El
+   servidor resuelve las referencias por nombre, descarta lo inválido y corta en
+   **32 comandos** (`Lote.TOPE_TEXTO_O_VOZ`).
+7. Un auditor revisa la propuesta y agrega avisos, por ejemplo: "parece una lista
+   cerrada de valores; considera modelarla como enumeración".
+8. La propuesta queda en el historial y se avisa a **todas** las pestañas del
+   diagrama: el chat es grupal.
+9. El modelador revisa los **Cambios propuestos** y la **Auditoría automática**, y
+   aplica. El cliente envía la propuesta como **un `BATCH`** por
+   `/app/diagram/{id}/op`. El bus lo aplica todo o nada.
+10. Al recibir su operación confirmada, el cliente marca la propuesta como
+    aplicada (`PATCH /ai/historial/{interactionId}/aplicada` con el `opId`). El
+    servidor **busca ese `opId` en el log** antes de marcarla.
+
+**Subflujo · Configurar la IA del proyecto.** El Propietario abre
+**Configuración de la IA** y elige el rol de la IA (*Mentor*, *Senior* o
+*Revisor*), el nivel de detalle y unas instrucciones propias
+(`PUT /api/v1/projects/{id}/ia/configuracion`). Desde el siguiente pedido, la IA
+responde con esa configuración, para todos.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | Un Observador pide *Diseñar* o *Modificar* | `403` *"Los VIEWER no pueden pedirle cambios a la IA"*. Sí puede *Consultar* y *Revisar*, que no proponen cambios |
+| A2 | El pedido y el diagrama no entran en el contexto del modelo | `422`, sin llamar al modelo |
+| A3 | El proveedor no responde o devuelve basura | `502` con el motivo. El diagrama no cambia |
+| A4 | La IA propone más de 32 cambios | Se aceptan los primeros 32; los demás se listan como descartados por el tope, para pedirlos en otro pedido |
+| A5 | La IA propone un `id` de tipo `int` o una segunda identidad | El `id` pasa a ser la identidad `uuid` de la clase (se avisa en el resumen); una segunda identidad se descarta |
+| A6 | El `BATCH` choca con un lock ajeno o una regla del modelo | El bus lo rechaza **entero**; la propuesta no queda marcada como aplicada |
+| A7 | Alguien intenta marcar como aplicado un lote que no está en el log | `409` |
+| A8 | Un Modelador o un Observador intenta cambiar la configuración | `403` *"Solo el propietario puede cambiar como se comporta la IA del proyecto"* |
+
+### Postcondiciones
+
+- Pedir una propuesta **no escribe el modelo**: solo el historial del chat.
+- Aplicarla deja **una** operación en el log, con origen `TEXT` o `VOICE` y su
+  autor, que se deshace con un Ctrl+Z.
+
+### Evidencia
+
+**Automática** (`mvn test`): `ServicioDeIATest` (11), `HistorialIACompartidoTest`
+(13), `MemoriaDeConversacionTest` (11), `ProveedorClaudeTest` (12),
+`ProveedorGeminiTest` (10), `NormalizadorPlanUmlTest` (7), `ExpansorPlanUmlTest`
+(6), `AuditorDePropuestaIATest` (6), `PresupuestoDeContextoTest` (6),
+`ConfiguracionIAControllerTest` (6), `ContextoDeEquipoEnElPedidoTest` (5) y
+`PromptDeSistemaTest` (3). Las pruebas `*VivoTest` contra un modelo real se omiten
+si el modelo no está disponible.
+
+**Automática** (`npm test`): `configuracion.test.tsx` (22), `regresionesT14.test.ts`
+(14), `chat.test.ts` (13), `historialCompartido.test.ts` (9) y `voz.test.tsx` (6).
+
+**En vivo** (07/11/2026, Qwen 3.5 9B en Colab por un túnel de Cloudflare): con el
+diagrama vacío, *Diseñar* armó un modelo de ventas que el equipo calificó como
+completo en un 70 %. El `id: int` que apareció ahí motivó A5.
+
+### Lo que todavía no cumple
+
+- **El dictado web se corta rápido**: el reconocimiento de voz del navegador
+  termina en la primera pausa (`continuous = false` en `VistaIA.tsx`).
+- La calidad depende del modelo. Con un modelo local de 8 a 9 B, *Diseñar*
+  necesita revisión humana; por eso la propuesta nunca se aplica sola.
+
+---
+
+## CU-03 · Importar un diagrama
+
+**Resumen.** Un modelador trae un modelo que ya existe afuera: una **imagen** del
+diagrama (foto, captura o pizarra), un **XMI** (por ejemplo, de Enterprise
+Architect), un script **SQL** con `CREATE TABLE` o el **JSON** de los modelos
+canónicos. El sistema lo lee, muestra qué entendió y qué no, y lo agrega al
+diagrama como un solo cambio.
+
+**Qué valida de la arquitectura.** El mismo patrón de CU-02: un endpoint que solo
+**propone** y una aplicación por el bus (ADR-002, ADR-016). La visión en dos
+niveles con degradación (ADR-012, ADR-023) y la lectura tolerante de formatos
+ajenos (ADR-013, 018, 019 y 031).
+
+**Actor principal:** Modelador. **Secundario:** Proveedor de IA (solo para leer
+textos de la imagen, y es opcional).
+
+### Precondiciones
+
+1. El usuario tiene permiso de escritura (Propietario o Modelador).
+2. Imagen: PNG o JPEG de hasta 8 MB. Una captura da mejor resultado que una foto.
+
+### Flujo básico
+
+1. En la barra de herramientas, el modelador aprieta **Importar** y elige un
+   archivo, o **Desde imagen** y elige una imagen.
+2. El cliente envía la imagen a `POST /api/v1/diagrams/{id}/vision/deteccion`, o el
+   archivo a `POST /api/v1/diagrams/{id}/importaciones/propuesta`.
+3. **Imagen:** el nivel 1 (`DetectorGeometrico`, Java puro) encuentra cajas,
+   compartimentos y líneas. El nivel 2 clasifica rombos y triángulos y lee los
+   textos, primero sin modelo (plantillas) y, si hay uno configurado, con Claude,
+   Gemini o un modelo local. La imagen no se guarda.
+   **Archivo:** el servidor reconoce el formato y lo lee con `LectorXmi`,
+   `LectorSql` o `LectorModeloJson`.
+4. El cliente muestra la revisión: clases, atributos, métodos y relaciones que
+   entran, **lo que no se pudo interpretar** y lo que **no va a entrar**. El
+   modelador corrige nombres y tipos antes de aplicar.
+5. El modelador aplica. El cliente envía todo como **un `BATCH`** (origen `IMAGE`
+   o `XMI_IMPORT`) por el WebSocket. El bus lo aplica todo o nada.
+6. Los demás ven aparecer el modelo importado sin recargar.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | Un Observador intenta importar o subir una imagen | `403`, antes de leer nada: no tiene sentido revisar algo que el bus va a rechazar |
+| A2 | Archivo vacío, imagen ilegible o demasiado grande | `400` con el motivo |
+| A3 | Formato que no es XMI, SQL ni JSON | `415` |
+| A4 | El nivel 2 de visión falla o el modelo está apagado | Se sigue con el nivel 1: la propuesta sale sin textos, pero no se pierde la detección |
+| A5 | XMI de un dialecto desconocido | Se lee lo que se puede y se declara el resto (ADR-019) |
+| A6 | SQL con construcciones que el UML no recupera (herencia SINGLE_TABLE, `@Embeddable`, …) | Se importa lo estructural y se declara la pérdida (ADR-018) |
+| A7 | XMI de Enterprise Architect con diagrama | Se importa también la disposición de las cajas (ADR-031) |
+| A8 | El lote supera los 500 cambios (`Lote.TOPE_IMPORTACION`) | El bus lo rechaza; la pantalla lo avisa antes de enviar |
+| A9 | Un nombre choca con una clase que ya existe | El bus rechaza el lote entero; el modelador lo renombra en la revisión |
+
+### Postcondiciones
+
+- Leer y revisar **no escribe nada**.
+- Aplicar deja **una** operación en el log, que se deshace entera con un Ctrl+Z
+  (ADR-030).
+
+### Evidencia
+
+**Automática** (`mvn test`): visión, `DetectorGeometricoTest` (18),
+`EnriquecedorPorGeminiTest` (14), `ClasificadorDeSimboloTest` (11),
+`EnriquecedorPorModeloTest` (11), `EnriquecedorPorClaudeTest` (10),
+`ImagenDeEntradaTest` (10), `OcrDePlantillasTest` (7), `EnriquecedorPorPlantillasTest`
+(5) y `EnderezadorTest` (4); archivos, `LectorSqlTest` (15),
+`LectorXmiToleranciaTest` (13), `EnterpriseArchitectXmiTest` (11), `ImportacionTest`
+(8) y `LectorXmiTest` (4).
+
+**Automática** (`npm test`): `propuesta.test.ts` (13) y `traductor.test.ts` (9).
+
+**En vivo:** README, sección *Leer un diagrama desde una imagen*, y
+`PLAN-DE-PRUEBAS.md`, secciones 8 y 12.
+
+### Lo que todavía no cumple
+
+- **No se probó con un XMI real del Enterprise Architect del docente** (T-05,
+  bloqueada: falta el archivo).
+- La letra manuscrita necesita un modelo de visión (Claude, Gemini o uno local);
+  sin él, solo se lee texto impreso.
+
 ---
 
 ## CU-04 · Derivar el modelo lógico
@@ -295,8 +515,15 @@ permiso de escritura.
 - ~~La pantalla de ambigüedades no conoce el rol del usuario.~~ Ya lo conoce (CU-06,
   ADR-026): en modo Observador la pantalla llega en solo lectura. El rechazo del
   servidor (A8) sigue siendo la garantía; la interfaz solo lo refleja.
-- La **Vista Física** todavía es un marcador de lugar. El DDL ya existe (lo
-  emite el generador en CU-05), pero la pestaña no lo muestra.
+- ~~La **Vista Física** todavía es un marcador de lugar.~~ Ya muestra el DDL, se
+  edita y se confirma: es CU-07.
+
+### Ampliación posterior a la v1.3 · Vista Documental
+
+La pestaña **Documental** (`GET /api/v1/diagrams/{id}/documental`, ADR-035) es la
+hermana de la Vista Lógica para MongoDB: proyecta el mismo modelo a colecciones y
+documentos, también derivada y de solo lectura. Es la lectura que usa CU-05 al
+generar la variante MongoDB.
 
 ---
 
@@ -456,6 +683,20 @@ dos filas.
 - **ADR-010 no está implementado.** El ADR pide compilar lo generado
   (`mvn package`) **antes** de entregar el ZIP y devolver `FAILED` con el log si
   falla. Hoy el ZIP se entrega sin compilar; la compilación se verificó a mano.
+
+### Ampliaciones posteriores a la v1.3
+
+| Qué | Dónde se decidió | En el flujo |
+|---|---|---|
+| **Listo para producción**: perfiles `dev` (H2 con datos de ejemplo), `postgres` (el Docker de ColabModel, puerto 55432) y `prod` (variables `DB_*`); auditoría y `version` para bloqueo optimista (`409`); errores uniformes; paginación con `X-Total-Count`; Dockerfile y `docker-compose.yml`; una prueba MockMvc por controlador | ADR-034 | Paso 6: el ZIP trae todo eso además de las 5 capas |
+| **Variante MongoDB**: el panel Generar elige PostgreSQL o MongoDB (`?store=`). La API, los DTO y el manifiesto son iguales en las dos | ADR-035 | Paso 2 y paso 5 |
+| **Base confirmada**: el resumen dice si el DDL del ZIP es el confirmado en CU-07; con `?esquema=<hash>`, la descarga responde `409` si cambió | ADR-032 | Paso 4 |
+| **Consola y manifiesto**: el ZIP trae `app-manifest.json` y una consola web en `GET /` | ADR-021 | Lo usan CU-10 y CU-11 |
+
+Evidencia nueva (`mvn test`): `GeneradorProduccionTest` (12), `GeneradorMongoTest`
+(10), `PlantillaConsolaTest` (9), `ManifestDeAppTest` (6), `SeguridadMongoTest` (3),
+`ProduccionBordesTest` (2) y `ArranqueDelProyectoGeneradoTest` (1), que arranca un
+proyecto generado. La prueba en vivo del 08/11/2026 está en CU-10.
 
 ---
 
@@ -632,6 +873,398 @@ filas OWNER, en vez de decidir por su cuenta).
 
 ---
 
+## CU-07 · Editar y confirmar la Vista Física
+
+**Resumen.** Un modelador ve el esquema de PostgreSQL que saldrá del diagrama,
+lo corrige ahí mismo (columnas, tipos, `NOT NULL`, `UNIQUE`, `ON DELETE`), lo
+prueba contra un PostgreSQL de verdad y lo **confirma** antes de generar.
+
+**Qué valida de la arquitectura.** Que editar la Física sea editar el modelo
+(ADR-032): cada gesto se traduce a un comando del catálogo que ya existía, sobre
+el elemento que produjo esa columna. No hay un segundo esquema guardado (ADR-003)
+ni un segundo camino de escritura (ADR-002).
+
+**Actor principal:** Modelador. **Secundario:** Observador (ve y verifica, no
+edita ni confirma).
+
+### Precondiciones
+
+1. El usuario es miembro del proyecto; para editar y confirmar, con permiso de
+   escritura.
+2. El diagrama tiene al menos una clase.
+
+### Flujo básico
+
+1. El usuario abre la pestaña **Fisico (DDL)**. El cliente pide
+   `GET /api/v1/diagrams/{id}/physical`, con `ETag`: volver a la pestaña sin
+   cambios responde `304`.
+2. Ve el diagrama de tablas, dibujado donde están sus clases (geometría derivada,
+   no se guarda), y el script DDL.
+3. Abre una tabla y edita una columna. Al poner el foco en un control, el cliente
+   pide el **lock de la clase** (ADR-004); mirar no bloquea.
+4. Cada cambio sale como un comando: nombre, tipo, largo, `NOT NULL`, `UNIQUE` y
+   rango → `UPDATE_ATTRIBUTE`; agregar o quitar columna → `ADD_ATTRIBUTE` o
+   `REMOVE_ATTRIBUTE`; renombrar la tabla → `RENAME_CLASS`; `NOT NULL` de una FK →
+   la multiplicidad; `ON DELETE` → el tipo de relación (CASCADE = composición,
+   SET NULL = agregación, RESTRICT = asociación). La pantalla dice el efecto en
+   palabras del UML antes de aplicarlo.
+5. El usuario aprieta **Verificar en PostgreSQL** (`POST /physical/verificacion`). El servidor
+   ejecuta el script en un esquema temporal, dentro de una transacción que
+   **siempre** se deshace, y responde lo que PostgreSQL creó o el error con su
+   línea.
+6. El modelador aprieta **Confirmar esquema**: el cliente envía `CONFIRM_SCHEMA` por el bus con el
+   hash SHA-256 del DDL revisado. El servidor vuelve a verificar y guarda hash,
+   DDL, `seq` y autor.
+7. Al generar (CU-05), el resumen dice si el DDL del ZIP es el confirmado.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | La columna sale de algo que no es de esa tabla (identidad, PK heredada, valor embebido, subclase en SINGLE_TABLE, tabla puente) | Queda fija y la pantalla dice dónde se cambia |
+| A2 | Otra sesión tiene el lock de la clase | La tabla se ve, no se edita, y dice quién la tiene |
+| A3 | PostgreSQL rechaza el script | La verificación devuelve el error y la línea; no se puede confirmar |
+| A4 | El esquema cambió entre verificar y confirmar | El bus rechaza la confirmación (`STALE`) |
+| A5 | El esquema cambió después de confirmar | La Vista Física muestra la diferencia por línea contra el DDL confirmado |
+| A6 | Se pide el ZIP con `?esquema=<hash>` y el DDL ya no es ese | `409`, en vez de entregar otra cosa |
+| A7 | Poner `CASCADE` en una FK | La relación pasa a ser composición y puede abrir la ambigüedad A-1 de CU-04 |
+
+### Postcondiciones
+
+- Cada edición es una operación del log, visible también en la vista de Clases.
+- Verificar no deja nada en la base. Confirmar deja una fila en
+  `schema_confirmations` y una operación en el log.
+
+### Evidencia
+
+**Automática** (`mvn test`): `EsquemaFisicoTest` (7), `ConfirmadorDeEsquemaTest`
+(3) y `VerificadorDeEsquemaTest` (3). **(`npm test`)**: `edicion.test.ts` (17),
+`diagrama.test.ts` (11), `VistaFisica.test.ts` (5) y `diferencias.test.ts` (4).
+
+**En vivo:** `PLAN-DE-PRUEBAS.md`, sección 6.
+
+### Lo que todavía no cumple
+
+- No hay capa física propia: tipos exactos como `numeric(p,s)`, `DEFAULT`,
+  índices y `UNIQUE` compuestos quedan fuera (ADR-032, *Descartado* a).
+- En MongoDB no hay DDL que confirmar: la confirmación es solo de PostgreSQL.
+
+---
+
+## CU-08 · Versionar el diagrama
+
+**Resumen.** El equipo guarda versiones con nombre del diagrama, las compara,
+vuelve a una anterior, abre **ramas** para probar ideas y las **fusiona** con el
+diagrama original resolviendo los conflictos uno por uno, como en Git.
+
+**Qué valida de la arquitectura.** Que las versiones se apoyen en el log de
+operaciones (ADR-037) y que restaurar y fusionar **no agreguen comandos**: se
+calcula la diferencia y se manda como un `BATCH` por el bus (ADR-014, ADR-016),
+con locks, secuencia y autor.
+
+**Actor principal:** Modelador. **Secundario:** Observador (ve historial, ramas y
+diferencias).
+
+### Precondiciones
+
+1. El usuario es miembro del proyecto; para guardar, restaurar, crear ramas y
+   fusionar, con permiso de escritura.
+
+### Flujo básico
+
+1. El modelador abre el panel **Versiones** y guarda una versión con nombre y
+   mensaje (`POST /diagrams/{id}/versions`). Se fija el `seq` actual y se guarda
+   el snapshot. Los demás ven la versión nueva sin recargar
+   (`/topic/diagram/{id}/versions`).
+2. Compara dos versiones, o una versión con el estado actual
+   (`GET /diff?from=&to=`). La vista **Diff** agrupa por clases, atributos, métodos
+   y relaciones, con colores para agregado, eliminado y modificado.
+3. Restaura una versión, con confirmación (`POST /versions/{vid}/restore`). El
+   servidor calcula los comandos que llevan del estado actual al de la versión y
+   los aplica como un `BATCH`.
+
+**Subflujo · Ramas y fusión**
+
+4. Crea una rama desde una versión (`POST /branches`). La rama es un **diagrama
+   nuevo** del mismo proyecto que conserva la identidad lógica de cada elemento.
+5. Trabaja en la rama como en cualquier diagrama (CU-01).
+6. Desde el diagrama de destino pide la vista previa de la fusión
+   (`POST /merge/preview`): base común, cambios limpios de cada lado y
+   conflictos.
+7. Elige *nuestro* o *suyo* en cada conflicto y fusiona (`POST /merge`). Lo
+   resultante entra como un `BATCH`.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | Nombre de versión repetido en el diagrama | Rechazado (`uq(diagram_id, name)`) |
+| A2 | Un Observador intenta guardar, restaurar, crear rama o fusionar | `403` |
+| A3 | El diagrama avanzó entre calcular y aplicar la restauración o la fusión | `409`: el `BATCH` lleva el `seqEsperado` y no se aplica nada |
+| A4 | Un elemento a cambiar tiene el lock de otro | `409` con el elemento y quién lo tiene |
+| A5 | Se fusiona con conflictos sin resolver | `409` con la lista de conflictos |
+| A6 | Los diagramas no comparten historia, o el lote supera los 500 cambios | `422` |
+| A7 | Un lado borró y el otro modificó el mismo elemento | Conflicto con el campo `existencia` |
+| A8 | Los dos lados crearon elementos distintos con el mismo nombre | Conflicto `nombre repetido` con un nombre sugerido (por ejemplo, `Prestamo_2`) |
+
+### Postcondiciones
+
+- Guardar una versión no cambia el modelo.
+- Restaurar y fusionar dejan **una** operación en el log, con su autor, que todos
+  ven en vivo.
+
+### Evidencia
+
+**Automática** (`mvn test`): `VersionesTest` (11), `FusionYDiferenciasTest` (8) e
+`IdentidadLogicaTest` (4). **(`npm test`)**: `diffMerge.test.ts` (20),
+`vistas.test.tsx` (11) y `api.test.ts` (9). `e2eVersiones.test.ts` (3) y
+`backendReal.test.ts` (3) recorren el flujo contra un backend vivo; están apagadas
+por defecto y se encienden con `BACKEND_REAL=http://localhost:8080`.
+
+### Lo que todavía no cumple
+
+- No hay *rebase* ni *cherry-pick*: solo versión, rama, restaurar y fusionar.
+
+---
+
+## CU-09 · Exportar el diagrama a XMI
+
+**Resumen.** Cualquier miembro descarga el diagrama como XMI para abrirlo en otra
+herramienta UML: XMI 2.5.1 estándar o el perfil de Enterprise Architect, que
+incluye el dibujo del diagrama.
+
+**Qué valida de la arquitectura.** La interoperabilidad de salida (ADR-013,
+022 y 024) y que exportar sea una **lectura**: no toca el diagrama ni pasa por el
+bus.
+
+**Actor principal:** Observador o Modelador.
+
+### Flujo básico
+
+1. El usuario abre **Exportar** y elige el perfil: **Estándar** o **Enterprise
+   Architect** (ADR-031).
+2. El cliente pide `GET /api/v1/diagrams/{id}/xmi?perfil=estandar|ea`.
+3. El servidor arma el XMI con clases, atributos, métodos, relaciones y, en el
+   perfil EA, la disposición de las cajas.
+4. Lo que el XMI no puede llevar va escrito dentro del archivo
+   (`xmi:Documentation`) y en la cabecera `X-Colabmodel-Perdidas`. La pantalla lo
+   muestra **antes** de guardar.
+5. El usuario guarda el archivo.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | Quien pide no es miembro | `403` |
+| A2 | El modelo tiene construcciones que XMI no representa | Se exporta igual y se declaran las pérdidas (ADR-018) |
+
+### Postcondiciones
+
+- El diagrama no cambia. Reimportar el archivo (CU-03) devuelve el mismo modelo,
+  salvo las pérdidas declaradas.
+
+### Evidencia
+
+**Automática** (`mvn test`): `EnterpriseArchitectXmiTest` (11) y `EscritorXmiTest`
+(6). **(`npm test`)**: `exportacionXmi.test.ts` (7).
+
+**En vivo:** `PLAN-DE-PRUEBAS.md`, sección 9.
+
+### Lo que todavía no cumple
+
+- **No se abrió en el Enterprise Architect del docente** (T-05, bloqueada: falta
+  su archivo).
+
+---
+
+## CU-10 · Probar el backend generado desde su consola
+
+**Resumen.** Quien arranca el backend que salió de CU-05 abre su dirección en el
+navegador y encuentra una **consola** con un menú por entidad, para crear, listar,
+editar y borrar registros sin escribir código ni usar Postman.
+
+**Qué valida de la arquitectura.** Que el backend generado (P2) sea usable por sí
+mismo y que el `app-manifest.json` describa la API completa (ADR-021): la consola
+se arma solo con el manifiesto, sin conocer el dominio.
+
+**Actor principal:** Usuario del backend generado.
+
+### Precondiciones
+
+1. El proyecto generado está compilado y arrancado (CU-05). Con el perfil `dev`
+   usa H2 en memoria con datos de ejemplo; con `postgres`, el PostgreSQL del
+   Docker de ColabModel (puerto 55432); con `prod`, el de las variables
+   `DB_URL`, `DB_USER` y `DB_PASSWORD`.
+
+### Flujo básico
+
+1. El usuario abre `http://localhost:8081/`. El backend sirve la consola, que lee
+   `GET /app-manifest.json`.
+2. Elige una entidad del menú y ve la lista, paginada (`X-Total-Count`).
+3. Crea un registro. Las referencias a otra entidad se eligen de una **lista**
+   que muestra el nombre, no el id.
+4. Edita un registro: el formulario trae los datos actuales y guarda con la
+   `version` del registro.
+5. Borra un registro.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | Falta un campo obligatorio o un valor no cumple su regla | `400`, y la consola dice qué campo |
+| A2 | Valor repetido en un campo único | `409` |
+| A3 | Se borra algo que otro registro todavía referencia (RESTRICT) | `409` *"… todavía lo referencia. Elimina o reasigna eso primero."* |
+| A4 | Se borra el dueño de una composición | Se borran también sus partes (CASCADE) |
+| A5 | Dos personas editan el mismo registro y la segunda guarda con la `version` vieja | `409` |
+| A6 | Se pide un id que no existe | `404` |
+
+### Postcondiciones
+
+- La consola usa solo la API pública: lo que funciona en ella funciona igual para
+  la app móvil (CU-11) o cualquier otro cliente.
+
+### Evidencia
+
+**Automática** (`mvn test`): `PlantillaConsolaTest` (9), `ManifestDeAppTest` (6) y
+`GeneradorProduccionTest` (12). Cada proyecto generado trae además sus propias
+pruebas MockMvc, una por controlador.
+
+**En vivo:**
+
+- T-12 (02/11/2026): primera prueba de un backend generado en el navegador,
+  contra PostgreSQL 16 y contra MongoDB 7.
+- 08/11/2026: un modelo de ventas de 7 entidades. Su proyecto generado pasó sus
+  56 pruebas. Arrancó contra PostgreSQL y pasó 20 de 20 comprobaciones de la API.
+  En la consola, con el perfil `dev`, se probó: crear una categoría; crear un
+  producto eligiendo esa categoría de la lista; editarlo; el `409` al borrar la
+  categoría referenciada; y el borrado del producto y de la categoría.
+
+---
+
+## CU-11 · Registrar y consultar datos por voz
+
+**Resumen.** Desde la app móvil, una persona le habla al backend generado:
+*"crear libro con título Rayuela"* o *"listar socios"*. La app entiende el pedido
+sin un modelo de lenguaje, pregunta lo que falta de a un campo y crea o lista
+los registros.
+
+**Qué valida de la arquitectura.** La app dirigida por metadatos (ADR-011): la
+misma APK sirve para cualquier backend generado, porque todo el vocabulario sale
+del `app-manifest.json`. Y el motor de intenciones determinista (ADR-021): ante un
+empate, **pregunta**, nunca adivina.
+
+**Actor principal:** Usuario de la app móvil. **Secundario:** el backend generado
+(P2).
+
+### Precondiciones
+
+1. Hay un backend generado arrancado y alcanzable desde el teléfono, por la IP de
+   la máquina y no por `localhost`.
+2. La app tiene permiso de micrófono (solo para dictar).
+
+### Flujo básico
+
+1. El usuario abre la app y elige **Asistente**.
+2. Escribe la dirección del backend y aprieta **Conectar**. La app baja
+   `GET /app-manifest.json`.
+3. Dicta o escribe el pedido. El dictado une las frases separadas por pausas en un
+   solo pedido.
+4. El motor reconoce verbo, entidad, campos y valores, tolerando plurales, género,
+   tildes y errores chicos.
+5. Si falta un campo obligatorio, la app lo pide de a uno.
+6. Las referencias por nombre ("del socio Ana") se resuelven contra el backend.
+7. La app hace `POST` o `GET` sobre la ruta de la entidad y muestra el resultado.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | Dos entidades, campos o literales empatan | La app pregunta cuál, con las opciones |
+| A2 | El valor no cumple el tipo, el largo, el rango o la enumeración | Se rechaza antes de llamar al backend, con todos los motivos juntos |
+| A3 | Se pide actualizar o borrar | *Fuera de alcance*: se reconoce el pedido y se dice que no está |
+| A4 | El valor repite uno único | El backend responde `409` y la app lo muestra |
+| A5 | Hay una pregunta pendiente y el usuario dice un pedido nuevo o *"cancelar"* | El pedido nuevo reemplaza al pendiente |
+| A6 | La dirección no responde o no es un backend generado | Error al conectar, con el código que respondió |
+
+### Evidencia
+
+**Automática** (`flutter test`): `asistente_test.dart` (37), `intent_test.dart`
+(35), `verificar_contrato_crud_test.dart` (14), `dictado_continuo_test.dart` (12) y
+`lexico_test.dart` (8).
+
+**En vivo:** APK de depuración probada en un teléfono real por la red local
+(T-03b). El verificador `mobile/tool/verificar_contrato_crud.dart` se corrió
+contra un backend generado en MongoDB (T-02).
+
+### Lo que todavía no cumple
+
+- Solo **crear y listar**; sin filtros al listar ni cola sin conexión (ADR-021,
+  recorte declarado).
+- **Pendiente para T-13:** volver a probar en el teléfono el envío automático tras
+  el silencio, una respuesta dictada a una pregunta pendiente y *"cancelar"* por
+  voz.
+
+---
+
+## CU-12 · Seguir un diagrama en vivo desde el teléfono
+
+**Resumen.** Un miembro del proyecto entra desde la app móvil con su cuenta de
+ColabModel y mira un diagrama mientras el equipo lo edita. Ve los cambios al
+instante, quién está conectado y quién edita qué. Solo mira: no modifica nada.
+
+**Qué valida de la arquitectura.** El canal push (C-09) y la recuperación por
+`seq` (CU-01, A10) desde un segundo cliente, y el **espejo** del efecto de cada
+comando en tres lenguajes (`CommandApplier.java` ↔ `applyOperation.ts` ↔
+`aplicar_operacion.dart`, ADR-036).
+
+**Actor principal:** Usuario de la app móvil que es miembro del proyecto
+(cualquier rol).
+
+### Precondiciones
+
+1. El usuario tiene una cuenta de ColabModel y es miembro del proyecto.
+2. La herramienta (P1) es alcanzable desde el teléfono por la IP de la máquina.
+
+### Flujo básico
+
+1. El usuario abre la app y elige **Ver diagrama en vivo**.
+2. Escribe la dirección de la herramienta, su email y su contraseña, y aprieta
+   **Entrar** (`POST /api/v1/auth/login`).
+3. Elige un proyecto y un diagrama (`GET /projects`, `GET /projects/{id}`).
+4. La app pide el snapshot (`GET /diagrams/{id}`) y se suscribe por STOMP a
+   `ops`, `locks` y `presence`.
+5. Cada operación se aplica sobre el modelo local. El dibujo de clases se
+   actualiza, con zoom y desplazamiento.
+
+### Flujos alternativos
+
+| # | Condición | Respuesta del sistema |
+|---|---|---|
+| A1 | Credenciales equivocadas | Error en la pantalla de entrada |
+| A2 | Llega un `seq` salteado o se cortó la red | La app pide lo que falta (`GET /operations?sinceSeq=`) y sigue |
+| A3 | Sin red al abrir | Ofrece ver el último diagrama guardado, con el aviso *"Sin conexión, última actualización hh:mm"* |
+| A4 | El diagrama está vacío | *"Cuando alguien dibuje algo, aparece acá"* |
+| A5 | El usuario no es miembro del proyecto | `403`: el proyecto no aparece en su lista |
+
+### Postcondiciones
+
+- La app **nunca** envía nada a `/app/...`: el modelo no cambia.
+
+### Evidencia
+
+**Automática** (`flutter test`): `aplicar_operacion_test.dart` (23),
+`sincronizador_test.dart` (10), `controlador_visor_test.dart` (7),
+`cliente_herramienta_test.dart` (6), `dibujo_clases_test.dart` (4) y
+`pantalla_inicio_test.dart` (3).
+
+**En vivo:** probado en el teléfono junto con la APK (T-03b).
+
+### Lo que todavía no cumple
+
+- Solo la vista de Clases: no muestra la Lógica, la Física ni la Documental.
+
+---
+
 ## Estado del hito LCA
 
 | Caso de uso | Funciona de punta a punta | Pendiente para darlo por cumplido |
@@ -649,11 +1282,38 @@ escenarios tienen tests automáticos. Lo pendiente —cronometrar EC-01, EC-03 y
 EC-08, compilar en CI (EC-04, ADR-010) y el modo offline (EC-05)— son medidas
 de Construcción, no requisitos para validar la arquitectura.
 
+## Estado de todos los casos de uso (08/11/2026)
+
+| Caso de uso | Funciona | Probado en vivo | Lo que falta |
+|---|---|---|---|
+| **CU-01** Modelar en colaboración | ✅ | ✅ dos pestañas, backend real | Cronometrar EC-01 y EC-08; modo sin conexión (EC-05) |
+| **CU-02** Diseñar con la IA | ✅ | ✅ Qwen 3.5 9B en Colab | El dictado web se corta en la primera pausa |
+| **CU-03** Importar un diagrama | ✅ | ⚠️ sin el XMI del docente | T-05 (bloqueada: falta el archivo) |
+| **CU-04** Derivar el modelo lógico | ✅ | ✅ | — |
+| **CU-05** Generar el backend | ✅ | ✅ PostgreSQL y MongoDB | EC-04 en CI y ADR-010 |
+| **CU-06** Proyectos, miembros y roles | ✅ | ✅ navegador automatizado | Pantalla de perfil y contraseña |
+| **CU-07** Editar y confirmar la Física | ✅ | según `PLAN-DE-PRUEBAS.md` §6 | Capa física propia (descartada por ahora) |
+| **CU-08** Versionar el diagrama | ✅ | ⚠️ hay pruebas contra un backend vivo, apagadas por defecto (`BACKEND_REAL=…`) | Correrlas en el ensayo (T-13) |
+| **CU-09** Exportar a XMI | ✅ | ⚠️ no se abrió en el EA del docente | T-05 |
+| **CU-10** Consola del backend generado | ✅ | ✅ PostgreSQL 16, MongoDB 7 y H2 | — |
+| **CU-11** Datos por voz (móvil) | ✅ crear y listar | ✅ teléfono real | Repetir la voz en el teléfono (T-13) |
+| **CU-12** Visor en vivo (móvil) | ✅ | ✅ teléfono real | Solo la vista de Clases |
+
+**El ensayo general de punta a punta (T-13) recorre todos estos casos en orden.**
+
 ## Trazabilidad
 
 | Caso de uso | ADR | Escenarios de calidad | Reglas de mapeo |
 |---|---|---|---|
-| CU-01 | 002, 004, 005, 007, 014 | EC-01, EC-08, EC-11, EC-12 | — |
-| CU-04 | 003, 009 | EC-04 (parcial) | 1, 2, 3, 4, 8, 10, 11, 12 y los puntos A-1 a A-4 |
-| CU-05 | 003, 007, 014 | EC-03, EC-04 | 3, 6, 7, 8, 9, 10 |
+| CU-01 | 002, 004, 005, 007, 014, 027–030 | EC-01, EC-08, EC-11, EC-12 | — |
+| CU-02 | 002, 012, 016, 017 | EC-11 | 1 (identidad `uuid`) |
+| CU-03 | 002, 012, 013, 016, 018, 019, 023, 025, 031, 033 | EC-11 | — |
+| CU-04 | 003, 009, 035 | EC-04 (parcial) | 1, 2, 3, 4, 8, 10, 11, 12 y los puntos A-1 a A-4 |
+| CU-05 | 003, 007, 014, 021, 032, 034, 035 | EC-03, EC-04 | 3, 6, 7, 8, 9, 10 |
 | CU-06 | 002, 004, 026 | EC-11, EC-12 | — |
+| CU-07 | 002, 003, 004, 032 | EC-11 | 3, 9 |
+| CU-08 | 002, 014, 016, 037 | EC-11 | — |
+| CU-09 | 013, 018, 022, 024, 031 | — | — |
+| CU-10 | 021, 034 | — | 9 |
+| CU-11 | 011, 021 | — | — |
+| CU-12 | 005, 036 | EC-08 | — |

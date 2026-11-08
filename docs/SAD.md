@@ -100,5 +100,5 @@ va en el README («Informe del proyecto»).
 
 - `ADR.md` — las decisiones con su justificación (ADR-001 a ADR-037)
 - `REGLAS-MAPEO.md` — las 12 reglas, tipos, ambigüedades, normalización
-- `CASOS-DE-USO.md` — CU-01, CU-04 y CU-05: el criterio de salida del LCA, con evidencia
+- `CASOS-DE-USO.md` — los 12 casos de uso (CU-01 a CU-12), con evidencia; CU-01, CU-04 y CU-05 son el criterio de salida del LCA
 - `../canonical-models/README.md` — la suite de regresión del generador

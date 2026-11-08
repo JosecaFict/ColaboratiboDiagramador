@@ -34,7 +34,7 @@ Si 0.4 falla, **no sigas**: lo que sea que falle acá va a falsear todo lo demá
 
 ---
 
-## 1 · Entrar (IAM, JWT, roles — EC-11)
+## 1 · Entrar (IAM, JWT, roles — CU-06, EC-11)
 
 > **Ojo con esto antes de empezar:** *no hay pantalla de acceso todavía*. El
 > frontend llama solo a `POST /api/v1/dev/bootstrap` al cargar y entra siempre
@@ -76,7 +76,7 @@ Abrí **tres pestañas** sobre el mismo diagrama, cada una con su token (2 OWNER
 
 ---
 
-## 3 · Editar el modelo conceptual (CU-04)
+## 3 · Editar el modelo conceptual (CU-01)
 
 | # | Qué hacer | Qué tiene que pasar |
 |---|---|---|
@@ -96,7 +96,7 @@ Abrí **tres pestañas** sobre el mismo diagrama, cada una con su token (2 OWNER
 
 ---
 
-## 4 · Relaciones
+## 4 · Relaciones (CU-01)
 
 | # | Qué hacer | Qué tiene que pasar |
 |---|---|---|
@@ -128,7 +128,7 @@ Abrí **tres pestañas** sobre el mismo diagrama, cada una con su token (2 OWNER
 
 ---
 
-## 5 · Vista Lógica (derivación, CU-05)
+## 5 · Vista Lógica (derivación, CU-04)
 
 Solo lectura: se mira, no se edita.
 
@@ -149,7 +149,7 @@ Solo lectura: se mira, no se edita.
 
 ---
 
-## 6 · Vista Física
+## 6 · Vista Física (CU-07)
 
 Es **solo lectura**, igual que la Lógica: el esquema se deriva en el backend y acá
 se mira. No hay edición de columnas desde esta vista.
@@ -166,7 +166,7 @@ se mira. No hay edición de columnas desde esta vista.
 
 ---
 
-## 7 · Los 4 puntos de ambigüedad (A-1 … A-4)
+## 7 · Los 4 puntos de ambigüedad (A-1 … A-4, CU-04)
 
 La herramienta **detecta**, muestra **las dos lecturas** y el equipo elige. Lo
 elegido tiene que **cambiar el esquema**.
@@ -185,7 +185,7 @@ elegido tiene que **cambiar el esquema**.
 
 ---
 
-## 8 · Importar (ítems 4.1 y 4.2)
+## 8 · Importar (ítems 4.1 y 4.2, CU-03)
 
 | # | Qué hacer | Qué tiene que pasar |
 |---|---|---|
@@ -205,7 +205,7 @@ elegido tiene que **cambiar el esquema**.
 
 ---
 
-## 9 · Exportar XMI
+## 9 · Exportar XMI (CU-09)
 
 | # | Qué hacer | Qué tiene que pasar |
 |---|---|---|
@@ -239,12 +239,12 @@ elegido tiene que **cambiar el esquema**.
 
 ---
 
-## 11 · IA por texto (ítem 4.4, sin UI ni voz)
+## 11 · IA por texto (ítem 4.4, CU-02)
 
 | # | Qué hacer | Qué tiene que pasar |
 |---|---|---|
 | 11.1 | `POST /diagrams/{id}/ai/propuestas` con "creá una clase Autor con nombre y nacionalidad" | Devuelve una **propuesta** para revisar. **No** escribe nada |
-| 11.2 | Pedir 30 cambios de una vez | Se aceptan **como máximo 8**, y se **avisa** que el resto se truncó (no se rechaza el pedido entero) |
+| 11.2 | Pedir 40 cambios de una vez | Se aceptan **como máximo 32** (`Lote.TOPE_TEXTO_O_VOZ`), y se **avisa** que el resto se truncó (no se rechaza el pedido entero) |
 | 11.3 | Forzar una respuesta con un tipo de comando inventado | Se rechaza: el catálogo es cerrado |
 | 11.4 | Pedir algo sobre una clase que no existe | Se rechaza **con motivo** |
 | 11.5 | Confirmar la propuesta mandando el `BATCH` por el bus | Entra como **una** operación, con origen `TEXT` |
@@ -252,7 +252,7 @@ elegido tiene que **cambiar el esquema**.
 
 ---
 
-## 12 · Leer un diagrama desde una imagen (`vision/`)
+## 12 · Leer un diagrama desde una imagen (`vision/`, CU-03)
 
 Esto es lo último que se construyó y **no necesita ningún modelo ni internet**.
 Preparate cuatro imágenes:
@@ -290,7 +290,7 @@ Preparate cuatro imágenes:
 
 ---
 
-## 13 · App móvil (ítem 4.3, sin UI ni voz)
+## 13 · App móvil (ítem 4.3, CU-11)
 
 | # | Qué hacer | Qué tiene que pasar |
 |---|---|---|
