@@ -227,7 +227,7 @@ public class ProveedorOllama implements ProveedorDeIA {
         return "Sos el arquitecto UML de ColabModel. Devuelve exclusivamente un objeto JSON que cumpla el esquema format. "
                 + "No hay herramientas disponibles en este modo; no emitas llamadas ni Markdown. Usa el requisito y contexto "
                 + "del usuario como fuente de verdad. Incluye classes, relations y audit con el modelo completo, nunca por etapas. "
-                + "Presupuesto: " + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ
+                + "Presupuesto: " + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_DISENO_TEXTO
                 + " cambios contando cada clase, atributo y relacion. Prioriza las relaciones y los datos esenciales; "
                 + "las clases asociativas pueden tener solo identidad cuando sus roles y relaciones esten completos. "
                 + "Usa nombres espanoles ASCII. La multiplicidad junto a una clase cuenta instancias de ESA clase. "
@@ -294,10 +294,10 @@ public class ProveedorOllama implements ProveedorDeIA {
         int minimo = presupuesto.path("relations").size();
         for (JsonNode clase : presupuesto.path("classes")) minimo += ValidadorPlanFinal.asociativaSinDatosValida(
                 presupuesto, clase.path("name").asText()) ? 2 : 3;
-        if (minimo > com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ) {
+        if (minimo > com.uagrm.colabmodel.modelcore.command.Lote.TOPE_DISENO_TEXTO) {
             return "el modelo necesita al menos " + minimo + " cambios esenciales; simplifica clases redundantes "
                     + "y relaciones duplicadas para caber en "
-                    + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ;
+                    + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_DISENO_TEXTO;
         }
         if (!p.path("audit").isArray() || p.path("audit").size() < 2) return "audit debe contener 2 a 5 puntos";
         return null;

@@ -44,7 +44,7 @@ class ValidadorPlanFinalTest {
         ((ObjectNode) p.path("classes").get(0)).putArray("attributes")
                 .addObject().put("name", "idAnimal").put("pk", true);
         var attrs = (com.fasterxml.jackson.databind.node.ArrayNode) p.path("classes").get(1).path("attributes");
-        for (int i = 0; i < 48; i++) attrs.addObject().put("name", "dato" + i);
+        for (int i = 0; i < 90; i++) attrs.addObject().put("name", "dato" + i);
         assertThat(revisar(p)).anyMatch(e -> e.contains("solo tiene identidad"))
                 .anyMatch(e -> e.contains("plan final requiere"));
     }

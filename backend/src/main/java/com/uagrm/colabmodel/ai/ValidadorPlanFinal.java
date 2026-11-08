@@ -117,8 +117,8 @@ final class ValidadorPlanFinal {
         }
         if (componentes.size() > 1) errores.add("El modelo contiene grupos sin conexion: " + componentes
                 + ". Revisa las asociaciones requeridas; no inventes enlaces solo para conectar el grafo.");
-        if (cambios > Lote.TOPE_TEXTO_O_VOZ) errores.add("El plan final requiere " + cambios
-                + " cambios y el limite es " + Lote.TOPE_TEXTO_O_VOZ
+        if (cambios > Lote.TOPE_DISENO_TEXTO) errores.add("El plan final requiere " + cambios
+                + " cambios y el limite es " + Lote.TOPE_DISENO_TEXTO
                 + "; compacta el diseno sin eliminar requisitos esenciales.");
         return List.copyOf(errores);
     }

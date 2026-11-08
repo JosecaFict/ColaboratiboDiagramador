@@ -32,12 +32,21 @@ public record Lote(String descripcion, List<Command> comandos) {
      */
     public static final int TOPE_TEXTO_O_VOZ = 48;
 
+    /**
+     * Disenar sobre un diagrama vacio necesita mas: cada clase, atributo y
+     * relacion es un cambio, y un dominio de 9 a 11 clases ronda 55-65. Con
+     * 48 el modelo recortaba clases pedidas por el requisito para caber.
+     * Es el tope del bus para TEXT/VOICE; ServicioDeIA sigue aplicando
+     * TOPE_TEXTO_O_VOZ cuando el modo es MODIFICAR.
+     */
+    public static final int TOPE_DISENO_TEXTO = 90;
+
     /** Una importacion trae un modelo entero, pero con limite: es una transaccion. */
     public static final int TOPE_IMPORTACION = 500;
 
     public static int topePara(Origin origen) {
         return switch (origen) {
-            case TEXT, VOICE -> TOPE_TEXTO_O_VOZ;
+            case TEXT, VOICE -> TOPE_DISENO_TEXTO;
             case MOUSE, IMAGE, XMI_IMPORT -> TOPE_IMPORTACION;
         };
     }
@@ -58,7 +67,7 @@ public record Lote(String descripcion, List<Command> comandos) {
         if (lista.size() > tope) {
             throw rechazo(batch, "El lote trae " + lista.size() + " cambios y el tope para "
                     + batch.origin() + " es " + tope
-                    + (tope == TOPE_TEXTO_O_VOZ ? " (la propuesta debe dividirse en planes revisables)" : ""));
+                    + (tope == TOPE_DISENO_TEXTO ? " (la propuesta debe dividirse en planes revisables)" : ""));
         }
 
         List<Command> comandos = new ArrayList<>();

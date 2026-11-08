@@ -1158,7 +1158,7 @@ final class NormalizadorPlanUml {
     private static int recortarAtributosSecundarios(ObjectNode plan, String requisito) {
         int eliminados = 0;
         String requisitoCompacto = normal(requisito).replaceAll("[^a-z0-9]", "");
-        while (cantidadCambios(plan) > Lote.TOPE_TEXTO_O_VOZ) {
+        while (cantidadCambios(plan) > Lote.TOPE_DISENO_TEXTO) {
             boolean eliminado = false;
             for (int c = plan.path("classes").size() - 1; c >= 0 && !eliminado; c--) {
                 JsonNode clase = plan.path("classes").get(c);

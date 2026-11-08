@@ -110,6 +110,40 @@ class ReparadorDirigidoPlanTest {
         assertThat(finales.get(0).path("targetRole").asText()).isEqualTo("origen");
         assertThat(original.comandos().getFirst().parametros().path("relations")).hasSize(2);
     }
+    @Test
+    void recrear_una_relacion_existente_la_actualiza_en_vez_de_duplicarla() throws Exception {
+        var original = borrador();
+        var rs = (com.fasterxml.jackson.databind.node.ArrayNode) original.comandos().getFirst().parametros().path("relations");
+        rs.addObject().put("source", "Producto").put("target", "Inventario").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "1").put("targetMultiplicity", "1");
+        // Mismo par en sentido inverso, sin roles: es la misma relacion.
+        var recreada = comando("CREATE_RELATION", """
+                {"claseOrigen":"Inventario","claseDestino":"Producto","kind":"ASSOCIATION",
+                "sourceMultiplicity":"0..*","targetMultiplicity":"1"}
+                """);
+        var resultado = ReparadorDirigidoPlan.aplicar(original, new RespuestaIA(List.of(recreada), ""));
+        var finales = resultado.comandos().getFirst().parametros().path("relations");
+        assertThat(finales).hasSize(1);
+        assertThat(finales.get(0).path("source").asText()).isEqualTo("Producto");
+        assertThat(finales.get(0).path("sourceMultiplicity").asText()).isEqualTo("1");
+        assertThat(finales.get(0).path("targetMultiplicity").asText()).isEqualTo("0..*");
+        assertThat(ValidadorPlanFinal.revisar(resultado)).noneMatch(e -> e.contains("repetidas"));
+    }
+
+    @Test
+    void una_relacion_con_roles_distintos_si_se_agrega() throws Exception {
+        var original = borrador();
+        var rs = (com.fasterxml.jackson.databind.node.ArrayNode) original.comandos().getFirst().parametros().path("relations");
+        rs.addObject().put("source", "Producto").put("target", "Inventario").put("kind", "ASSOCIATION")
+                .put("targetRole", "origen").put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+        var nueva = comando("CREATE_RELATION", """
+                {"claseOrigen":"Producto","claseDestino":"Inventario","kind":"ASSOCIATION","targetRole":"destino",
+                "sourceMultiplicity":"1","targetMultiplicity":"0..*"}
+                """);
+        var resultado = ReparadorDirigidoPlan.aplicar(original, new RespuestaIA(List.of(nueva), ""));
+        assertThat(resultado.comandos().getFirst().parametros().path("relations")).hasSize(2);
+    }
+
     private ComandoPropuestoIA comando(String tipo, String json) throws Exception {
         return new ComandoPropuestoIA(tipo, mapper.readTree(json));
     }

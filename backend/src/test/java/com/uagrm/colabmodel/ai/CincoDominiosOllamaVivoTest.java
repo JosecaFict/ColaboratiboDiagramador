@@ -89,7 +89,7 @@ class CincoDominiosOllamaVivoTest {
         try {
             PropuestaDeIA propuesta = servicio.generar(UUID.randomUUID(), "Actua como arquitecto UML. Deduce las entidades, "
                     + "atributos y relaciones a partir de estos requisitos, en un diagrama vacio. " + requisito
-                    + " Genera una propuesta completa dentro de 48 cambios. Prioriza requisitos esenciales sobre "
+                    + " Genera una propuesta completa dentro de 90 cambios. Prioriza requisitos esenciales sobre "
                     + "atributos descriptivos; usa roles y clases asociativas sin datos adicionales si corresponde. "
                     + "Usa nombres espanoles ASCII y multiplicidades en ambos extremos de asociaciones.",
                     Origin.TEXT, ModoIA.DISENAR, modelo);

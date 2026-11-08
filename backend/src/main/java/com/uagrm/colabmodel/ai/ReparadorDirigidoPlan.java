@@ -109,6 +109,20 @@ final class ReparadorDirigidoPlan {
                     r.set(destino, p.get(extremo).deepCopy());
                 }
             } else {
+                // El modelo suele "corregir" una relacion volviendo a crearla. Si ya
+                // existe una con los mismos extremos, tipo y roles, se actualiza esa
+                // en lugar de agregar un duplicado que el validador rechaza.
+                ObjectNode existente = relacionEquivalente(relaciones, candidatas, s, t, p);
+                if (existente != null) {
+                    boolean inversa = !s.equals(existente.path("source").asText());
+                    if (p.has("name")) existente.set("name", p.get("name").deepCopy());
+                    for (String extremo : List.of("sourceMultiplicity", "targetMultiplicity")) {
+                        if (!p.has(extremo)) continue;
+                        String destino = inversa ? extremo.equals("sourceMultiplicity") ? "targetMultiplicity" : "sourceMultiplicity" : extremo;
+                        existente.set(destino, p.get(extremo).deepCopy());
+                    }
+                    continue;
+                }
                 ObjectNode r = relaciones.addObject().put("source", s).put("target", t);
                 for (String campo : List.of("kind", "name", "sourceRole", "targetRole", "sourceMultiplicity", "targetMultiplicity"))
                     if (p.has(campo)) r.set(campo, p.get(campo).deepCopy());
@@ -127,5 +141,21 @@ final class ReparadorDirigidoPlan {
         plan.putArray("audit").add("Se corrigio el borrador mediante ajustes dirigidos sobre sus clases existentes.")
                 .add("Las restricciones temporales y transaccionales requieren validacion en la logica de negocio.");
         return new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan)), "");
+    }
+
+    /** Misma relacion que la pedida: extremos, tipo y roles iguales en cualquier sentido. */
+    private static ObjectNode relacionEquivalente(ArrayNode relaciones, List<Integer> candidatas, String s, String t,
+                                                  JsonNode p) {
+        String tipo = p.path("kind").asText();
+        String rolS = p.path("sourceRole").asText(), rolT = p.path("targetRole").asText();
+        for (int i : candidatas) {
+            ObjectNode r = (ObjectNode) relaciones.get(i);
+            if (!tipo.equals(r.path("kind").asText())) continue;
+            boolean directa = s.equals(r.path("source").asText()) && t.equals(r.path("target").asText());
+            String rs = r.path(directa ? "sourceRole" : "targetRole").asText();
+            String rt = r.path(directa ? "targetRole" : "sourceRole").asText();
+            if (rolS.equals(rs) && rolT.equals(rt)) return r;
+        }
+        return null;
     }
 }

@@ -57,7 +57,7 @@ final class EsquemaPlanUml {
 
         return new HerramientaIA(NOMBRE,
                 "Propone UN modelo UML conceptual completo en una sola llamada. Incluye todas las clases con al menos "
-                        + "un atributo. Presupuesto total: " + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ
+                        + "un atributo. Presupuesto total: " + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_DISENO_TEXTO
                         + " cambios; cada clase, cada atributo y cada relacion consume un cambio. Calcula el total antes "
                         + "de emitir. Conserva requisitos esenciales, usa roles en lugar de clases redundantes y elimina "
                         + "atributos secundarios antes de exceder el presupuesto. Incluye "
