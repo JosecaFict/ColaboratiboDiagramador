@@ -42,6 +42,29 @@ class NormalizadorParentescoPlanTest {
     }
 
     @Test
+    void un_rol_con_datos_comunes_se_fusiona_y_reutiliza_la_recursiva_sin_roles() throws Exception {
+        // Ganaderia, 2026-11-08: PadreAnimal con nombre (que Animal no tenia) y una
+        // asociacion Animal-Animal sin roles dibujada por el modelo.
+        ObjectNode p = (ObjectNode) mapper.readTree("""
+                {"classes":[
+                  {"name":"Animal","attributes":[{"name":"idAnimal","dataType":"uuid","pk":true},
+                    {"name":"fechaNacimiento","dataType":"date"}]},
+                  {"name":"PadreAnimal","attributes":[{"name":"idPadreAnimal","dataType":"uuid","pk":true},
+                    {"name":"nombre","dataType":"string"},{"name":"fechaNacimiento","dataType":"date"}]}],
+                "relations":[
+                  {"source":"Animal","target":"PadreAnimal","kind":"ASSOCIATION","sourceMultiplicity":"1","targetMultiplicity":"0..1"},
+                  {"source":"Animal","target":"Animal","kind":"ASSOCIATION","sourceMultiplicity":"0..*","targetMultiplicity":"0..1"}],
+                "audit":["parentesco","conservacion"]}
+                """);
+        NormalizadorParentescoPlan.simplificar(p);
+        assertThat(p.path("classes")).hasSize(1);
+        assertThat(p.path("classes").get(0).path("attributes")).extracting(a -> a.path("name").asText())
+                .containsExactly("idAnimal", "fechaNacimiento", "nombre");
+        assertThat(p.path("relations")).hasSize(1);
+        assertThat(p.path("relations").get(0).path("targetRole").asText()).isEqualTo("padre");
+    }
+
+    @Test
     void no_convierte_subclases_en_roles_familiares() throws Exception {
         ObjectNode p = plan();
         ((ObjectNode) p.path("relations").get(0)).put("kind", "GENERALIZATION");

@@ -73,14 +73,40 @@ final class NormalizadorParentescoPlan {
                 if (nombre.equals(relacion.path("source").asText()) || nombre.equals(relacion.path("target").asText()))
                     relaciones.remove(r);
             }
+            // El padre es un Animal: sus datos propios pasan a la entidad base en vez de perderse.
+            ArrayNode atributosBase = (ArrayNode) base.path("attributes");
+            for (JsonNode a : clase.path("attributes")) {
+                String campo = a.path("name").asText();
+                if (campo.equalsIgnoreCase("id") || campo.matches("^id[_A-Z].*") || a.path("pk").asBoolean()) continue;
+                boolean existe = false;
+                for (JsonNode b : atributosBase) if (campo.equalsIgnoreCase(b.path("name").asText())) existe = true;
+                if (!existe) atributosBase.add(a.deepCopy());
+            }
             clases.remove(i);
-            relaciones.addObject().put("source", entidad).put("target", entidad).put("kind", "ASSOCIATION")
+            ObjectNode recursiva = recursivaSinRol(relaciones, entidad, rol);
+            if (recursiva == null) recursiva = relaciones.addObject().put("source", entidad).put("target", entidad);
+            recursiva.put("kind", "ASSOCIATION")
                     .put("name", rol.equals("padre") ? "tienePadre" : "tieneMadre")
                     .put("sourceRole", "descendientes").put("targetRole", rol)
                     .put("sourceMultiplicity", "0..*").put("targetMultiplicity", "0..1");
             cambios++;
         }
         return cambios;
+    }
+
+    /**
+     * La asociacion recursiva que ya cumple ese rol, o una sin roles que el modelo
+     * dibujo junto a la clase PadreX: se reutiliza en vez de agregar otra.
+     */
+    private static ObjectNode recursivaSinRol(ArrayNode relaciones, String entidad, String rol) {
+        ObjectNode libre = null;
+        for (JsonNode r : relaciones) {
+            if (!entidad.equals(r.path("source").asText()) || !entidad.equals(r.path("target").asText())) continue;
+            String rs = r.path("sourceRole").asText(), rt = r.path("targetRole").asText();
+            if (rol.equalsIgnoreCase(rs) || rol.equalsIgnoreCase(rt)) return (ObjectNode) r;
+            if (libre == null && rs.isBlank() && rt.isBlank()) libre = (ObjectNode) r;
+        }
+        return libre;
     }
 
     private static JsonNode base(JsonNode plan, JsonNode clase) {
@@ -100,15 +126,11 @@ final class NormalizadorParentescoPlan {
         if (!sufijo.isEmpty() && !sufijo.equalsIgnoreCase(candidata)) return null;
         JsonNode base = null;
         for (JsonNode c : plan.path("classes")) if (c.path("name").asText().equals(candidata)) base = c;
-        if (base == null) return null;
-        // Si el rol guarda datos diferentes, no se descartan ni se fusionan.
+        // Una clave propia del rol (registroGenealogico pk) es una identidad deliberada:
+        // no se fusiona. Los datos comunes no lo impiden; simplificar() los pasa a la base.
         for (JsonNode a : clase.path("attributes")) {
             String campo = a.path("name").asText();
-            if (campo.equalsIgnoreCase("id") || campo.matches("^id[_A-Z].*")) continue;
-            boolean duplicado = false;
-            for (JsonNode b : base.path("attributes")) if (campo.equalsIgnoreCase(b.path("name").asText())
-                    && a.path("dataType").asText().equals(b.path("dataType").asText())) duplicado = true;
-            if (!duplicado) return null;
+            if (a.path("pk").asBoolean() && !campo.equalsIgnoreCase("id") && !campo.matches("^id[_A-Z].*")) return null;
         }
         return base;
     }

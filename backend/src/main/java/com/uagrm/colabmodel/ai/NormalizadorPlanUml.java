@@ -575,8 +575,13 @@ final class NormalizadorPlanUml {
 
     private static int completarRolesTraslado(ObjectNode plan, String requisito) {
         String pedido = normal(requisito);
-        if (!pedido.contains("origen") || !pedido.contains("destino")) return 0;
-        int cambios = completarParRoles(plan, claseUnica(plan, "transferencia"), claseUnica(plan, "cuenta"));
+        // Misma condicion que RevisorCoberturaPlan: "movimientos entre lotes" pide
+        // origen y destino aunque no use esas palabras. Si difieren, el revisor
+        // exige roles que el normalizador nunca completa.
+        boolean origenDestino = pedido.contains("origen") && pedido.contains("destino");
+        if (!origenDestino && !pedido.contains("entre lotes") && !pedido.contains("entre establecimientos")) return 0;
+        int cambios = origenDestino
+                ? completarParRoles(plan, claseUnica(plan, "transferencia"), claseUnica(plan, "cuenta")) : 0;
         if (pedido.contains("entre lotes")) cambios += completarParRoles(plan,
                 claseUnica(plan, "(?:movimiento|traslado)(?:animal|lote)?"), claseUnica(plan, "lote"));
         if (pedido.contains("entre establecimientos")) cambios += completarParRoles(plan,

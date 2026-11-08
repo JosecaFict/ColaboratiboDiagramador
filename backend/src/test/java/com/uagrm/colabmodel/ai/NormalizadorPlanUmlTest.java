@@ -594,6 +594,30 @@ class NormalizadorPlanUmlTest {
     }
 
     @Test
+    void movimiento_entre_lotes_completa_origen_y_destino_sin_esas_palabras_en_el_pedido() {
+        // Ganaderia, 2026-11-08: el revisor exigia roles por "entre lotes" y el
+        // normalizador solo los completaba si el pedido decia origen y destino.
+        ObjectNode p = J.objectNode();
+        var cs = p.putArray("classes");
+        clase(cs.addObject(), "Lote", "nombre");
+        clase(cs.addObject(), "Animal", "sexo");
+        clase(cs.addObject(), "MovimientoAnimal", "fechaMovimiento");
+        var rs = p.putArray("relations");
+        relacion(rs.addObject(), "Animal", "MovimientoAnimal", "ASSOCIATION");
+        relacion(rs.addObject(), "MovimientoAnimal", "Lote", "ASSOCIATION");
+        relacion(rs.addObject(), "Lote", "Animal", "ASSOCIATION");
+        p.putArray("audit");
+        String pedido = "Registrar movimientos de animales entre lotes o establecimientos";
+        var n = NormalizadorPlanUml.normalizar(new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p)), ""), pedido);
+        var relaciones = n.comandos().getFirst().parametros().path("relations");
+        assertThat(relaciones).filteredOn(r -> r.toString().contains("MovimientoAnimal") && r.toString().contains("Lote"))
+                .extracting(r -> r.path("source").asText().equals("Lote") ? r.path("sourceRole").asText()
+                        : r.path("targetRole").asText())
+                .containsExactlyInAnyOrder("loteOrigen", "loteDestino");
+        assertThat(RevisorCoberturaPlan.revisar(n, pedido)).noneMatch(e -> e.contains("origen y destino"));
+    }
+
+    @Test
     void transferencia_completa_dos_roles_en_el_extremo_cuenta_y_es_idempotente() {
         ObjectNode p = J.objectNode();
         var cs = p.putArray("classes");
