@@ -111,3 +111,18 @@ describe('pendiente vigente', () => {
     expect(pendienteVigente('Los creditos requeridos por cada plan no tienen contexto', turismo)).toBe(true)
   })
 })
+
+describe('rol familiar duplicado', () => {
+  it('PadreAnimal pasa a una recursiva de Animal con rol padre y se borra', () => {
+    const ganaderia: EstadoModelo = { diagramId: 'd', layout: {},
+      classes: ['Animal', 'PadreAnimal', 'Lote'].map(clase),
+      relationships: [rel('p1', 'PadreAnimal', 'Animal', '0..1', '0..*'), rel('l1', 'Lote', 'Animal', '1', '0..*')] }
+    const hallazgo = 'PadreAnimal duplica una entidad existente como rol familiar; usa una asociacion recursiva con rol padre y descendientes.'
+    const [unico] = arreglosDirectos(hallazgo, ganaderia)
+    expect(unico.cambios.map((c) => c.tipo)).toEqual(['CREATE_RELATION', 'DELETE_CLASS'])
+    expect(unico.cambios[0].payload).toMatchObject({ sourceClassId: 'Animal', targetClassId: 'Animal', targetRole: 'padre',
+      sourceRole: 'descendientes', sourceMultiplicity: '0..*', targetMultiplicity: '0..1' })
+    expect(pendienteVigente(hallazgo, ganaderia)).toBe(true)
+    expect(pendienteVigente(hallazgo, { ...ganaderia, classes: ganaderia.classes.filter((c) => c.name !== 'PadreAnimal') })).toBe(false)
+  })
+})

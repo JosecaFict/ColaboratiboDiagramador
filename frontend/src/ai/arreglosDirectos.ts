@@ -64,6 +64,25 @@ export function arreglosDirectos(hallazgo: string, modelo: EstadoModelo): Arregl
         sugerido: i === 0 && afinidad < 2 }))
   }
 
+  // Ganaderia 2026-11-08: "PadreAnimal duplica una entidad existente como rol familiar". El padre es
+  // un Animal: la clase sobra y su lugar lo ocupa una asociacion recursiva Animal-Animal con rol padre.
+  const rolFamiliar = hallazgo.match(/(\w+) duplica una entidad existente como rol familiar; usa una asociacion recursiva con rol (\w+)/)
+  if (rolFamiliar) {
+    const duplicada = porNombre(rolFamiliar[1]), rol = rolFamiliar[2].toLowerCase()
+    const base = duplicada && modelo.classes.find((c) => c.id !== duplicada.id
+      && c.name.toLowerCase() === duplicada.name.toLowerCase().replace(/^(padre|madre)/, ''))
+    if (!duplicada || !base) return []
+    const yaTieneRol = modelo.relationships.some((r) => r.sourceClassId === base.id && r.targetClassId === base.id
+      && [r.sourceRole, r.targetRole].some((x) => (x ?? '').toLowerCase() === rol))
+    return [{ etiqueta: `Usar ${base.name} con rol ${rol} y quitar ${duplicada.name}`, cambios: [
+      ...(yaTieneRol ? [] : [{ tipo: 'CREATE_RELATION' as const, payload: { relationId: uuid(), sourceClassId: base.id,
+        targetClassId: base.id, kind: 'ASSOCIATION', name: rol === 'padre' ? 'tienePadre' : 'tieneMadre',
+        sourceRole: 'descendientes', targetRole: rol, sourceMultiplicity: '0..*', targetMultiplicity: '0..1' },
+        resumen: `Crear relacion ${base.name} [0..*] — [0..1] ${base.name} con rol ${rol}` }]),
+      { tipo: 'DELETE_CLASS' as const, payload: { classId: duplicada.id }, resumen: `Borrar la clase ${duplicada.name}` },
+    ] }]
+  }
+
   // Prestamo no identifica al cliente prestatario: una unica respuesta.
   const prestatario = hallazgo.match(/(\w+) no identifica al cliente prestatario/)
   if (prestatario) {
@@ -164,6 +183,8 @@ export function pendienteVigente(hallazgo: string, modelo: EstadoModelo): boolea
   if (m) { const c = porNombre(m[1]); return !c || relaciones(c.id).length === 0 }
   m = hallazgo.match(/(\w+) no identifica su cabecera (\w+)/)
   if (m) return !unidas(porNombre(m[1]), porNombre(m[2]))
+  m = hallazgo.match(/(\w+) duplica una entidad existente como rol familiar/)
+  if (m) return !!porNombre(m[1])
   m = hallazgo.match(/(\w+) no identifica al titular mediante una asociacion con \[(\w+)/)
   if (m) return !unidas(porNombre(m[1]), porNombre(m[2]))
   m = hallazgo.match(/(\w+) no identifica al cliente prestatario/)
