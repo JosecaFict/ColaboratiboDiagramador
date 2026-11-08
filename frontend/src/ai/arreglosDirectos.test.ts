@@ -79,6 +79,15 @@ describe('arreglos directos', () => {
     expect(primera.cambios[0].payload).toMatchObject({ relationId: 'c1', sourceMultiplicity: '0..*', targetMultiplicity: '1' })
   })
 
+  it('un detalle de itinerario sugiere el destino y deja pagos y cancelaciones al final', () => {
+    const modelo: EstadoModelo = { diagramId: 'd', layout: {},
+      classes: ['Cancelacion', 'Destino', 'Pago', 'Paquete', 'Itinerario', 'DetalleItinerario'].map(clase),
+      relationships: [rel('i1', 'Itinerario', 'DetalleItinerario', '1', '0..*')] }
+    const opciones = arreglosDirectos('La clase asociativa DetalleItinerario no conecta sus dos extremos o roles.', modelo)
+    expect(opciones[0]).toMatchObject({ etiqueta: 'Conectar con Destino', sugerido: true })
+    expect(opciones.slice(-2).map((o) => o.etiqueta)).toEqual(['Conectar con Cancelacion', 'Conectar con Pago'])
+  })
+
   it('el itinerario sugiere pertenecer al paquete', () => {
     const [primera] = arreglosDirectos('Itinerario no identifica el paquete o la salida al que pertenece', turismo)
     expect(primera).toMatchObject({ etiqueta: 'Pertenece a Paquete', sugerido: true })

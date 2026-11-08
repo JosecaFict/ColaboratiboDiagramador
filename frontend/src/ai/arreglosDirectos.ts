@@ -49,12 +49,16 @@ export function arreglosDirectos(hallazgo: string, modelo: EstadoModelo): Arregl
     const propias = palabras(clase.name)
     // Despues de las que comparten una palabra, las que suelen completar ese tipo de clase:
     // un detalle referencia un concepto de catalogo; un titular, a una persona.
+    // Turismo 2026-11-08: un paso del itinerario visita un destino o hace una actividad,
+    // y el chat ofrecia antes Cancelacion y Pago.
     const complemento = /^titular/i.test(clase.name) ? /^(cliente|usuario|persona|propietario)/i
+      : /^(detalle|paso|linea|item)(itinerario|ruta|recorrido)/i.test(clase.name) ? /^(destino|actividad|parada|lugar|servicio)/i
       : /^(detalle|linea|item|asignacion)/i.test(clase.name) ? /^(producto|servicio|articulo|insumo|material|actividad)/i : null
+    // Los registros (pagos, cancelaciones, reservas...) casi nunca son el extremo que le falta a un detalle.
     return modelo.classes
       .filter((c) => c.id !== clase.id && !ya.has(c.id))
       .map((c) => ({ c, afinidad: palabras(c.name).some((p) => propias.includes(p)) ? 0
-        : complemento?.test(c.name) ? 1 : 2 }))
+        : complemento?.test(c.name) ? 1 : REGISTRO.test(c.name) || /^cancelacion/i.test(c.name) ? 3 : 2 }))
       .sort((a, b) => a.afinidad - b.afinidad || a.c.name.localeCompare(b.c.name))
       .map(({ c, afinidad }, i) => ({ etiqueta: `Conectar con ${c.name}`, cambios: [crear(clase.id, c.id, '0..*', '1')],
         sugerido: i === 0 && afinidad < 2 }))
