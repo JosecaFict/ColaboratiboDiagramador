@@ -147,6 +147,17 @@ class GeneradorProduccionTest {
     }
 
     @Test
+    void el_perfil_postgres_apunta_a_la_base_del_docker_de_colabmodel() {
+        var p = generar("02-uno-a-muchos.json", Almacen.POSTGRES);
+        String yml = p.archivos().get("src/main/resources/application.yml");
+        String readme = p.archivos().get("README.md");
+
+        assertThat(yml).contains("on-profile: postgres")
+                .contains("jdbc:postgresql://127.0.0.1:55432/").doesNotContain(":5433/");
+        assertThat(readme).contains("CREATE DATABASE ").doesNotContain("{{db}}");
+    }
+
+    @Test
     void trae_docker_readme_y_una_prueba_por_controlador() {
         ProyectoGenerado p = generar("02-uno-a-muchos.json", Almacen.POSTGRES);
 

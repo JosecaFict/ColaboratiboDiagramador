@@ -1033,7 +1033,10 @@ public final class GeneradorSpringBoot {
                     activate:
                       on-profile: postgres
                   datasource:
-                    url: jdbc:postgresql://localhost:5433/{{db}}
+                    # El PostgreSQL del docker-compose de ColabModel (puerto 55432).
+                    # 127.0.0.1 y no localhost: en Windows, localhost puede ir por
+                    # IPv6 a un PostgreSQL nativo distinto.
+                    url: jdbc:postgresql://127.0.0.1:55432/{{db}}
                     username: colabmodel
                     password: colabmodel
                   flyway:

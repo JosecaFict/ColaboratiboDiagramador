@@ -1106,11 +1106,15 @@ final class PlantillasProduccion {
                         memoria, con el esquema creado por Flyway y unas filas de ejemplo. La base se
                         borra al apagar, que es justo lo que se quiere para probar.
 
-                        Para el PostgreSQL local de desarrollo (mismo DDL, sin datos de ejemplo):
+                        Para el PostgreSQL local de desarrollo (mismo DDL, sin datos de ejemplo), el
+                        del `docker compose` de ColabModel en el puerto 55432. La base se crea una vez:
 
                         ```bash
+                        docker compose exec db psql -U colabmodel -d colabmodel -c "CREATE DATABASE {{db}};"
                         mvn spring-boot:run -Dspring-boot.run.profiles=postgres
                         ```
+
+                        El primer comando va en la carpeta de ColabModel, donde esta su `docker-compose.yml`.
 
                         El esquema lo crea Flyway: `V1__init.sql` es el que se vio y confirmo en la
                         Vista Fisica y `V2__auditoria.sql` agrega version y auditoria. Hibernate solo
@@ -1138,6 +1142,7 @@ final class PlantillasProduccion {
                 .replace("{{creado}}", meta.creado())
                 .replace("{{actualizado}}", meta.actualizado())
                 .replace("{{proyecto}}", o.nombreProyecto())
+                .replace("{{db}}", Nombres.identificador(o.nombreProyecto()))
                 .replace("{{entidades}}", String.valueOf(entidades))
                 .replace("{{advertencias}}", lista);
     }
