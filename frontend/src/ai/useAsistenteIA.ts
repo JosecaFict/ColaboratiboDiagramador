@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid'
 import type { EstadoModelo } from '../canvas/applyOperation'
 import type { CambioDelLote } from '../importacion/propuesta'
 import type { EntradaHistorialIA, EstadoIA, MensajeIA, ModoIA, PropuestaIA, RecomendacionesIA } from './tipos'
-import { arreglosDirectos } from './arreglosDirectos'
+import { arreglosDirectos, pendienteVigente } from './arreglosDirectos'
 import { elegidas, ordenarRecomendaciones, pendientesComoRecomendaciones, seleccionInicial, textoDeRecomendaciones } from './recomendaciones'
 
 export const MODOS: { id: ModoIA; nombre: string; descripcion: string }[] = [
@@ -27,6 +27,8 @@ function textoDeRespuesta(propuesta: PropuestaIA, modo: ModoIA) {
     ? `La IA respondió, pero no generó cambios aplicables. Vuelve a intentarlo con una instrucción más concreta.${respuesta ? `\n\nRespuesta recibida:\n${respuesta}` : ''}`
     : respuesta || fallback
 }
+
+const PREFIJO_SIN_RESOLVER = 'Sin resolver por la IA, revisalo antes de aplicar: '
 
 const clavePropuesta = (propuesta: PropuestaIA) => propuesta.interaccionId ?? JSON.stringify(propuesta)
 
@@ -103,6 +105,11 @@ export function useAsistenteIA({ diagramId, token, modelo, onAplicar }: Opciones
     () => ordenarRecomendaciones(ultimasRecomendaciones?.recomendaciones ?? []), [ultimasRecomendaciones])
   const opcionesPorRecomendacion = useMemo(() => new Map(recomendacionesOrdenadas.map((r) =>
     [r.id, arreglosDirectos(r.titulo, modelo)])), [recomendacionesOrdenadas, modelo])
+
+  // Solo los "sin resolver" que siguen siendo ciertos en el diagrama actual (pueden haberse corregido despues).
+  const pendientesVigentes = useMemo(() => (ultimaPropuesta?.advertencias ?? [])
+    .filter((a) => a.startsWith(PREFIJO_SIN_RESOLVER) && pendienteVigente(a.slice(PREFIJO_SIN_RESOLVER.length), modelo)),
+  [ultimaPropuesta, modelo])
 
   const pedirIA = async (url: string, cuerpo: unknown) => {
     const r = await fetch(`/api/v1/diagrams/${diagramId}/ai/${url}`, {
@@ -203,7 +210,12 @@ export function useAsistenteIA({ diagramId, token, modelo, onAplicar }: Opciones
   /** Lo que Diseñar dejo "sin resolver" pasa a tarjetas: el usuario elige, precisa y convierte. */
   const corregirPendientes = () => {
     if (!ultimaPropuesta?.advertencias?.length) return
-    const pendientes = pendientesComoRecomendaciones(ultimaPropuesta.advertencias)
+    if (!pendientesVigentes.length) {
+      setMensajes((m) => [...m, { id: uuid(), autor: 'asistente', modo: 'RECOMENDAR',
+        texto: 'Los puntos que Diseñar dejó pendientes ya están resueltos en el diagrama. Si querés, pedime "Revisa el diagrama".' }])
+      return
+    }
+    const pendientes = pendientesComoRecomendaciones(pendientesVigentes)
     setMensajes((m) => [...m, { id: uuid(), autor: 'asistente', modo: 'RECOMENDAR',
       recomendaciones: pendientes, texto: pendientes.resumen }])
     setSeleccionRec(new Set(pendientes.recomendaciones.map((r) => r.id)))
@@ -251,7 +263,7 @@ export function useAsistenteIA({ diagramId, token, modelo, onAplicar }: Opciones
     modo, setModo, texto, setTexto, mensajes, consultando, error, seleccion, setSeleccion, ediciones,
     estadoIA, cargandoHistorial, modeloIA, cambiarModeloIA, seleccionRec, setSeleccionRec, panel, setPanel,
     accionesEditadas, setAccionesEditadas, arreglosElegidos, setArreglosElegidos,
-    ultimaPropuesta, ultimasRecomendaciones, recomendacionesOrdenadas, opcionesPorRecomendacion,
+    ultimaPropuesta, ultimasRecomendaciones, recomendacionesOrdenadas, opcionesPorRecomendacion, pendientesVigentes,
     enviar, convertirRecomendaciones, corregirPendientes, aplicar, yaAplicada, editar, nombreDeClase,
   }
 }

@@ -12,7 +12,6 @@ interface Props {
   onVerDetalle: () => void
 }
 
-const PREFIJO_SIN_RESOLVER = 'Sin resolver por la IA'
 const INTENCIONES: Intencion[] = ['CONSULTAR', 'DISENAR', 'RECOMENDAR', 'MODIFICAR', 'CORREGIR']
 
 /**
@@ -33,7 +32,8 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle }
   const lista = useRef<HTMLDivElement>(null)
 
   const intencion = intencionManual ?? detectarIntencion(texto)
-  const pendientes = (ultimaPropuesta?.advertencias ?? []).filter((a) => a.startsWith(PREFIJO_SIN_RESOLVER)).length
+  // Solo los pendientes que siguen siendo ciertos en el diagrama actual.
+  const pendientes = asistente.pendientesVigentes.length
   const sinVer = abierto ? 0 : mensajes.slice(vistos).filter((m) => m.autor === 'asistente').length
   // La propuesta y las recomendaciones activas se muestran como tarjetas debajo de su mensaje.
   const idPropuesta = useMemo(() => [...mensajes].reverse().find((m) => m.propuesta === ultimaPropuesta)?.id,

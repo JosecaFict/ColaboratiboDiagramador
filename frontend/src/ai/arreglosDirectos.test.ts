@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { EstadoModelo } from '../canvas/applyOperation'
 import type { UmlClass, UmlRelationship } from '../contracts/command'
-import { arreglosDirectos } from './arreglosDirectos'
+import { arreglosDirectos, pendienteVigente } from './arreglosDirectos'
 
 const clase = (id: string): UmlClass => ({ id, diagramId: 'd', name: id, isAbstract: false, weak: false,
   erKind: 'STRONG', inheritanceStrategy: 'SINGLE_TABLE', attributes: [], methods: [] } as unknown as UmlClass)
@@ -86,5 +86,19 @@ describe('arreglos directos', () => {
 
   it('un hallazgo desconocido no inventa arreglos', () => {
     expect(arreglosDirectos('Los creditos requeridos por cada plan no tienen contexto', turismo)).toEqual([])
+  })
+})
+
+describe('pendiente vigente', () => {
+  it('un pendiente ya corregido en el diagrama deja de mostrarse', () => {
+    const corregido: EstadoModelo = { ...turismo,
+      relationships: [...turismo.relationships, rel('r5', 'AsignacionServicio', 'ServicioTuristico', '0..*', '1')] }
+    const hallazgo = 'La clase asociativa AsignacionServicio no conecta sus dos extremos o roles.'
+    expect(pendienteVigente(hallazgo, turismo)).toBe(true)
+    expect(pendienteVigente(hallazgo, corregido)).toBe(false)
+  })
+
+  it('lo que no sabe comprobar sigue vigente', () => {
+    expect(pendienteVigente('Los creditos requeridos por cada plan no tienen contexto', turismo)).toBe(true)
   })
 })

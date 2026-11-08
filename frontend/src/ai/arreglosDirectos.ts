@@ -141,3 +141,47 @@ export function arreglosDirectos(hallazgo: string, modelo: EstadoModelo): Arregl
   }
   return []
 }
+
+/**
+ * Si un pendiente de Diseñar sigue siendo cierto en el diagrama real. La auditoria queda
+ * guardada con el diseño: al recargar, un pendiente ya corregido (con un arreglo directo o
+ * a mano) volvia a aparecer. Lo que no se sabe comprobar se considera vigente.
+ */
+export function pendienteVigente(hallazgo: string, modelo: EstadoModelo): boolean {
+  const porNombre = (n: string) => modelo.classes.find((c) => c.name === n)
+  const nombre = (id: string) => modelo.classes.find((c) => c.id === id)?.name ?? ''
+  const relaciones = (id: string) => modelo.relationships.filter((r) => r.sourceClassId === id || r.targetClassId === id)
+  const vecinas = (id: string) => new Set(relaciones(id).map((r) => r.sourceClassId === id ? r.targetClassId : r.sourceClassId))
+  const unidas = (a?: { id: string }, b?: { id: string }) => !!a && !!b && vecinas(a.id).has(b.id)
+
+  let m = hallazgo.match(/clase asociativa (\w+) no conecta/i) ?? hallazgo.match(/posible clase asociativa (\w+) solo tiene/i)
+  if (m) { const c = porNombre(m[1]); return !c || vecinas(c.id).size < 2 }
+  m = hallazgo.match(/Clase desconectada: (\w+)/i) ?? hallazgo.match(/La clase (\w+) queda desconectada/i)
+  if (m) { const c = porNombre(m[1]); return !c || relaciones(c.id).length === 0 }
+  m = hallazgo.match(/(\w+) no identifica su cabecera (\w+)/)
+  if (m) return !unidas(porNombre(m[1]), porNombre(m[2]))
+  m = hallazgo.match(/(\w+) no identifica al titular mediante una asociacion con \[(\w+)/)
+  if (m) return !unidas(porNombre(m[1]), porNombre(m[2]))
+  m = hallazgo.match(/(\w+) no identifica al cliente prestatario/)
+  if (m) return !unidas(porNombre(m[1]), modelo.classes.find((c) => /^cliente$/i.test(c.name)))
+  m = hallazgo.match(/(\w+) no identifica el paquete o la salida/)
+  if (m) { const c = porNombre(m[1]); return !c || ![...vecinas(c.id)].some((v) => /^(paquete|salida)/i.test(nombre(v))) }
+  m = hallazgo.match(/(\w+) no registra el importe/)
+  if (m) { const c = porNombre(m[1]); return !c || !c.attributes.some((a) => /monto|importe|valor/i.test(a.name)) }
+  m = hallazgo.match(/relacion (\w+) \[1\] - \[1\] (\w+) es uno a uno/)
+  if (m) {
+    const a = porNombre(m[1]), b = porNombre(m[2])
+    return !a || !b || modelo.relationships.some((r) => ((r.sourceClassId === a.id && r.targetClassId === b.id)
+      || (r.sourceClassId === b.id && r.targetClassId === a.id)) && r.sourceMultiplicity === '1' && r.targetMultiplicity === '1')
+  }
+  m = hallazgo.match(/(\w+) no permite representar multiples viajeros/)
+  if (m) {
+    const c = porNombre(m[1])
+    return !c || !relaciones(c.id).some((r) => {
+      const otro = r.sourceClassId === c.id ? r.targetClassId : r.sourceClassId
+      const junto = r.sourceClassId === c.id ? r.targetMultiplicity : r.sourceMultiplicity
+      return /^(viajero|participante|pasajero)/i.test(nombre(otro)) && (junto ?? '').includes('*')
+    })
+  }
+  return true
+}
