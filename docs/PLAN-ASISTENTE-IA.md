@@ -99,6 +99,39 @@ Se anotan en la tabla del final, siempre con la GPU libre (sin juegos ni overlay
 5. **Retirar reglas de dominio** de `NormalizadorPlanUml` y `RevisorCoberturaPlan`, conservando las genericas.
 6. **Dominios de reserva**: 3-4 requisitos nuevos que nunca se usen para ajustar reglas; se evaluan solo para medir.
 
+## Estado al 2026-11-08 (madrugada)
+
+Hecho en `feature/asistente-ia` (sin push):
+
+- Fase 0 y 1: Ollama al 100 % GPU (flash attention, KV q8_0), `keep_alive` 10m, telemetria por llamada.
+- Fase 2 (backend): `POST /ai/recomendaciones` y `POST /ai/recomendaciones/propuesta`.
+  - Revisor determinista generico (origen VERIFICADO): claves, desconexion, `xxxId`, multiplicidades,
+    duplicados, muchos a muchos, identificadores inconsistentes, nombres para el generador, COMPOSITION
+    cuando el requisito pide conservar.
+  - Verificacion regla por regla del requisito con el modelo local (origen MODELO), con filtro de evidencia
+    inventada.
+  - `colabmodel.ai.auditoria.proveedor: activo | claude` para auditar con Claude mas adelante.
+- Prueba HTTP real sobre "2 Plan academico" (659d4865-...): recomendaciones en 66 s; la propuesta desde la
+  recomendacion verificada de la COMPOSITION dio 1 UPDATE_RELATION -> ASSOCIATION, 0 rechazados, en 5 s.
+  Quedo en el historial de la IA sin aplicar.
+
+Conclusiones medidas:
+
+- Lo VERIFICADO es estable y correcto.
+- Lo del MODELO (qwen3.5 9B) es inestable entre corridas: a veces ve la COMPOSITION, nunca detecto
+  creditos fuera del plan, inventa acciones (esAutoReferente). Revision abierta y thinking no mejoran
+  (thinking agota 4096 tokens por regla).
+
+Pendiente, en orden:
+
+1. Aplicar desde la UI la propuesta del historial (UPDATE_RELATION) y comprobar que el rombo desaparece:
+   valida el camino bus -> diagrama.
+2. Fase 3: panel lateral plegable con Consultar/Disenar/Modificar/Recomendar; tarjetas "Verificado" y
+   "Sugerencia del modelo"; agrupar sugerencias del modelo que repiten un hallazgo verificado; usar como
+   requisito el ultimo prompt de Disenar.
+3. Revisar por que el panel "Puntos de ambiguedad" dice solo lectura siendo el dueno del proyecto.
+4. Evaluar los 5 dominios (`RecomendarOllamaVivoTest`) y luego dominios nuevos.
+
 ## Tabla de resultados
 
 | Fase | Fecha | PROCESSOR | Disenar (s, promedio) | Llamadas por Disenar | Tokens/s | Exito (x/15) | Asistente (s) | Notas |
