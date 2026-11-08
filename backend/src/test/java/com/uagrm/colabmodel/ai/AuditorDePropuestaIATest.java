@@ -189,6 +189,22 @@ class AuditorDePropuestaIATest {
         assertThat(avisos).noneMatch(a -> a.contains("multiplicidad junto a la entidad historica Receta"));
     }
 
+    @Test
+    void la_pk_de_una_clase_con_asociacion_recursiva_no_es_una_clave_foranea() {
+        ObjectNode animal = clase("animal", "Animal");
+        ObjectNode id = J.objectNode().put("classId", "animal").put("name", "idAnimal")
+                .put("dataType", "uuid").put("pk", true);
+        ObjectNode madre = J.objectNode().put("sourceClassId", "animal").put("targetClassId", "animal")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "0..*").put("targetMultiplicity", "0..1")
+                .put("targetRole", "madre");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, animal), aceptado(CommandType.ADD_ATTRIBUTE, id),
+                aceptado(CommandType.CREATE_RELATION, madre)));
+
+        assertThat(avisos).noneMatch(a -> a.contains("idAnimal") && a.contains("duplica"));
+    }
+
     private static ObjectNode clase(String id, String nombre) {
         return J.objectNode().put("classId", id).put("name", nombre);
     }

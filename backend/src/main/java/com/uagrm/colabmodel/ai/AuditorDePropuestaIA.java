@@ -151,7 +151,9 @@ final class AuditorDePropuestaIA {
     private static void advertirReferenciaDuplicada(List<String> avisos, List<Atributo> atributos,
                                                      String clase, String relacionada) {
         String relacionadaNormal = normal(relacionada);
-        atributos.stream().filter(a -> esReferenciaA(normal(a.nombre()), relacionadaNormal)).findFirst().ifPresent(a ->
+        // La pk es la identidad propia (idAnimal en Animal), no una referencia: en una
+        // asociacion recursiva Animal-Animal se confundia con una clave foranea.
+        atributos.stream().filter(a -> !a.pk() && esReferenciaA(normal(a.nombre()), relacionadaNormal)).findFirst().ifPresent(a ->
                 avisos.add(clase + "." + a.nombre() + " duplica la asociacion con " + relacionada
                         + " en un modelo conceptual."));
     }
