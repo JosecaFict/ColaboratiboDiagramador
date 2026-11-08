@@ -32,3 +32,14 @@ describe('detectarIntencion', () => {
       + 'emitidas a los clientes del negocio')).not.toBe('CORREGIR')
   })
 })
+
+describe('intencion de generar', () => {
+  it.each([
+    ['¿Está listo para generar?', 'GENERAR'],
+    ['¿puedo generar el backend?', 'GENERAR'],
+    ['Genera el backend Spring Boot', 'GENERAR'],
+    ['genera el modelo de una clinica', 'DISENAR'],
+  ])('"%s" -> %s', (texto, esperado) => {
+    expect(detectarIntencion(texto)).toBe(esperado)
+  })
+})

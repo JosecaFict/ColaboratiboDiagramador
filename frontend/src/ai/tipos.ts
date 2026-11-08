@@ -32,6 +32,12 @@ export interface RecomendacionesIA {
   verificaciones: VerificacionIA[]
   hallazgosEstructurales: string[]
   modelo: string | null
+  /** Solo en el frontend: arreglos ya armados por recomendacion (p. ej. la revision para generar). */
+  arreglos?: Record<number, import('./arreglosDirectos').ArregloDirecto[]>
+  /** Solo en el frontend: lo que no tiene arreglo directo no se manda al modelo. */
+  sinIA?: boolean
+  /** Solo en el frontend: revision "¿esta listo para generar?". */
+  generacion?: { bloqueantes: number }
 }
 
 export interface ComandoAceptadoIA {

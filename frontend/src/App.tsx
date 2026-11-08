@@ -856,7 +856,9 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         <PanelAmbiguedades
           ambiguedades={ambiguedades}
           error={errorAmbiguedades}
-          soloLectura={!puedeEditar}
+          // Decidir una ambiguedad es una decision de modelado, no una edicion del lienzo: no depende
+          // de la vista abierta. Antes, desde la Vista Fisica o la de IA, el dueño la veia de solo lectura.
+          soloLectura={!puedeEditarModelo || !conectado}
           onElegir={elegirLectura}
           onCerrar={() => setVerAmbiguedades(false)}
         />
@@ -1043,7 +1045,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       </main>
       {/* El asistente flotante acompaña al diagrama; en la vista completa de IA ya está todo a la vista. */}
       {vista !== 'AI' && <ChatFlotante asistente={asistente} conectado={conectado}
-        puedeEditar={puedeEditarModelo} onVerDetalle={() => setVista('AI')} />}
+        puedeEditar={puedeEditarModelo} onVerDetalle={() => setVista('AI')} onGenerar={() => void abrirGeneracion()} />}
     </div>
   )
 }

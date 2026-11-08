@@ -10,20 +10,22 @@ interface Props {
   puedeEditar: boolean
   /** Abre la vista completa de IA para revisar o editar cambio por cambio. */
   onVerDetalle: () => void
+  /** Abre la revision del generador de Spring Boot (la misma del boton Generar del editor). */
+  onGenerar: () => void
 }
 
-const INTENCIONES: Intencion[] = ['CONSULTAR', 'DISENAR', 'RECOMENDAR', 'MODIFICAR', 'CORREGIR']
+const INTENCIONES: Intencion[] = ['CONSULTAR', 'DISENAR', 'RECOMENDAR', 'MODIFICAR', 'CORREGIR', 'GENERAR']
 
 /**
  * Asistente flotante sobre el diagrama. Comparte la conversacion con la vista de IA:
  * mismo estado (useAsistenteIA), mismos endpoints, mismas protecciones. El diagrama sigue
  * visible y nada se aplica sin que el usuario pulse Aplicar.
  */
-export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle }: Props) {
+export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle, onGenerar }: Props) {
   const {
     mensajes, consultando, error, enviar, ultimaPropuesta, ultimasRecomendaciones, recomendacionesOrdenadas,
     opcionesPorRecomendacion, arreglosElegidos, setArreglosElegidos, seleccionRec, setSeleccionRec,
-    convertirRecomendaciones, corregirPendientes, aplicar, yaAplicada, estadoIA, modeloIA,
+    convertirRecomendaciones, corregirPendientes, revisarGeneracion, aplicar, yaAplicada, estadoIA, modeloIA,
   } = asistente
   const [abierto, setAbierto] = useState(false)
   const [texto, setTexto] = useState('')
@@ -62,7 +64,9 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle }
 
   const mandar = (pedido = texto, elegida: Intencion = intencion) => {
     if (consultando) return
-    if (elegida === 'CORREGIR') {
+    if (elegida === 'GENERAR') {
+      void revisarGeneracion()
+    } else if (elegida === 'CORREGIR') {
       // Corregir trabaja sobre lo que dejo el ultimo diseño; si no queda nada, se revisa el diagrama.
       if (pendientes && yaAplicada) corregirPendientes()
       else void enviar(REVISION_SIN_REQUISITO, 'RECOMENDAR')
@@ -107,7 +111,7 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle }
         {!mensajes.length && <div className="chat-bienvenida">
           <p>Contame qué querés hacer con el diagrama. Por ejemplo:</p>
           {['Diseña un sistema de ventas con clientes, productos y garantías', 'Revisa el diagrama', 'Corrige los errores',
-            '¿Qué representa este modelo?'].map((s) => <button key={s} onClick={() => mandar(s, detectarIntencion(s))}>{s}</button>)}
+            '¿Qué representa este modelo?', '¿Está listo para generar?'].map((s) => <button key={s} onClick={() => mandar(s, detectarIntencion(s))}>{s}</button>)}
         </div>}
 
         {mensajes.slice(-40).map((m) => <div key={m.id} className={`chat-mensaje ${m.autor}`}>
@@ -128,7 +132,7 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle }
             </div>}
           </div>}
 
-          {m.id === idRecomendaciones && !!recomendacionesOrdenadas.length && <div className="chat-tarjeta">
+          {m.id === idRecomendaciones && (!!recomendacionesOrdenadas.length || !!ultimasRecomendaciones?.generacion) && <div className="chat-tarjeta">
             {recomendacionesOrdenadas.map((r) => {
               const opciones = opcionesPorRecomendacion.get(r.id) ?? []
               return <div key={r.id} className={`chat-recomendacion ${seleccionRec.has(r.id) ? '' : 'inactiva'}`}>
@@ -141,13 +145,20 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle }
                     className={arreglosElegidos[r.id] === i ? 'elegida' : ''} onClick={() => elegirArreglo(r.id, i)}>
                     {o.etiqueta}{o.sugerido ? ' ★' : ''}</button>)}
                 </div>}
-                {!opciones.length && <small>Sin arreglo directo: lo intentará la IA con la acción sugerida.</small>}
+                {!opciones.length && <small>{ultimasRecomendaciones?.sinIA ? 'Para revisar a mano en el diagrama.' : 'Sin arreglo directo: lo intentará la IA con la acción sugerida.'}</small>}
               </div>
             })}
             <div className="chat-acciones">
-              <button className="principal" onClick={() => void convertirRecomendaciones()}
-                disabled={!puedeEditar || !conectado || consultando || !seleccionRec.size}>
-                Preparar {seleccionRec.size} cambio{seleccionRec.size === 1 ? '' : 's'}</button>
+              {(!ultimasRecomendaciones?.generacion || Object.keys(ultimasRecomendaciones.arreglos ?? {}).length > 0) &&
+                <button className={ultimasRecomendaciones?.generacion?.bloqueantes === 0 ? '' : 'principal'}
+                  onClick={() => void convertirRecomendaciones()}
+                  disabled={!puedeEditar || !conectado || consultando || !seleccionRec.size}>
+                  Preparar {seleccionRec.size} cambio{seleccionRec.size === 1 ? '' : 's'}</button>}
+              {/* Sin bloqueantes, el generador puede correr: se abre su revision (archivos, base, descarga). */}
+              {ultimasRecomendaciones?.generacion?.bloqueantes === 0 &&
+                <button className="principal" onClick={onGenerar} disabled={!conectado}>Generar Spring Boot</button>}
+              {!!ultimasRecomendaciones?.generacion?.bloqueantes &&
+                <small>Corregí los puntos marcados ALTA y volvé a preguntar "¿Está listo para generar?".</small>}
             </div>
           </div>}
         </div>)}

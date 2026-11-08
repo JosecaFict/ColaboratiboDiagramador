@@ -4,6 +4,7 @@ import type { EstadoModelo } from '../canvas/applyOperation'
 import type { CambioDelLote } from '../importacion/propuesta'
 import type { EntradaHistorialIA, EstadoIA, MensajeIA, ModoIA, PropuestaIA, RecomendacionesIA } from './tipos'
 import { arreglosDirectos, pendienteVigente } from './arreglosDirectos'
+import { revisarParaGenerar, type AmbiguedadPendiente, type ResumenCodegen } from './listoParaGenerar'
 import { elegidas, ordenarRecomendaciones, pendientesComoRecomendaciones, seleccionInicial, textoDeRecomendaciones } from './recomendaciones'
 
 export const MODOS: { id: ModoIA; nombre: string; descripcion: string }[] = [
@@ -103,8 +104,10 @@ export function useAsistenteIA({ diagramId, token, modelo, onAplicar }: Opciones
   const ultimasRecomendaciones = [...mensajes].reverse().find((m) => m.recomendaciones)?.recomendaciones
   const recomendacionesOrdenadas = useMemo(
     () => ordenarRecomendaciones(ultimasRecomendaciones?.recomendaciones ?? []), [ultimasRecomendaciones])
+  // Los arreglos ya armados (revision para generar) mandan; si no, se deducen del hallazgo.
   const opcionesPorRecomendacion = useMemo(() => new Map(recomendacionesOrdenadas.map((r) =>
-    [r.id, arreglosDirectos(r.titulo, modelo)])), [recomendacionesOrdenadas, modelo])
+    [r.id, ultimasRecomendaciones?.arreglos?.[r.id] ?? arreglosDirectos(r.titulo, modelo)])),
+  [recomendacionesOrdenadas, ultimasRecomendaciones, modelo])
 
   // Solo los "sin resolver" que siguen siendo ciertos en el diagrama actual (pueden haberse corregido despues).
   const pendientesVigentes = useMemo(() => (ultimaPropuesta?.advertencias ?? [])
@@ -133,8 +136,40 @@ export function useAsistenteIA({ diagramId, token, modelo, onAplicar }: Opciones
   }
 
   /** Se preelige el arreglo cuando es la unica respuesta o la opcion sugerida; el usuario la revisa antes de aplicar. */
-  const unicosArreglos = (ids: number[], titulos: string[]) => Object.fromEntries(ids.flatMap((id, i) =>
-    ((o) => o.length === 1 || o[0]?.sugerido)(arreglosDirectos(titulos[i], modelo)) ? [[id, 0]] : [])) as Record<number, number>
+  const unicosArreglos = (ids: number[], titulos: string[], armados?: RecomendacionesIA['arreglos']) =>
+    Object.fromEntries(ids.flatMap((id, i) => ((o) => o.length === 1 || o[0]?.sugerido)(
+      armados?.[id] ?? arreglosDirectos(titulos[i], modelo)) ? [[id, 0]] : [])) as Record<number, number>
+
+  /**
+   * "¿Esta listo para generar?": junta lo que dice el generador (/codegen/resumen), las ambiguedades
+   * sin decidir y las comprobaciones del diagrama. Los arreglos son directos, sin IA.
+   */
+  const revisarGeneracion = async () => {
+    if (consultando) return
+    setMensajes((m) => [...m, { id: uuid(), autor: 'usuario', modo: 'RECOMENDAR', texto: '¿Está listo para generar?' }])
+    setConsultando(true)
+    setError(null)
+    try {
+      const leer = async <T,>(url: string): Promise<T | null> => {
+        const r = await fetch(`/api/v1/diagrams/${diagramId}/${url}`, { headers: { Authorization: `Bearer ${token}` } })
+        return r.ok ? r.json() as Promise<T> : null
+      }
+      const [resumen, ambiguedades] = await Promise.all([
+        leer<ResumenCodegen>('codegen/resumen').catch(() => null),
+        leer<AmbiguedadPendiente[]>('ambiguities').catch(() => null)])
+      const revision = revisarParaGenerar(modelo, resumen, ambiguedades)
+      setMensajes((m) => [...m, { id: uuid(), autor: 'asistente', modo: 'RECOMENDAR', recomendaciones: revision,
+        texto: revision.resumen }])
+      // Solo se preseleccionan los puntos con arreglo directo: lo informativo no se "convierte".
+      setSeleccionRec(new Set(revision.recomendaciones.filter((r) => revision.arreglos?.[r.id]).map((r) => r.id)))
+      setAccionesEditadas({})
+      setArreglosElegidos(unicosArreglos(revision.recomendaciones.map((r) => r.id),
+        revision.recomendaciones.map((r) => r.titulo), revision.arreglos))
+      setPanel('recomendaciones')
+    } finally {
+      setConsultando(false)
+    }
+  }
 
   /** @param modoPedido el modo a usar; por defecto el elegido en la vista. El chat lo pasa segun la intencion. */
   const enviar = async (pedido = texto, modoPedido: ModoIA = modo) => {
@@ -184,9 +219,15 @@ export function useAsistenteIA({ diagramId, token, modelo, onAplicar }: Opciones
       const i = arreglosElegidos[r.id]
       return i === undefined ? [] : (opcionesPorRecomendacion.get(r.id)?.[i]?.cambios ?? [])
     })
-    const paraIA = lista.filter((r) => arreglosElegidos[r.id] === undefined)
+    // En la revision para generar, lo que no tiene arreglo directo es informativo: no se manda al modelo.
+    const paraIA = ultimasRecomendaciones?.sinIA ? [] : lista.filter((r) => arreglosElegidos[r.id] === undefined)
     setMensajes((m) => [...m, { id: uuid(), autor: 'usuario', modo: 'RECOMENDAR',
       texto: `Aplicar ${lista.length} ${lista.length === 1 ? 'recomendación' : 'recomendaciones'}: ${lista.map((r) => r.titulo).join('; ')}` }])
+    if (!paraIA.length && !directos.length) {
+      setMensajes((m) => [...m, { id: uuid(), autor: 'asistente', modo: 'RECOMENDAR',
+        texto: 'Esos puntos no tienen un arreglo directo: revisalos a mano en el diagrama.' }])
+      return
+    }
     if (!paraIA.length) {
       recibirPropuesta({ diagramId, origin: 'TEXT', aceptados: directos, rechazados: [], descartadosPorTope: [],
         advertencias: [], propuestosPorElModelo: 0, modelo: 'arreglo directo',
@@ -264,7 +305,7 @@ export function useAsistenteIA({ diagramId, token, modelo, onAplicar }: Opciones
     estadoIA, cargandoHistorial, modeloIA, cambiarModeloIA, seleccionRec, setSeleccionRec, panel, setPanel,
     accionesEditadas, setAccionesEditadas, arreglosElegidos, setArreglosElegidos,
     ultimaPropuesta, ultimasRecomendaciones, recomendacionesOrdenadas, opcionesPorRecomendacion, pendientesVigentes,
-    enviar, convertirRecomendaciones, corregirPendientes, aplicar, yaAplicada, editar, nombreDeClase,
+    enviar, convertirRecomendaciones, corregirPendientes, revisarGeneracion, aplicar, yaAplicada, editar, nombreDeClase,
   }
 }
 
