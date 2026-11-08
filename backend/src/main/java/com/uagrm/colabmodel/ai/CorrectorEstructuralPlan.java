@@ -25,7 +25,9 @@ final class CorrectorEstructuralPlan {
             "membresia", "participacion");
 
     private static final List<String> REGISTROS = List.of("reserva", "venta", "compra", "pedido", "pago",
-            "prestamo", "movimiento", "transferencia", "cita", "inscripcion", "factura");
+            "prestamo", "movimiento", "transferencia", "cita", "inscripcion", "factura",
+            // Ganaderia 2026-11-08: ControlSanitario [1] - [1] Animal dejaba un unico control por animal.
+            "control", "tratamiento", "aplicacion", "vacunacion", "diagnostico", "consulta", "evaluacion");
 
     static int corregir(ObjectNode plan, String requisito) {
         if (!(plan.path("classes") instanceof ArrayNode) || !(plan.path("relations") instanceof ArrayNode)) return 0;
@@ -44,6 +46,8 @@ final class CorrectorEstructuralPlan {
                 + completarImportes(plan, pedido)
                 + conectarPrestatario(plan, pedido)
                 + conectarAsociativaConSuNombre(plan)
+                + unaSolaIdentidad(plan)
+                + ubicacionActualDeLoMovido(plan)
                 + alinearCicloDeVidaConAuditoria(plan)
                 + retirarAfirmacionesFalsas(plan);
     }
@@ -363,6 +367,64 @@ final class CorrectorEstructuralPlan {
             }
             auditar(plan, "El backend conecto " + asociativa + " con " + nombrada + ", la clase que su nombre indica.");
             cambios++;
+        }
+        return cambios;
+    }
+
+    /** Ganaderia 2026-11-08: ProductoSanitario con idProductoSanitario e id, las dos como clave primaria. */
+    static int unaSolaIdentidad(ObjectNode plan) {
+        int cambios = 0;
+        for (JsonNode c : plan.path("classes")) {
+            ArrayNode atributos = (ArrayNode) c.path("attributes");
+            List<Integer> tecnicas = new ArrayList<>();
+            for (int i = 0; i < atributos.size(); i++) {
+                JsonNode a = atributos.get(i);
+                String nombre = a.path("name").asText();
+                if (a.path("pk").asBoolean() && (nombre.equalsIgnoreCase("id") || nombre.matches("^id[A-Z_].*"))) tecnicas.add(i);
+            }
+            if (tecnicas.size() < 2) continue;
+            // Se conserva la que nombra a la clase (idProductoSanitario); si no hay, la primera.
+            String propia = "id" + c.path("name").asText();
+            int conservar = tecnicas.stream().filter(i -> atributos.get(i).path("name").asText().equalsIgnoreCase(propia))
+                    .findFirst().orElse(tecnicas.getFirst());
+            for (int k = tecnicas.size() - 1; k >= 0; k--) {
+                if (tecnicas.get(k) == conservar) continue;
+                atributos.remove((int) tecnicas.get(k));
+                cambios++;
+            }
+        }
+        return cambios;
+    }
+
+    /**
+     * Ganaderia 2026-11-08: Animal [*] - [*] Lote junto a MovimientoAnimal, que ya guarda el
+     * historial. La directa es la ubicacion actual: cada animal esta en un lote. El lugar es
+     * la clase que el movimiento une dos veces (origen y destino).
+     */
+    static int ubicacionActualDeLoMovido(ObjectNode plan) {
+        int cambios = 0;
+        for (JsonNode c : plan.path("classes")) {
+            String movimiento = c.path("name").asText(), n = normal(movimiento);
+            if (!n.startsWith("movimiento") && !n.startsWith("traslado")) continue;
+            Map<String, Integer> enlaces = new HashMap<>();
+            for (JsonNode r : plan.path("relations")) {
+                String s = r.path("source").asText(), t = r.path("target").asText();
+                if (s.equals(movimiento) && !t.equals(movimiento)) enlaces.merge(t, 1, Integer::sum);
+                else if (t.equals(movimiento) && !s.equals(movimiento)) enlaces.merge(s, 1, Integer::sum);
+            }
+            for (JsonNode nodo : plan.path("relations")) {
+                ObjectNode r = (ObjectNode) nodo;
+                String s = r.path("source").asText(), t = r.path("target").asText();
+                if (s.equals(t) || !"ASSOCIATION".equals(r.path("kind").asText("ASSOCIATION"))) continue;
+                if (!r.path("sourceMultiplicity").asText().contains("*") || !r.path("targetMultiplicity").asText().contains("*")) continue;
+                int ls = enlaces.getOrDefault(s, 0), lt = enlaces.getOrDefault(t, 0);
+                if (ls == 0 || lt == 0 || (ls >= 2) == (lt >= 2)) continue;
+                boolean lugarEsOrigen = ls >= 2;
+                cambios += poner(r, lugarEsOrigen ? "sourceMultiplicity" : "targetMultiplicity", "1")
+                        + poner(r, lugarEsOrigen ? "targetMultiplicity" : "sourceMultiplicity", "0..*");
+                auditar(plan, "El backend dejo " + (lugarEsOrigen ? t : s) + " - " + (lugarEsOrigen ? s : t)
+                        + " como ubicacion actual; " + movimiento + " conserva el historial.");
+            }
         }
         return cambios;
     }

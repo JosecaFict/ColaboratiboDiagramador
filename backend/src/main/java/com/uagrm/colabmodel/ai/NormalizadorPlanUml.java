@@ -41,6 +41,11 @@ final class NormalizadorPlanUml {
             for (JsonNode atributoNodo : clase.path("attributes")) {
                 ObjectNode atributo = (ObjectNode) atributoNodo;
                 atributo.put("name", identificador(atributo.path("name").asText(), false));
+                // Ventas/turismo 2026-11-08: "idProducto (string)". La identidad tecnica es UUID,
+                // como la que el backend agrega cuando falta.
+                if (atributo.path("pk").asBoolean(false) && esIdTecnico(atributo.path("name").asText())
+                        && Set.of("string", "text").contains(atributo.path("dataType").asText()))
+                    atributo.put("dataType", "uuid");
                 if (atributo.path("pk").asBoolean(false) && !esIdTecnico(atributo.path("name").asText())) {
                     atributo.put("pk", false);
                     atributo.put("unique", esCandidatoUnico(atributo.path("name").asText()));

@@ -417,6 +417,68 @@ class CorrectorEstructuralPlanTest {
                 .noneMatch(x -> x.contains("Docente") && x.contains("PeriodoAcademico") && !x.contains("Asignacion"));
     }
 
+    // --- septima ronda (2026-11-08) ---
+
+    @Test
+    void ganaderia_un_animal_acumula_controles_y_tratamientos() throws Exception {
+        ObjectNode plan = plan("""
+                Animal: fechaNacimiento:date
+                ControlSanitario: fechaHora:datetime
+                Tratamiento: fechaHoraInicio:datetime
+                ---
+                ControlSanitario 1 -- 1 Animal
+                Tratamiento 1 -- 1 Animal
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, "Ganaderia: animales, controles sanitarios y tratamientos.");
+        assertThat(relaciones(r.comandos().getFirst().parametros()))
+                .contains("ControlSanitario 0..* -- 1 Animal", "Tratamiento 0..* -- 1 Animal");
+    }
+
+    @Test
+    void una_identidad_tecnica_de_texto_pasa_a_uuid() throws Exception {
+        ObjectNode plan = MAPPER.createObjectNode();
+        plan.putArray("classes").addObject().put("name", "Producto").putArray("attributes")
+                .addObject().put("name", "idProducto").put("dataType", "string").put("pk", true);
+        ((ArrayNode) plan.path("classes").get(0).path("attributes")).addObject().put("name", "nombre").put("dataType", "string");
+        plan.putArray("relations");
+        plan.putArray("audit").add("Uno.").add("Dos.");
+        JsonNode p = normalizar(plan, VENTAS).comandos().getFirst().parametros();
+        assertThat(p.path("classes").get(0).path("attributes").get(0).path("dataType").asText()).isEqualTo("uuid");
+    }
+
+    // --- octava ronda (2026-11-08) ---
+
+    @Test
+    void ganaderia_animal_lote_muchos_a_muchos_es_la_ubicacion_actual() throws Exception {
+        ObjectNode plan = plan("""
+                Animal: nombre:string
+                Lote: nombre:string
+                MovimientoAnimal: fechaMovimiento:datetime
+                ---
+                Animal 0..* -- 0..* Lote
+                MovimientoAnimal 0..* -- 1 Animal
+                MovimientoAnimal 0..* -- 1 Lote roles=/loteOrigen
+                MovimientoAnimal 0..* -- 1 Lote roles=/loteDestino
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, "Ganaderia: lotes, animales, historial de movimientos entre lotes con origen y destino.")
+                .comandos().getFirst().parametros();
+        assertThat(relaciones(p)).contains("Animal 0..* -- 1 Lote");
+    }
+
+    @Test
+    void una_clase_conserva_una_sola_identidad_tecnica() throws Exception {
+        ObjectNode plan = plan("""
+                ProductoSanitario: nombre:string
+                Animal: nombre:string
+                ---
+                Animal 1 -- 0..* ProductoSanitario
+                """, "Uno.", "Dos.");
+        ((ArrayNode) plan.path("classes").get(0).path("attributes")).addObject()
+                .put("name", "id").put("dataType", "uuid").put("pk", true);
+        JsonNode p = normalizar(plan, "Ganaderia").comandos().getFirst().parametros();
+        assertThat(atributos(p, "ProductoSanitario")).containsExactly("idProductoSanitario", "nombre");
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {
