@@ -19,6 +19,11 @@ final class NormalizadorPlanUml {
     private NormalizadorPlanUml() { }
 
     static RespuestaIA normalizar(RespuestaIA respuesta, String requisito) {
+        return normalizar(respuesta, requisito, Set.of());
+    }
+
+    /** @param enDiagrama clases que ya existen en el diagrama: una relacion hacia ellas no es un extremo inexistente */
+    static RespuestaIA normalizar(RespuestaIA respuesta, String requisito, Set<String> enDiagrama) {
         ComandoPropuestoIA comando = respuesta.comandos().stream()
                 .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
         if (comando == null || !comando.parametros().isObject()) return respuesta;
@@ -35,7 +40,8 @@ final class NormalizadorPlanUml {
         for (JsonNode claseNodo : plan.path("classes")) {
             ObjectNode clase = (ObjectNode) claseNodo;
             String anterior = clase.path("name").asText();
-            String limpio = identificador(anterior, true);
+            // El modelo escribe a veces "ControleSanitario" (portugues): el diagrama va en español.
+            String limpio = identificador(anterior, true).replaceFirst("^Controle(?=[A-Z])", "Control");
             nombres.put(anterior, limpio);
             clase.put("name", limpio);
             for (JsonNode atributoNodo : clase.path("attributes")) {
@@ -90,6 +96,9 @@ final class NormalizadorPlanUml {
             }
         }
 
+        // Academico 2026-11-08: relaciones hacia "Asignatura" y "Prerrequisito" cuando las clases se
+        // llamaban de otra forma bloqueaban toda la propuesta ("Relacion con extremo inexistente").
+        CorrectorEstructuralPlan.resolverExtremosInexistentes(plan, enDiagrama);
         int referenciasExplicitasAjustadas = convertirReferenciasExplicitas(plan);
         int relacionesFundamentalesAgregadas = asegurarRelacionesFundamentales(plan, requisito)
                 + completarVinculosExplicitos(plan, requisito)

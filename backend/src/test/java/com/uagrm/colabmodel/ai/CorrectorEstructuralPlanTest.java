@@ -479,6 +479,55 @@ class CorrectorEstructuralPlanTest {
         assertThat(atributos(p, "ProductoSanitario")).containsExactly("idProductoSanitario", "nombre");
     }
 
+    // --- novena ronda: pruebas desde el chat (2026-11-08) ---
+
+    @Test
+    void academico_relaciones_hacia_nombres_que_no_existen_no_bloquean_la_propuesta() throws Exception {
+        ObjectNode plan = plan("""
+                AsignaturaBase: nombre:string
+                DetallePlan: orden:int
+                Docente: nombre:string
+                ---
+                DetallePlan 0..* -- 1 Asignatura
+                Asignatura 1 -- 0..* Prerrequisito
+                Docente 1 -- 0..* DetallePlan
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, "Plan academico con asignaturas y docentes");
+        assertThat(relaciones(r.comandos().getFirst().parametros())).contains("DetallePlan 0..* -- 1 AsignaturaBase")
+                .noneMatch(x -> x.contains("Prerrequisito"));
+        assertThat(ValidadorPlanFinal.revisar(r)).noneMatch(h -> h.contains("extremo inexistente"));
+    }
+
+    @Test
+    void una_clase_del_diagrama_no_se_toma_como_extremo_inexistente() throws Exception {
+        ObjectNode plan = plan("""
+                Factura: total:decimal
+                ---
+                Factura 0..* -- 1 Cliente
+                """, "Uno.", "Dos.");
+        JsonNode p = NormalizadorPlanUml.normalizar(new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan)), ""),
+                "Facturas de clientes", java.util.Set.of("Cliente")).comandos().getFirst().parametros();
+        assertThat(relaciones(p)).contains("Factura 0..* -- 1 Cliente");
+    }
+
+    @Test
+    void controle_en_portugues_pasa_a_control_y_la_auditoria_no_afirma_atributos_retirados() throws Exception {
+        ObjectNode plan = plan("""
+                Animal: nombre:string
+                ControleSanitario: fecha:date
+                Producto: nombre:string
+                Inventario: cantidadDisponible:int, productoId:uuid
+                ---
+                ControleSanitario 0..* -- 1 Animal
+                Producto 1 -- 0..* Inventario
+                """, "La clase Inventario ahora tiene un atributo productoId que identifica el producto.",
+                "Se evitan claves foraneas como planId.");
+        JsonNode p = normalizar(plan, VENTAS).comandos().getFirst().parametros();
+        assertThat(clases(p)).contains("ControlSanitario").doesNotContain("ControleSanitario");
+        assertThat(atributos(p, "Inventario")).doesNotContain("productoId");
+        assertThat(p.path("audit").toString()).doesNotContain("tiene un atributo productoId").contains("Se evitan claves foraneas");
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {

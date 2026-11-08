@@ -15,6 +15,34 @@ import java.util.*;
 final class CorrectorEstructuralPlan {
     private CorrectorEstructuralPlan() { }
 
+    /**
+     * Una relacion que nombra una clase inexistente se dirige a la unica clase cuyo nombre la
+     * contiene o esta contenido en ella (Asignatura -> AsignaturaBase); si no hay una sola, se
+     * retira. Asi un nombre mal escrito por el modelo no bloquea la propuesta entera.
+     */
+    static int resolverExtremosInexistentes(ObjectNode plan, Set<String> enDiagrama) {
+        if (!(plan.path("relations") instanceof ArrayNode relaciones)) return 0;
+        Set<String> existentes = new HashSet<>();
+        for (JsonNode c : plan.path("classes")) existentes.add(c.path("name").asText());
+        int cambios = 0;
+        for (int i = relaciones.size() - 1; i >= 0; i--) {
+            ObjectNode r = (ObjectNode) relaciones.get(i);
+            boolean valida = true;
+            for (String extremo : List.of("source", "target")) {
+                String nombre = r.path(extremo).asText();
+                // Una clase que ya esta en el diagrama es un extremo valido aunque no venga en el plan.
+                if (existentes.contains(nombre) || enDiagrama.contains(nombre)) continue;
+                String n = normal(nombre);
+                List<String> parecidas = existentes.stream().filter(e -> !n.isBlank()
+                        && (normal(e).startsWith(n) || n.startsWith(normal(e)))).toList();
+                if (parecidas.size() == 1) { r.put(extremo, parecidas.getFirst()); cambios++; }
+                else valida = false;
+            }
+            if (!valida) { relaciones.remove(i); cambios++; }
+        }
+        return cambios;
+    }
+
     /** Subtipos de un concepto base que el modelo suele dejar sueltos. */
     private static final Map<String, Set<String>> SUBTIPOS = Map.of(
             "producto", Set.of("computadora", "laptop", "portatil", "notebook", "componente", "accesorio",
@@ -459,13 +487,23 @@ final class CorrectorEstructuralPlan {
         List<String> sueltas = new ArrayList<>();
         for (JsonNode c : plan.path("classes"))
             if (grado(plan, c.path("name").asText()) == 0) sueltas.add(c.path("name").asText());
-        if (sueltas.isEmpty() || !(plan.path("audit") instanceof ArrayNode audit)) return 0;
+        if (!(plan.path("audit") instanceof ArrayNode audit)) return 0;
+        Set<String> atributos = new HashSet<>();
+        for (JsonNode c : plan.path("classes")) for (JsonNode a : c.path("attributes")) atributos.add(normal(a.path("name").asText()));
+        // Ventas 2026-11-08: "Inventario ahora tiene un atributo productoId", que el backend ya habia retirado.
+        java.util.regex.Pattern atributoAfirmado = java.util.regex.Pattern.compile(
+                "(?:tiene|incluye|agrega|usa|con|mediante) (?:un |el )?atributo (\\w+id)\\b");
         int cambios = 0;
         for (int i = audit.size() - 1; i >= 0; i--) {
             String punto = normal(audit.get(i).asText());
             boolean afirmaEnlace = punto.contains("conect") || punto.contains("vincul") || punto.contains("relacion")
                     || punto.contains("asocia");
-            if (afirmaEnlace && sueltas.stream().anyMatch(c -> menciona(punto, normal(c)))) { audit.remove(i); cambios++; }
+            var m = atributoAfirmado.matcher(punto);
+            boolean atributoInexistente = m.find() && !atributos.contains(m.group(1));
+            if ((afirmaEnlace && sueltas.stream().anyMatch(c -> menciona(punto, normal(c)))) || atributoInexistente) {
+                audit.remove(i);
+                cambios++;
+            }
         }
         return cambios;
     }

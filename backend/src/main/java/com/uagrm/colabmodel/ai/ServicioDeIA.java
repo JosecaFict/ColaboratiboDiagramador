@@ -108,7 +108,7 @@ public class ServicioDeIA {
         List<String> sinResolver = List.of();
         if (modo == ModoIA.DISENAR) {
             respuesta = revisarPlan(prompt, respuesta, contexto, relaciones, modelo);
-            respuesta = NormalizadorPlanUml.normalizar(respuesta, prompt);
+            respuesta = NormalizadorPlanUml.normalizar(respuesta, prompt, nombres(contexto));
             List<String> pendientes = hallazgosFinales(respuesta, prompt, contexto);
             if (!pendientes.isEmpty()) {
                 try {
@@ -178,7 +178,7 @@ public class ServicioDeIA {
                 .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
         if (ProveedorOllama.errorDeFormatoDelPlan(plan) != null) return borrador;
 
-        RespuestaIA baseNormalizada = NormalizadorPlanUml.normalizar(borrador, requisito);
+        RespuestaIA baseNormalizada = NormalizadorPlanUml.normalizar(borrador, requisito, nombres(contexto));
         List<String> hallazgosBase = hallazgosFinales(baseNormalizada, requisito, contexto);
 
         String pedidoRevision = """
@@ -213,7 +213,7 @@ public class ServicioDeIA {
             ComandoPropuestoIA planRevisado = revisada.comandos().stream()
                     .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
             if (ProveedorOllama.errorDeFormatoDelPlan(planRevisado) != null) return borrador;
-            RespuestaIA candidata = NormalizadorPlanUml.normalizar(revisada, requisito);
+            RespuestaIA candidata = NormalizadorPlanUml.normalizar(revisada, requisito, nombres(contexto));
             if (pierdeClases(baseNormalizada, candidata)) return borrador;
             return hallazgosFinales(candidata, requisito, contexto).size() > hallazgosBase.size()
                     ? borrador : revisada;
@@ -221,6 +221,11 @@ public class ServicioDeIA {
             return new RespuestaIA(borrador.comandos(), unirNotas(borrador.notaDelModelo(),
                     "La revision automatica no estuvo disponible; se conserva el primer plan validado."));
         }
+    }
+
+    /** Las clases que ya estan en el diagrama: el plan puede relacionarse con ellas sin incluirlas. */
+    private static java.util.Set<String> nombres(List<SolicitudIA.ClaseEnContexto> contexto) {
+        return contexto.stream().map(SolicitudIA.ClaseEnContexto::nombre).collect(Collectors.toSet());
     }
 
     private static String unirNotas(String primera, String segunda) {
@@ -255,7 +260,7 @@ public class ServicioDeIA {
         }
         boolean tienePlan = reparada.comandos().stream().anyMatch(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo()));
         if (!tienePlan) return repararConAjustes(requisito, borrador, hallazgos, modelo);
-        reparada = NormalizadorPlanUml.normalizar(reparada, requisito);
+        reparada = NormalizadorPlanUml.normalizar(reparada, requisito, nombres(contexto));
         if (pierdeClases(borrador, reparada)) {
             LOG.info("La reparacion completa elimino clases del borrador; se descarta y se corrige el borrador");
             return repararConAjustes(requisito, borrador, hallazgos, modelo);
