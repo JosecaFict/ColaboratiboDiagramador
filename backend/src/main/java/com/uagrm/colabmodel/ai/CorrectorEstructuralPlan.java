@@ -75,6 +75,8 @@ final class CorrectorEstructuralPlan {
                 + conectarPrestatario(plan, pedido)
                 + conectarAsociativaConSuNombre(plan)
                 + unaSolaIdentidad(plan)
+                + moverDatosAlPlan(plan, pedido)
+                + variosPrerrequisitosPorAsignatura(plan)
                 + ubicacionActualDeLoMovido(plan)
                 + alinearCicloDeVidaConAuditoria(plan)
                 + retirarAfirmacionesFalsas(plan);
@@ -395,6 +397,66 @@ final class CorrectorEstructuralPlan {
             }
             auditar(plan, "El backend conecto " + asociativa + " con " + nombrada + ", la clase que su nombre indica.");
             cambios++;
+        }
+        return cambios;
+    }
+
+    /** Datos que dependen del plan: el requisito los pide "dentro del plan" o "en cada plan". */
+    private static final List<String> DATOS_DEL_PLAN = List.of("credito", "cargahoraria", "horas", "nivel", "caracter",
+            "obligatori", "electiv", "semestre");
+
+    /**
+     * Academico 2026-11-08: creditos y cargaHoraria en Asignatura, cuando el requisito los pide
+     * "dentro del plan correspondiente". En el catalogo valen para todos los planes: un cambio en
+     * el plan 2025 reescribia el de 2018. Pasan a la clase que une la asignatura con el plan.
+     */
+    static int moverDatosAlPlan(ObjectNode plan, String pedido) {
+        if (!pedido.contains("plan") || !(pedido.contains("cada plan") || pedido.contains("dentro del plan")
+                || pedido.contains("plan correspondiente") || pedido.contains("en el plan"))) return 0;
+        String asignatura = clase(plan, n -> n.startsWith("asignatura") || n.startsWith("materia"));
+        if (asignatura == null) return 0;
+        // La clase que une la asignatura con un plan: DetallePlan, PlanAsignatura, ParticipacionAsignatura...
+        String detalle = vecinas(plan, asignatura).stream()
+                .filter(v -> !normal(v).startsWith("plan") && vecinas(plan, v).stream().anyMatch(x -> normal(x).startsWith("plan")))
+                .sorted(Comparator.comparing(v -> ASOCIATIVAS.stream().anyMatch(normal(v)::startsWith) ? 0 : 1))
+                .findFirst().orElse(null);
+        if (detalle == null) return 0;
+        ArrayNode origen = (ArrayNode) objeto(plan, asignatura).path("attributes");
+        ArrayNode destino = (ArrayNode) objeto(plan, detalle).path("attributes");
+        List<String> movidos = new ArrayList<>();
+        for (int i = origen.size() - 1; i >= 0; i--) {
+            JsonNode a = origen.get(i);
+            String n = normal(a.path("name").asText());
+            if (a.path("pk").asBoolean() || DATOS_DEL_PLAN.stream().noneMatch(n::startsWith)) continue;
+            if (!tieneAtributo(plan, detalle, a.path("name").asText())) destino.add(a.deepCopy());
+            origen.remove(i);
+            movidos.add(a.path("name").asText());
+        }
+        if (movidos.isEmpty()) return 0;
+        Collections.reverse(movidos);
+        auditar(plan, "El backend paso " + String.join(", ", movidos) + " de " + asignatura + " a " + detalle
+                + ": dependen del plan, y en el catalogo un cambio afectaria a todas las versiones.");
+        return movidos.size();
+    }
+
+    /**
+     * Academico 2026-11-08: DetallePlan [0..*] - [1] Prerrequisito decia que cada asignatura del plan
+     * tiene exactamente un prerrequisito. Cada prerrequisito pertenece a una asignatura (o detalle),
+     * que puede tener ninguno o varios: el extremo del prerrequisito es 0..*.
+     */
+    static int variosPrerrequisitosPorAsignatura(ObjectNode plan) {
+        int cambios = 0;
+        for (JsonNode nodo : plan.path("relations")) {
+            ObjectNode r = (ObjectNode) nodo;
+            if (!"ASSOCIATION".equals(r.path("kind").asText("ASSOCIATION"))) continue;
+            String s = normal(r.path("source").asText()), t = normal(r.path("target").asText());
+            boolean requisitoS = s.startsWith("prerrequisito"), requisitoT = t.startsWith("prerrequisito");
+            if (requisitoS == requisitoT) continue;
+            String juntoRequisito = requisitoS ? "sourceMultiplicity" : "targetMultiplicity";
+            String juntoOtro = requisitoS ? "targetMultiplicity" : "sourceMultiplicity";
+            String m = r.path(juntoRequisito).asText();
+            if ((m.equals("1") || m.equals("0..1")) && r.path(juntoOtro).asText().contains("*"))
+                cambios += poner(r, juntoRequisito, "0..*") + poner(r, juntoOtro, "1");
         }
         return cambios;
     }

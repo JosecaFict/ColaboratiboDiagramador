@@ -528,6 +528,56 @@ class CorrectorEstructuralPlanTest {
         assertThat(p.path("audit").toString()).doesNotContain("tiene un atributo productoId").contains("Se evitan claves foraneas");
     }
 
+    // --- decima ronda: diagrama academico real (2026-11-08) ---
+
+    private static final String ACADEMICO_PLAN = "Planes academicos: carreras con varias versiones de su plan, asignaturas, "
+            + "periodos, docentes. Conservar carga horaria, creditos, nivel y caracter dentro del plan correspondiente; "
+            + "una asignatura puede requerir varias asignaturas previas; asignaciones docentes por periodo.";
+
+    @Test
+    void academico_periodo_como_texto_pasa_a_asociacion_con_periodo_academico() throws Exception {
+        ObjectNode plan = plan("""
+                PeriodoAcademico: nombre:string
+                Docente: nombre:string
+                AsignacionDocente: periodoAcademico:string, horasSemanales:int
+                ---
+                Docente 1 -- 0..* AsignacionDocente
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, ACADEMICO_PLAN).comandos().getFirst().parametros();
+        assertThat(atributos(p, "AsignacionDocente")).doesNotContain("periodoAcademico").contains("horasSemanales");
+        assertThat(relaciones(p)).anyMatch(x -> x.contains("AsignacionDocente") && x.contains("PeriodoAcademico"));
+    }
+
+    @Test
+    void academico_creditos_y_carga_horaria_pasan_al_detalle_del_plan() throws Exception {
+        ObjectNode plan = plan("""
+                PlanAcademico: nombreVersion:string
+                Asignatura: nombre:string, creditos:int, cargaHoraria:int, descripcion:text
+                DetallePlan: caracter:string, orden:int
+                ---
+                PlanAcademico 1 -- 0..* DetallePlan
+                DetallePlan 0..* -- 1 Asignatura
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, ACADEMICO_PLAN).comandos().getFirst().parametros();
+        assertThat(atributos(p, "Asignatura")).doesNotContain("creditos", "cargaHoraria").contains("nombre", "descripcion");
+        assertThat(atributos(p, "DetallePlan")).contains("caracter", "orden", "creditos", "cargaHoraria");
+    }
+
+    @Test
+    void academico_un_detalle_puede_tener_varios_prerrequisitos() throws Exception {
+        ObjectNode plan = plan("""
+                Asignatura: nombre:string
+                DetallePlan: orden:int
+                Prerrequisito: periodoMinimo:int
+                ---
+                DetallePlan 0..* -- 1 Asignatura
+                DetallePlan 0..* -- 1 Prerrequisito
+                Prerrequisito 0..* -- 1 Asignatura
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, ACADEMICO_PLAN).comandos().getFirst().parametros();
+        assertThat(relaciones(p)).contains("DetallePlan 1 -- 0..* Prerrequisito", "Prerrequisito 0..* -- 1 Asignatura");
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {

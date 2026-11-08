@@ -493,10 +493,11 @@ final class NormalizadorPlanUml {
                 if (a.path("pk").asBoolean()) continue;
                 String campo = a.path("name").asText();
                 String tipo = a.path("dataType").asText();
-                // periodoAcademico: uuid tambien es una FK a PeriodoAcademico.
+                // periodoAcademico: uuid -- o string, academico 2026-11-08 -- con el nombre exacto de
+                // una clase es una FK a PeriodoAcademico guardada como texto libre: pasa a ser asociacion.
                 String referencia = campo.matches("id[A-Z].*") ? campo.substring(2)
                         : campo.endsWith("Id") ? campo.substring(0, campo.length() - 2)
-                        : tipo.equals("uuid") ? campo : "";
+                        : Set.of("uuid", "string", "text", "int", "integer", "long").contains(tipo) ? campo : "";
                 List<String> candidatas = new java.util.ArrayList<>();
                 for (JsonNode destino : plan.path("classes")) {
                     String n = destino.path("name").asText();
