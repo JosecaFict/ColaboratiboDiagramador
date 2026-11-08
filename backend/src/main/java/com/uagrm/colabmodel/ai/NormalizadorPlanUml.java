@@ -151,6 +151,7 @@ final class NormalizadorPlanUml {
         int coautoriasAjustadas = corregirCoautoriaExplicita(plan, requisito);
         int decisionesDeObligatoriedad = ajustarObligatoriedadExplicita(plan, requisito);
         boolean reglaPrestamoActivo = detectaReglaPrestamoActivo(plan, requisito);
+        CorrectorEstructuralPlan.corregir(plan, requisito);
         int secundariosRecortados = recortarAtributosSecundarios(plan, requisito);
 
         if (plan.path("audit") instanceof ArrayNode audit) {

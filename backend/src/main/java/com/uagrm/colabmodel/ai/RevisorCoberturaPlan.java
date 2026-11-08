@@ -100,7 +100,9 @@ final class RevisorCoberturaPlan {
                     boolean sale = nombre.equals(r.path("source").asText()), llega = nombre.equals(r.path("target").asText());
                     if (!sale && !llega) continue;
                     String otro = r.path(sale ? "target" : "source").asText();
-                    if (normal(otro).startsWith("viajero") && r.path(sale ? "targetMultiplicity" : "sourceMultiplicity")
+                    // Participante como persona que viaja equivale a Viajero.
+                    if ((normal(otro).startsWith("viajero") || normal(otro).equals("participante"))
+                            && r.path(sale ? "targetMultiplicity" : "sourceMultiplicity")
                             .asText().contains("*")) participacion = true;
                     if ((normal(otro).contains("particip") || normal(otro).contains("detalle"))
                             && vecinas.getOrDefault(otro, Set.of()).stream().map(RevisorCoberturaPlan::normal)
