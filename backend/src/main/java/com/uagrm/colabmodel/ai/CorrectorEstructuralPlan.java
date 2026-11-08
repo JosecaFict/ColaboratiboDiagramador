@@ -40,6 +40,7 @@ final class CorrectorEstructuralPlan {
                 + permitirVariosPagos(plan, pedido)
                 + retirarMuchosAMuchosCubiertos(plan)
                 + retirarGarantiaAlCatalogo(plan)
+                + retirarRecursivaCubierta(plan)
                 + alinearCicloDeVidaConAuditoria(plan)
                 + retirarAfirmacionesFalsas(plan);
     }
@@ -177,6 +178,7 @@ final class CorrectorEstructuralPlan {
         if (reserva == null) return 0;
         // Con una clase Viajero aparte, Participante es la participacion (0..* por reserva), no la persona.
         boolean participanteEsPersona = clase(plan, n -> n.startsWith("viajero")) == null;
+        boolean sinParticipacion = clase(plan, n -> n.startsWith("participante") || n.startsWith("participacion")) == null;
         int cambios = 0;
         for (JsonNode nodo : plan.path("relations")) {
             ObjectNode r = (ObjectNode) nodo;
@@ -188,6 +190,10 @@ final class CorrectorEstructuralPlan {
             String juntoOtro = s.equals(reserva) ? "targetMultiplicity" : "sourceMultiplicity";
             if (n.equals("participante") && participanteEsPersona && pedido.contains("participantes")) {
                 cambios += poner(r, juntoReserva, "1") + poner(r, juntoOtro, "1..*");
+            } else if (n.startsWith("viajero") && sinParticipacion && pedido.contains("participantes")) {
+                // Turismo 2026-11-08: Reserva [0..*] - [1] Viajero dejaba un solo viajero por reserva.
+                // Sin clase de participacion, la relacion directa es N:M: varios viajeros por reserva.
+                cambios += poner(r, juntoReserva, "0..*") + poner(r, juntoOtro, "1..*");
             } else if (n.startsWith("titular") && vecinas(plan, otro).stream().noneMatch(v -> normal(v).startsWith("cuenta"))) {
                 cambios += poner(r, juntoReserva, "0..*") + poner(r, juntoOtro, "1");
             }
@@ -258,6 +264,29 @@ final class CorrectorEstructuralPlan {
                 relaciones.remove(i);
                 cambios++;
             }
+        }
+        return cambios;
+    }
+
+    /**
+     * Academico 2026-11-08: Asignatura-Asignatura sin roles junto a la clase Prerrequisito,
+     * que ya une la asignatura requerida. Son dos versiones de la misma dependencia.
+     */
+    static int retirarRecursivaCubierta(ObjectNode plan) {
+        ArrayNode relaciones = (ArrayNode) plan.path("relations");
+        int cambios = 0;
+        for (int i = relaciones.size() - 1; i >= 0; i--) {
+            JsonNode r = relaciones.get(i);
+            String c = r.path("source").asText();
+            if (!c.equals(r.path("target").asText()) || !"ASSOCIATION".equals(r.path("kind").asText("ASSOCIATION"))) continue;
+            // Solo si la clase de prerrequisitos ya une sus dos extremos: si no, la recursiva es la unica representacion.
+            boolean cubierta = vecinas(plan, c).stream().anyMatch(v -> (normal(v).contains("prerrequisito")
+                    || normal(v).contains("correlativ")) && ValidadorPlanFinal.asociativaSinDatosValida(plan, v));
+            if (!cubierta) continue;
+            relaciones.remove(i);
+            auditar(plan, "El backend retiro la asociacion recursiva de " + c
+                    + ": la clase de prerrequisitos ya representa esa dependencia.");
+            cambios++;
         }
         return cambios;
     }

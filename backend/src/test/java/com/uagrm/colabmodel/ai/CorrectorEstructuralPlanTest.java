@@ -291,6 +291,88 @@ class CorrectorEstructuralPlanTest {
         assertThat(atributos(p, "Producto")).contains("nombre");
     }
 
+    @Test
+    void turismo_sin_clase_de_participacion_una_reserva_lleva_varios_viajeros() throws Exception {
+        ObjectNode plan = plan("""
+                Reserva: fechaCreacion:datetime
+                Viajero: nombre:string, email:string
+                TitularReserva: nombre:string
+                ---
+                Reserva 0..* -- 1 Viajero
+                Reserva 0..* -- 1 TitularReserva
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, TURISMO);
+        assertThat(relaciones(r.comandos().getFirst().parametros())).contains("Reserva 0..* -- 1..* Viajero");
+        assertThat(RevisorCoberturaPlan.revisar(r, TURISMO)).noneMatch(h -> h.contains("multiples viajeros"));
+    }
+
+    // --- quinta ronda (2026-11-08) ---
+
+    @Test
+    void banco_titular_unido_solo_a_cuenta_recupera_al_cliente_aunque_la_directa_tenga_roles() throws Exception {
+        ObjectNode plan = plan("""
+                Cliente: nombre:string
+                Cuenta: saldo:decimal
+                Titular: porcentajePropiedad:decimal
+                ---
+                Cliente 0..* -- 0..* Cuenta roles=titulares/cuentas
+                Titular 0..* -- 1 Cuenta
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, BANCO);
+        JsonNode p = r.comandos().getFirst().parametros();
+        assertThat(relaciones(p)).noneMatch(x -> x.startsWith("Cliente") && x.endsWith("Cuenta")
+                || x.startsWith("Cuenta") && x.endsWith("Cliente"))
+                .anyMatch(x -> x.contains("Titular") && x.contains("Cliente"));
+        assertThat(ValidadorPlanFinal.revisar(r)).noneMatch(h -> h.contains("Titular"));
+        assertThat(RevisorCoberturaPlan.revisar(r, BANCO)).noneMatch(h -> h.contains("Titular"));
+    }
+
+    @Test
+    void academico_la_recursiva_de_asignatura_sobra_junto_a_la_clase_prerrequisito() throws Exception {
+        ObjectNode plan = plan("""
+                Asignatura: nombre:string
+                DetallePlan: orden:int
+                Prerrequisito: condicion:string
+                ---
+                DetallePlan 0..* -- 1 Asignatura
+                DetallePlan 1 -- 0..* Prerrequisito
+                Asignatura 1 -- 0..* Asignatura roles=requisitos/requisitoDe
+                Prerrequisito 0..* -- 1 Asignatura
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, ACADEMICO);
+        assertThat(relaciones(r.comandos().getFirst().parametros())).noneMatch(x -> x.startsWith("Asignatura") && x.endsWith("Asignatura"));
+        assertThat(RevisorCoberturaPlan.revisar(r, ACADEMICO)).noneMatch(h -> h.contains("prerrequisitos"));
+    }
+
+    @Test
+    void una_prerrequisito_con_un_solo_extremo_se_completa_y_la_recursiva_sobra() throws Exception {
+        ObjectNode plan = plan("""
+                Asignatura: nombre:string
+                Prerrequisito: condicion:string
+                ---
+                Asignatura 1 -- 0..* Asignatura roles=requisitos/requisitoDe
+                Prerrequisito 0..* -- 1 Asignatura
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, "Asignaturas con prerrequisitos");
+        List<String> rels = relaciones(r.comandos().getFirst().parametros());
+        assertThat(rels).noneMatch(x -> x.startsWith("Asignatura") && x.endsWith("Asignatura"));
+        assertThat(rels.stream().filter(x -> x.contains("Prerrequisito"))).hasSize(2); // actual y requerida
+        assertThat(RevisorCoberturaPlan.revisar(r, "Asignaturas con prerrequisitos")).noneMatch(h -> h.contains("prerrequisitos"));
+    }
+
+    @Test
+    void sin_clase_prerrequisito_la_recursiva_se_conserva() throws Exception {
+        ObjectNode plan = plan("""
+                Asignatura: nombre:string
+                Carrera: nombre:string
+                ---
+                Asignatura 1 -- 0..* Asignatura roles=requisitos/requisitoDe
+                Carrera 1 -- 0..* Asignatura
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, "Asignaturas con prerrequisitos").comandos().getFirst().parametros();
+        assertThat(relaciones(p)).anyMatch(x -> x.startsWith("Asignatura") && x.endsWith("Asignatura"));
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {

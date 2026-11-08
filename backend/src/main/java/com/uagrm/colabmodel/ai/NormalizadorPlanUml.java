@@ -996,8 +996,9 @@ final class NormalizadorPlanUml {
                 if (otra == r || !otra.path("kind").asText().equals("ASSOCIATION")) continue;
                 String s = otra.path("source").asText(), t = otra.path("target").asText();
                 String actor = s.equals(vecino) ? t : t.equals(vecino) ? s : "";
-                if (Set.of("cliente", "usuario", "persona", "propietario").contains(normal(actor))
-                        && otra.path("sourceRole").asText().isBlank() && otra.path("targetRole").asText().isBlank())
+                // Banco 2026-11-08: el modelo puso roles (titulares/cuentas) a Cliente-Cuenta y
+                // con la exigencia de roles vacios Titular quedaba sin Cliente.
+                if (Set.of("cliente", "usuario", "persona", "propietario").contains(normal(actor)))
                     candidatas.add((ObjectNode) otra);
             }
             // Solo transforma una asociacion ya explicita, sin inventar un
@@ -1007,6 +1008,9 @@ final class NormalizadorPlanUml {
                 if (directa.path("source").asText().equals(vecino)) directa.put("source", nombre);
                 else directa.put("target", nombre);
                 directa.put("name", "tieneTitularidades");
+                // Los roles describian Cliente-Cuenta y ya no corresponden a Cliente-Titular.
+                directa.remove("sourceRole");
+                directa.remove("targetRole");
                 reparadas++;
             }
         }
