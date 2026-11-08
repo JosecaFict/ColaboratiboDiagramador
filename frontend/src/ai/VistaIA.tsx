@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid'
 import type { EstadoModelo } from '../canvas/applyOperation'
 import type { CambioDelLote } from '../importacion/propuesta'
 import type { EntradaHistorialIA, EstadoIA, MensajeIA, ModoIA, PropuestaIA, RecomendacionesIA } from './tipos'
+import { arreglosDirectos } from './arreglosDirectos'
 import { elegidas, etiquetaOrigen, ordenarRecomendaciones, pendientesComoRecomendaciones, seleccionInicial, textoDeRecomendaciones } from './recomendaciones'
 
 interface Props {
@@ -66,6 +67,7 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
   const [seleccionRec, setSeleccionRec] = useState<Set<number>>(new Set())
   const [panel, setPanel] = useState<'cambios' | 'recomendaciones'>('cambios')
   const [accionesEditadas, setAccionesEditadas] = useState<Record<number, string>>({})
+  const [arreglosElegidos, setArreglosElegidos] = useState<Record<number, number>>({})
 
   useEffect(() => {
     let vivo = true
@@ -111,6 +113,8 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
   const ultimasRecomendaciones = [...mensajes].reverse().find((m) => m.recomendaciones)?.recomendaciones
   const recomendacionesOrdenadas = useMemo(
     () => ordenarRecomendaciones(ultimasRecomendaciones?.recomendaciones ?? []), [ultimasRecomendaciones])
+  const opcionesPorRecomendacion = useMemo(() => new Map(recomendacionesOrdenadas.map((r) =>
+    [r.id, arreglosDirectos(r.titulo, modelo)])), [recomendacionesOrdenadas, modelo])
 
   const pedirIA = async (url: string, cuerpo: unknown) => {
     const r = await fetch(`/api/v1/diagrams/${diagramId}/ai/${url}`, {
@@ -154,6 +158,8 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
         }])
         setSeleccionRec(seleccionInicial(recomendaciones.recomendaciones))
         setAccionesEditadas({})
+        setArreglosElegidos(unicosArreglos(recomendaciones.recomendaciones.map((r) => r.id),
+          recomendaciones.recomendaciones.map((r) => r.titulo)))
         setPanel('recomendaciones')
       } else {
         recibirPropuesta(await pedirIA('propuestas',
@@ -172,13 +178,28 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
     const lista = elegidas(recomendacionesOrdenadas, seleccionRec)
       .map((r) => ({ ...r, accion: accionesEditadas[r.id]?.trim() || r.accion }))
     if (!lista.length || consultando) return
+    // Con un arreglo directo elegido, el comando se arma aqui contra el diagrama real:
+    // el modelo solo recibe lo que no tiene una opcion concreta.
+    const directos = lista.flatMap((r) => {
+      const i = arreglosElegidos[r.id]
+      return i === undefined ? [] : (opcionesPorRecomendacion.get(r.id)?.[i]?.cambios ?? [])
+    })
+    const paraIA = lista.filter((r) => arreglosElegidos[r.id] === undefined)
     setMensajes((m) => [...m, { id: uuid(), autor: 'usuario', modo: 'RECOMENDAR',
       texto: `Aplicar ${lista.length} ${lista.length === 1 ? 'recomendación' : 'recomendaciones'}: ${lista.map((r) => r.titulo).join('; ')}` }])
+    if (!paraIA.length) {
+      recibirPropuesta({ diagramId, origin: 'TEXT', aceptados: directos, rechazados: [], descartadosPorTope: [],
+        advertencias: [], propuestosPorElModelo: 0, modelo: 'arreglo directo',
+        notaDelModelo: `Preparé ${directos.length} cambio${directos.length === 1 ? '' : 's'} con los arreglos que elegiste, sin usar el modelo. Revisalos y aplicalos.` },
+      'MODIFICAR')
+      return
+    }
     setConsultando(true)
     setError(null)
     try {
-      recibirPropuesta(await pedirIA('recomendaciones/propuesta',
-        { recomendaciones: lista, origin: 'TEXT', modelo: modeloIA || undefined }) as PropuestaIA, 'MODIFICAR')
+      const propuesta = await pedirIA('recomendaciones/propuesta',
+        { recomendaciones: paraIA, origin: 'TEXT', modelo: modeloIA || undefined }) as PropuestaIA
+      recibirPropuesta(directos.length ? { ...propuesta, aceptados: [...directos, ...propuesta.aceptados] } : propuesta, 'MODIFICAR')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudieron convertir las recomendaciones en cambios.')
     } finally {
@@ -194,8 +215,13 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
       recomendaciones: pendientes, texto: pendientes.resumen }])
     setSeleccionRec(new Set(pendientes.recomendaciones.map((r) => r.id)))
     setAccionesEditadas({})
+    setArreglosElegidos(unicosArreglos(pendientes.recomendaciones.map((r) => r.id), pendientes.recomendaciones.map((r) => r.titulo)))
     setPanel('recomendaciones')
   }
+
+  /** Solo se preelige un arreglo cuando es la unica respuesta posible. */
+  const unicosArreglos = (ids: number[], titulos: string[]) => Object.fromEntries(ids.flatMap((id, i) =>
+    arreglosDirectos(titulos[i], modelo).length === 1 ? [[id, 0]] : [])) as Record<number, number>
 
   const aplicar = () => {
     if (!ultimaPropuesta) return
@@ -314,7 +340,17 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
                 </span>
               </label>
               {r.problema && r.problema !== r.titulo && <p>{r.problema}</p>}
-              {r.accion && <label className="ia-accion"><b>Acción</b>
+              {!!opcionesPorRecomendacion.get(r.id)?.length && <label className="ia-accion"><b>Arreglo directo (sin IA)</b>
+                <select value={arreglosElegidos[r.id] ?? ''} disabled={!marcada} onChange={(e) => setArreglosElegidos((a) => {
+                  const nuevo = { ...a }
+                  if (e.target.value === '') delete nuevo[r.id]; else nuevo[r.id] = Number(e.target.value)
+                  return nuevo
+                })}>
+                  <option value="">— elegí una opción (o dejá que la IA lo intente, menos confiable) —</option>
+                  {opcionesPorRecomendacion.get(r.id)!.map((o, i) => <option key={o.etiqueta} value={i}>{o.etiqueta}</option>)}
+                </select>
+              </label>}
+              {r.accion && arreglosElegidos[r.id] === undefined && <label className="ia-accion"><b>Acción para la IA</b>
                 <textarea rows={2} value={accionesEditadas[r.id] ?? r.accion} disabled={!marcada}
                   onChange={(e) => setAccionesEditadas((a) => ({ ...a, [r.id]: e.target.value }))}/>
               </label>}
