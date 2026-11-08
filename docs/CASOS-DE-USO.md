@@ -1,18 +1,23 @@
-# Casos de uso del hito LCA
+# Casos de uso de ColabModel
 
-**ColabModel** · v1.3 · 21/09/2026 · Fase RUP: **Elaboración** (CU-01, CU-04, CU-05) y **Construcción** (CU-06)
+**ColabModel** · v2.0 · 08/11/2026 · 2do parcial · Fase RUP: **Construcción**
 
-El plan RUP (`SAD.md`) define el criterio de salida de Elaboración así:
-**CU-01, CU-04 y CU-05 funcionando de punta a punta.** Hasta esta versión esos
-tres identificadores existían solo como criterio; no estaban escritos en
-ningún lado. Este documento los fija.
+**24 casos de uso**: 23 funcionando en `main` (commit `db10191`, «ColabModel · 2do
+parcial») y 1 proyectado, que ya existe en la rama `feature/asistente-ia` pero todavía
+no esta unido a `main`. El [catálogo](#catálogo-de-casos-de-uso) los lista todos.
 
-> **Sobre la numeración.** El equipo fijó estos tres casos de uso el
-> 13/09/2026, eligiendo los que ejercitan la arquitectura completa. Los números
-> 02 y 03 no se definen acá porque no forman parte del hito.
+Historia de este documento: en la v1.3 (21/09/2026, hito LCA) solo existian CU-01,
+CU-04 y CU-05, el criterio de salida de Elaboración que fija el plan RUP (`SAD.md`), y
+CU-06 de Construcción. Esas cuatro especificaciones completas se conservan más abajo
+tal cual. Los demás casos se agregan con una especificación resumida.
 
-Cada caso lleva, además de la especificación RUP, dos secciones que el hito
-exige y que una especificación común no trae:
+> **Sobre la numeración.** CU-01, CU-04, CU-05 y CU-06 conservan su número, porque
+> los citan los ADR, el plan de pruebas y el README. Los números 02 y 03, que el hito
+> LCA dejó reservados, se usan ahora para dos casos de gestión, y los nuevos siguen
+> desde el 07.
+
+Cada especificación completa lleva, además de la especificación RUP, dos secciones que
+el hito exige y que una especificación común no trae:
 
 - **Evidencia**: qué lo prueba de forma automática y cómo mostrarlo en vivo.
   Sin esto, "funciona de punta a punta" es una afirmación, no un resultado.
@@ -29,6 +34,9 @@ exige y que una especificación común no trae:
 | **Modelador** | Miembro con rol EDITOR | Leer y escribir el modelo; crear y renombrar diagramas; abandonar el proyecto. En CU-01, CU-04 y CU-05 "Modelador" es cualquiera que pueda escribir, Propietario incluido |
 | **Observador** | Miembro con rol VIEWER | Leer todo: proyecto, diagramas, miembros, Vista Lógica, Física, ambigüedades y código generado. No puede escribir; puede abandonar el proyecto |
 | **No miembro** | Usuario autenticado que no está en el proyecto | Nada: recibe 403 en todo, y tampoco puede suscribirse a los tópicos de sus diagramas |
+| **Visitante** | Persona sin cuenta | Crear su cuenta e iniciar sesión (CU-02) |
+| **Asistente de IA** | Actor secundario: el modelo configurado en `colabmodel.ai.proveedor`. Por defecto Ollama local, que corre el compañero de IA | Responder, revisar y proponer cambios (CU-19, CU-20). Nunca escribe el modelo por su cuenta: una persona revisa y aplica |
+| **Usuario del backend generado** | Quien usa la app móvil (modo Asistente) contra el backend que salió de CU-05 o CU-13. No necesita cuenta en ColabModel | Crear y listar registros por texto o por voz (CU-23) |
 | **Sistema de destino** | Maven + JDK 21 en la máquina del usuario | Compilar el proyecto generado |
 
 Los roles son **por proyecto**: no hay rol por diagrama ni administrador global (ADR-026).
@@ -37,6 +45,331 @@ La autenticación es un JWT HS256 que emiten `POST /api/v1/auth/login` y
 `/auth/register`, y la interfaz tiene su pantalla de **Iniciar sesión** y **Crear
 cuenta**. Ya no hay usuario de prueba: `POST /api/v1/dev/bootstrap` solo existe con
 el perfil `dev` y sirve para la prueba de roles por `curl` del README (sección 5).
+
+---
+
+## Catálogo de casos de uso
+
+✅ funciona en `main` · 🔜 proyectado: existe en una rama que todavía no está unida a `main`.
+
+| ID | Caso de uso | Actor principal | Estado | Especificación |
+|---|---|---|---|---|
+| **Gestión** | | | | |
+| CU-02 | Registrarse, iniciar sesión y gestionar el perfil | Visitante · cualquier usuario | ✅ | [resumida](#cu-02--registrarse-iniciar-sesión-y-gestionar-el-perfil) |
+| CU-06 | Gestionar proyectos, miembros y roles | Propietario | ✅ | [completa](#cu-06--gestionar-proyectos-miembros-y-roles) |
+| CU-03 | Gestionar diagramas | Modelador · Propietario | ✅ | [resumida](#cu-03--gestionar-diagramas) |
+| **Modelado** | | | | |
+| CU-01 | Modelar el diagrama de clases en colaboración | Modelador | ✅ | [completa](#cu-01--modelar-el-diagrama-de-clases-en-colaboración) |
+| CU-07 | Deshacer y rehacer | Modelador | ✅ | [resumida](#cu-07--deshacer-y-rehacer) |
+| CU-08 | Importar un modelo desde SQL o XMI | Modelador | ✅ | [resumida](#cu-08--importar-un-modelo-desde-sql-o-xmi) |
+| CU-09 | Leer un diagrama desde una imagen | Modelador | ✅ | [resumida](#cu-09--leer-un-diagrama-desde-una-imagen) |
+| CU-10 | Exportar a XMI | Cualquier miembro | ✅ | [resumida](#cu-10--exportar-a-xmi) |
+| **Del modelo a la base** | | | | |
+| CU-04 | Derivar el modelo lógico y resolver ambigüedades | Modelador | ✅ | [completa](#cu-04--derivar-el-modelo-lógico) |
+| CU-11 | Verificar y confirmar el esquema físico | Modelador | ✅ | [resumida](#cu-11--verificar-y-confirmar-el-esquema-físico) |
+| CU-12 | Ver la Vista Documental (NoSQL) | Cualquier miembro | ✅ | [resumida](#cu-12--ver-la-vista-documental) |
+| CU-05 | Generar el backend Spring Boot con PostgreSQL | Cualquier miembro | ✅ ampliado por ADR-034 | [completa](#cu-05--generar-el-backend-spring-boot) |
+| CU-13 | Generar el backend Spring Boot con MongoDB | Cualquier miembro | ✅ | [resumida](#cu-13--generar-el-backend-con-mongodb) |
+| **Versiones** | | | | |
+| CU-14 | Registrar una versión del diagrama | Modelador | ✅ | [resumida](#cu-14--registrar-una-versión) |
+| CU-15 | Comparar versiones | Cualquier miembro | ✅ | [resumida](#cu-15--comparar-versiones) |
+| CU-16 | Restaurar una versión | Modelador | ✅ | [resumida](#cu-16--restaurar-una-versión) |
+| CU-17 | Crear una rama y fusionarla | Modelador | ✅ | [resumida](#cu-17--crear-una-rama-y-fusionarla) |
+| **Inteligencia artificial** | | | | |
+| CU-18 | Configurar la IA del proyecto | Propietario | ✅ | [resumida](#cu-18--configurar-la-ia-del-proyecto) |
+| CU-19 | Consultar y revisar el modelo con la IA en el chat del equipo | Cualquier miembro | ✅ | [resumida](#cu-19--consultar-y-revisar-el-modelo-con-la-ia) |
+| CU-20 | Diseñar o modificar con la IA y aplicar la propuesta | Modelador | ✅ | [resumida](#cu-20--diseñar-o-modificar-con-la-ia-y-aplicar-la-propuesta) |
+| CU-21 | Dictar un pedido a la IA por voz | Cualquier miembro | ✅ | [resumida](#cu-21--dictar-un-pedido-a-la-ia-por-voz) |
+| CU-24 | Revisar si el modelo está listo para generar | Modelador | 🔜 `feature/asistente-ia` | [resumida](#cu-24--revisar-si-el-modelo-está-listo-para-generar) |
+| **Aplicación móvil** | | | | |
+| CU-22 | Ver el diagrama en vivo desde el teléfono | Cualquier miembro | ✅ | [resumida](#cu-22--ver-el-diagrama-en-vivo-desde-el-teléfono) |
+| CU-23 | Operar el backend generado desde el teléfono, por texto o por voz | Usuario del backend generado | ✅ | [resumida](#cu-23--operar-el-backend-generado-desde-el-teléfono) |
+
+**Totales:** 24 casos de uso. 23 funcionan en `main`; CU-24 está en `feature/asistente-ia`.
+
+Toda escritura del modelo entra por el mismo bus de comandos (ADR-002): la IA, la
+importación, la visión, restaurar y fusionar no tienen un camino propio. Por eso cada
+caso que cambia el diagrama se ve en vivo en todas las pantallas, queda con su autor
+en el log y respeta los bloqueos.
+
+---
+
+## Especificaciones resumidas
+
+Cada una dice el actor, lo que hace falta antes, el flujo básico, el resultado, los
+casos alternativos que importan y con qué se prueba. Las rutas de la API van sin el
+prefijo `/api/v1`.
+
+### CU-02 · Registrarse, iniciar sesión y gestionar el perfil
+
+- **Actor:** Visitante (registro) y cualquier usuario (sesión y perfil).
+- **Flujo básico:** 1. El visitante crea su cuenta (`POST /auth/register`). 2. Inicia
+  sesión con email y clave (`POST /auth/login`) y recibe un JWT. 3. Desde su perfil
+  (`GET /me`) cambia sus datos (`PATCH /me`) o su clave (`POST /me/password`).
+- **Resultado:** el usuario entra a sus proyectos; cada pedido siguiente lleva el JWT.
+- **Alternativos:** un email ya registrado responde 409 «Ese email ya está registrado»;
+  las credenciales equivocadas se rechazan; sin JWT válido no se accede a la API ni a
+  los tópicos WebSocket.
+- **Evidencia:** `CuentaDeUsuarioTest`, `RespuestasDeSeguridadTest`,
+  `SuscripcionAutorizadaTest`; en el frontend `auth/*.test.ts`. **ADR:** 026.
+
+### CU-03 · Gestionar diagramas
+
+- **Actor:** Modelador (crear y renombrar) y Propietario (además, eliminar).
+- **Precondición:** ser miembro del proyecto con permiso de escritura.
+- **Flujo básico:** 1. Crea un diagrama en el proyecto (`POST /projects/{id}/diagrams`).
+  2. Lo renombra (`PATCH /diagrams/{id}`). 3. El propietario lo elimina
+  (`DELETE /diagrams/{id}`).
+- **Resultado:** el diagrama queda disponible (o deja de estarlo) para todos los
+  miembros del proyecto.
+- **Alternativos:** un Observador o un no miembro recibe 403.
+- **Evidencia:** `GestionDeProyectosTest`, `ApiDeProyectosTest`, `RespuestasHttpTest`.
+  **ADR:** 026.
+
+### CU-07 · Deshacer y rehacer
+
+- **Actor:** Modelador.
+- **Flujo básico:** 1. Pulsa **Deshacer** (o Ctrl+Z). 2. El cliente arma el comando
+  inverso del último cambio propio, con su precondición. 3. El servidor lo aplica por
+  el bus si el elemento sigue como lo dejó. 4. **Rehacer** repite el cambio deshecho.
+- **Resultado:** el cambio se revierte en todas las pantallas, como un comando más.
+- **Alternativos:** si otro usuario cambió ese elemento después, el servidor rechaza
+  el deshacer en vez de pisar su trabajo. El historial es local a cada sesión: nadie
+  deshace lo de otro.
+- **Evidencia:** `DeshacerCreacionesTest`, `DeshacerGeometriaTest`,
+  `DeshacerSemanticaTest`, `DeshacerConcurrenteTest`; `collab/historialLocal.test.ts`.
+  **ADR:** 027, 029, 030.
+
+### CU-08 · Importar un modelo desde SQL o XMI
+
+- **Actor:** Modelador.
+- **Flujo básico:** 1. Sube un script SQL (`CREATE TABLE`, `ALTER TABLE`) o un XMI
+  (incluido Enterprise Architect). 2. El sistema muestra la propuesta: clases,
+  atributos y relaciones, cada una con su casilla, y lo que no pudo leer. 3. El usuario
+  elige y confirma. 4. Lo elegido entra como **un solo BATCH** (hasta 500 cambios).
+- **Resultado:** el modelo importado aparece en todas las pantallas a la vez.
+- **Alternativos:** un dialecto XMI desconocido degrada a lo que se pudo leer, sin
+  romper; si el lote falla, no se aplica nada (todo o nada).
+- **Evidencia:** `LectorSqlTest`, `LectorXmiTest`, `LectorXmiToleranciaTest`,
+  `EnterpriseArchitectXmiTest`, `ImportacionTest`; `importacion/propuesta.test.ts`.
+  **ADR:** 016, 018, 019, 031.
+
+### CU-09 · Leer un diagrama desde una imagen
+
+- **Actor:** Modelador. **Actor secundario:** el lector de textos configurado
+  (`vision.nivel2.proveedor`).
+- **Flujo básico:** 1. Sube la foto o captura de un diagrama de clases. 2. El nivel 1
+  (geometría, determinista y sin red) detecta cajas, líneas y tipos de relación. 3. El
+  nivel 2, si está activo, lee los textos. 4. El usuario revisa la propuesta y confirma.
+  5. Entra como un BATCH con origen `IMAGE`.
+- **Resultado:** el diagrama de la foto queda en el lienzo, editable.
+- **Alternativos:** sin el nivel 2, las cajas salen sin textos y el usuario los
+  completa; un archivo que no es una imagen o pesa más de 8 MB se rechaza antes de
+  procesarlo.
+- **Evidencia:** `DetectorGeometricoTest`, `ClasificadorDeSimboloTest`,
+  `EnderezadorTest`, `OcrDePlantillasTest`, `EnriquecedorPor*Test`;
+  `vision/traductor.test.ts`. **ADR:** 023, 033.
+
+### CU-10 · Exportar a XMI
+
+- **Actor:** cualquier miembro (es una lectura).
+- **Flujo básico:** 1. Elige **Exportar XMI**. 2. El sistema arma el archivo
+  (`GET /diagrams/{id}/xmi`) en notación UML 2.5.1, con la disposición del diagrama.
+- **Resultado:** un archivo que Enterprise Architect abre con el diagrama dibujado.
+- **Evidencia:** `EscritorXmiTest`, `EnterpriseArchitectXmiTest`;
+  `interop/exportacionXmi.test.ts`. **ADR:** 022, 024, 031.
+
+### CU-11 · Verificar y confirmar el esquema físico
+
+- **Actor:** Modelador.
+- **Precondición:** el modelo deriva a tablas (CU-04).
+- **Flujo básico:** 1. Abre la **Vista Física**: el DDL de PostgreSQL, con su diagrama
+  de tablas. 2. Edita una tabla; el cambio se traduce al modelo conceptual. 3. Pulsa
+  **Verificar en PostgreSQL** (`POST /diagrams/{id}/physical/verificacion`): el script
+  corre en una transacción que siempre se deshace. 4. Pulsa **Confirmar esquema**.
+- **Resultado:** queda registrada la huella del DDL confirmado; CU-05 la usa para
+  entregar exactamente esa base.
+- **Alternativos:** si alguien cambia el modelo después de confirmar, la confirmación
+  deja de estar vigente y la descarga con esa huella responde 409.
+- **Evidencia:** `VerificadorDeEsquemaTest`, `ConfirmadorDeEsquemaTest`,
+  `EsquemaFisicoTest`; `physical/*.test.ts`. **ADR:** 032.
+
+### CU-12 · Ver la Vista Documental
+
+- **Actor:** cualquier miembro (los tres roles la leen).
+- **Flujo básico:** 1. Abre la pestaña **Documental** (`GET /diagrams/{id}/documental`).
+  2. Ve las colecciones de MongoDB: campos, lo incrustado, las referencias y el
+  discriminador `_tipo` de las jerarquías.
+- **Resultado:** el mismo modelo, leído como base NoSQL. Sale del mismo análisis que el
+  zip de CU-13: lo que se ve es lo que se entrega.
+- **Reglas:** composición = la parte va incrustada en el todo; asociación o agregación
+  = referencia por id en el lado N; herencia = una colección con `_tipo`; N:M = arreglo
+  de ids en un extremo; clase asociativa = colección propia con sus dos referencias.
+- **Evidencia:** `GeneradorMongoTest`, `CodegenHttpTest`; `documental/api.test.ts`.
+  **ADR:** 035.
+
+### CU-13 · Generar el backend con MongoDB
+
+- **Actor:** cualquier miembro (es una lectura).
+- **Flujo básico:** 1. En **Generar** elige la base **MongoDB**. 2. El panel resume lo
+  que sale (`GET /diagrams/{id}/codegen/resumen?store=mongo`). 3. Descarga el zip
+  (`GET /diagrams/{id}/codegen?store=mongo`).
+- **Resultado:** un Spring Boot sobre Spring Data MongoDB con **las mismas rutas, DTO y
+  manifiesto** que la variante PostgreSQL, listo para producción como la de CU-05:
+  PATCH, paginación con `X-Total-Count`, 201 + `Location`, errores con un solo formato,
+  versión y auditoría, perfiles `dev` y `prod`, Actuator, Docker y pruebas MockMvc.
+- **Alternativos:** sin claves foráneas, la integridad la cuida el Service: apuntar a un
+  id que no existe o borrar algo referenciado responde 409. Un `store` desconocido
+  responde 400.
+- **Evidencia:** `GeneradorMongoTest`, `GeneradorProduccionTest`, `SeguridadMongoTest`,
+  `ProduccionBordesTest`, `CodegenHttpTest`; `mvn package` de los proyectos generados
+  (`EscribirGeneradosTest`). **ADR:** 034, 035.
+
+### CU-14 · Registrar una versión
+
+- **Actor:** Modelador (OWNER o EDITOR; los tres roles leen las versiones).
+- **Flujo básico:** 1. Pulsa **Guardar versión**, con nombre y mensaje. 2. El sistema
+  guarda el `seq` actual del log, el autor y una foto del modelo
+  (`POST /diagrams/{id}/versions`).
+- **Resultado:** la versión aparece en el historial (`GET /diagrams/{id}/versions`).
+- **Alternativos:** un nombre que ya existe en el diagrama responde 409.
+- **Evidencia:** `VersionesTest`; `versiones/api.test.ts`, `versiones/vistas.test.tsx`.
+  **ADR:** 037.
+
+### CU-15 · Comparar versiones
+
+- **Actor:** cualquier miembro.
+- **Flujo básico:** 1. Elige dos versiones, o una versión y el estado actual. 2. El
+  sistema calcula la diferencia por id de elemento
+  (`GET /diagrams/{id}/diff?from=...&to=...`). 3. Muestra lo agregado, lo quitado y lo
+  cambiado, campo por campo.
+- **Alternativos:** un `from` que no es una versión ni `actual` responde 400.
+- **Evidencia:** `FusionYDiferenciasTest`, `IdentidadLogicaTest`;
+  `versiones/diffMerge.test.ts`. **ADR:** 037.
+
+### CU-16 · Restaurar una versión
+
+- **Actor:** Modelador.
+- **Flujo básico:** 1. Elige una versión del historial y pulsa **Restaurar**
+  (`POST /diagrams/{id}/versions/{vid}/restore`). 2. El sistema calcula lo que cambió
+  desde entonces y lo revierte como **un BATCH** por el bus.
+- **Resultado:** el diagrama vuelve a esa versión en todas las pantallas, sin perder el
+  historial: restaurar es un cambio más, con autor, en el log de operaciones.
+- **Alternativos:** un elemento bloqueado por otro usuario impide el lote; un rol sin
+  escritura recibe 403.
+- **Evidencia:** `VersionesTest`; `versiones/e2eVersiones.test.ts`. **ADR:** 037.
+
+### CU-17 · Crear una rama y fusionarla
+
+- **Actor:** Modelador.
+- **Flujo básico:** 1. Crea una rama desde una versión (`POST /diagrams/{id}/branches`):
+  un diagrama nuevo del mismo proyecto que **conserva los ids** de los elementos.
+  2. Trabaja en la rama. 3. Pide la vista previa de la fusión
+  (`POST /diagrams/{id}/merge/preview`): base común, lo que cambió cada lado y los
+  conflictos. 4. Elige, conflicto por conflicto, qué lado gana. 5. Fusiona
+  (`POST /diagrams/{id}/merge`).
+- **Resultado:** la fusión a tres bandas entra en el diagrama destino como un BATCH.
+- **Alternativos:** con conflictos sin resolver la fusión no procede; un nombre de rama
+  repetido responde 409.
+- **Evidencia:** `FusionYDiferenciasTest`, `VersionesTest`;
+  `versiones/diffMerge.test.ts`, `versiones/backendReal.test.ts`. **ADR:** 037.
+
+### CU-18 · Configurar la IA del proyecto
+
+- **Actor:** Propietario (los demás miembros la ven en solo lectura).
+- **Flujo básico:** 1. En la pestaña **IA** abre **Configuración de la IA**. 2. Elige el
+  estilo (**Mentor**, **Senior** o **Revisor**), el nivel de detalle (breve, normal o
+  detallado) y escribe instrucciones para el equipo. 3. Guarda
+  (`PUT /projects/{id}/ia/configuracion`).
+- **Resultado:** todas las respuestas siguientes de la IA en ese proyecto siguen esa
+  configuración.
+- **Alternativos:** un Modelador u Observador que intenta guardar recibe 403.
+- **Evidencia:** `ConfiguracionIAControllerTest`, `ConfiguracionIAPostgresTest`;
+  `ai/configuracion.test.tsx`. **ADR:** 017.
+
+### CU-19 · Consultar y revisar el modelo con la IA
+
+- **Actor:** cualquier miembro, Observador incluido. **Actor secundario:** Asistente de IA.
+- **Flujo básico:** 1. En la pestaña **IA** elige **Preguntar** o **Revisar** y escribe.
+  2. El servidor arma el pedido con el diagrama actual, la configuración (CU-18), quién
+  pregunta y la conversación reciente del equipo. 3. La IA responde.
+- **Resultado:** el turno queda en el historial del diagrama y aparece **sin recargar**
+  en las pantallas de todos los miembros (`/topic/diagram/{id}/ai`). La IA recuerda lo
+  que preguntó cada uno y responde según quién le habla.
+- **Alternativos:** estos dos modos no reciben herramientas, así que no pueden cambiar el
+  modelo; si el modelo local no responde, la vista muestra el error.
+- **Evidencia:** `MemoriaDeConversacionTest`, `HistorialIACompartidoTest`,
+  `ContextoDeEquipoEnElPedidoTest`, `PresupuestoDeContextoTest`; `ai/chat.test.ts`,
+  `ai/historialCompartido.test.ts`. **ADR:** 017.
+
+### CU-20 · Diseñar o modificar con la IA y aplicar la propuesta
+
+- **Actor:** Modelador. **Actor secundario:** Asistente de IA.
+- **Flujo básico:** 1. Elige **Diseñar** (un modelo completo desde un objetivo) o
+  **Modificar** (cambios puntuales) y escribe el pedido. 2. El servidor valida la
+  respuesta: solo comandos del catálogo cerrado, referencias que existen y como máximo
+  32 cambios; marca advertencias de diseño. 3. El usuario ve la propuesta con casillas,
+  edita o descarta lo que quiera y pulsa **Aplicar seleccionados**.
+- **Resultado:** lo elegido entra como **un solo BATCH** con origen `TEXT` o `VOICE`, y la
+  propuesta queda marcada como aplicada en todas las pantallas.
+- **Alternativos:** un Observador no puede pedir cambios (403); lo que no pasa la
+  validación se lista como rechazado con su motivo; lo que excede el tope se avisa.
+- **Evidencia:** `ServicioDeIATest`, `ServicioDeIABatchAplicacionTest`,
+  `AuditorDePropuestaIATest`, `NormalizadorPlanUmlTest`, `ExpansorPlanUmlTest`,
+  `EsquemaDeComandosTest`. **ADR:** 014, 016, 017.
+
+### CU-21 · Dictar un pedido a la IA por voz
+
+- **Actor:** cualquier miembro.
+- **Precondición:** un navegador con reconocimiento de voz (Chrome o Edge).
+- **Flujo básico:** 1. Pulsa **Dictar** y habla. 2. El texto aparece en el campo del
+  pedido, en el idioma del navegador. 3. Lo envía como en CU-19 o CU-20.
+- **Resultado:** el pedido viaja con origen `VOICE`.
+- **Alternativos:** sin soporte de voz en el navegador el botón queda deshabilitado, con
+  el aviso «Este navegador no permite dictar: usá Chrome o Edge, o escribí el pedido.»
+- **Evidencia:** `ai/voz.test.tsx`.
+
+### CU-22 · Ver el diagrama en vivo desde el teléfono
+
+- **Actor:** cualquier miembro (alcanza con Observador).
+- **Flujo básico:** 1. En la app elige **Ver diagrama en vivo** e inicia sesión contra la
+  herramienta. 2. Elige el proyecto y el diagrama. 3. La app baja el snapshot y escucha
+  `/topic/diagram/{id}/ops`.
+- **Resultado:** cada cambio que se hace en la web aparece solo en el teléfono.
+- **Alternativos:** al reconectar, la app se pone al día con
+  `/diagrams/{id}/operations?sinceSeq=`. El visor nunca escribe.
+- **Evidencia:** `cliente_herramienta_test`, `controlador_visor_test`,
+  `sincronizador_test`, `aplicar_operacion_test`, `dibujo_clases_test`. **ADR:** 036.
+
+### CU-23 · Operar el backend generado desde el teléfono
+
+- **Actor:** Usuario del backend generado.
+- **Precondición:** un backend generado por CU-05 o CU-13 corriendo en la misma red.
+- **Flujo básico:** 1. En el modo **Asistente** escribe la dirección del backend. 2. La
+  app lee su `app-manifest.json` y aprende el dominio. 3. El usuario escribe o dicta
+  («crear socio con nombre Carla Rojas», «listar socios»). 4. El motor de intenciones
+  arma el pedido y lo manda a la API generada.
+- **Resultado:** el registro se crea o se lista en el backend generado, no en la
+  herramienta.
+- **Alternativos:** un empate (dos entidades, dos fechas) se pregunta; un valor que no
+  encaja se rechaza con motivo antes de enviarlo. Recorte declarado: solo crear y listar.
+- **Evidencia:** `intent_test`, `lexico_test`, `asistente_test`, `asistente_real_test`,
+  `dictado_continuo_test`, `verificar_contrato_crud_test`; `ManifestDeAppTest` en el
+  backend. **ADR:** 011, 021.
+
+### CU-24 · Revisar si el modelo está listo para generar
+
+> 🔜 **Proyectado.** Existe en la rama `feature/asistente-ia` (37 commits, del 07/11/2026),
+> que todavía no está unida a `main`. Se documenta para planificar su integración.
+
+- **Actor:** Modelador. **Actor secundario:** Asistente de IA.
+- **Flujo básico:** 1. En el chat pregunta «¿Está listo para generar?». 2. El sistema
+  revisa el modelo y lista lo que bloquea la generación, cada punto con uno o más
+  **arreglos directos** para elegir. 3. El usuario elige y aplica. 4. Sin bloqueantes,
+  se abre la revisión del generador (la misma del botón **Generar**).
+- **Alternativos:** lo que no tiene arreglo directo se marca para revisar a mano o se
+  le pide a la IA con la acción sugerida.
+- **Pendiente para darlo por cumplido:** unir la rama a `main` con sus pruebas en verde.
 
 ---
 
@@ -462,8 +795,8 @@ dos filas.
 ## CU-06 · Gestionar proyectos, miembros y roles
 
 > **Fase RUP: Construcción.** No forma parte del hito LCA: cierra el "no hay login" que
-> CU-01 declaraba pendiente. Se numera 06 y no 02 porque el documento reserva el 02 y el
-> 03 para casos que no son del hito.
+> CU-01 declaraba pendiente. Se numera 06 y no 02 porque el documento reservaba el 02 y el
+> 03 para casos que no eran del hito; en la v2.0 esos números pasaron a CU-02 y CU-03.
 
 **Resumen.** Una persona se registra, crea sus propios proyectos, agrega a otros usuarios
 ya registrados con un rol, y los cambia, quita o les transfiere la propiedad. El rol se
