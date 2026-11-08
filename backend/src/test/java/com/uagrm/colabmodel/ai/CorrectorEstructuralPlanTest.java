@@ -260,6 +260,37 @@ class CorrectorEstructuralPlanTest {
         assertThat(relaciones(p)).contains("Reserva 1 -- 0..1 Cancelacion");
     }
 
+    // --- cuarta ronda (2026-11-08) ---
+
+    @Test
+    void la_auditoria_descarta_restos_del_json_y_conserva_los_puntos_con_negrita() throws Exception {
+        ObjectNode plan = plan("""
+                Reserva: fecha:date
+                Pago: monto:decimal
+                ---
+                Reserva 1 -- 0..* Pago
+                """, "]}**Nota:** El campo `classes_count` en el JSON anterior era un error de formato. {",
+                "**Trazabilidad:** cada pago identifica su reserva.");
+        JsonNode p = normalizar(plan, TURISMO).comandos().getFirst().parametros();
+        assertThat(p.path("audit").toString()).doesNotContain("classes_count", "JSON", "**")
+                .contains("Trazabilidad: cada pago identifica su reserva.");
+    }
+
+    @Test
+    void una_subclase_no_repite_los_atributos_que_hereda() throws Exception {
+        ObjectNode plan = plan("""
+                Producto: nombre:string, precioActual:decimal
+                Componente: nombre:string, especificaciones:text
+                Venta: fecha:date
+                ---
+                Componente 1 -- 0..* Producto GENERALIZATION
+                Venta 1 -- 0..* Producto
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, VENTAS).comandos().getFirst().parametros();
+        assertThat(atributos(p, "Componente")).doesNotContain("nombre").contains("especificaciones");
+        assertThat(atributos(p, "Producto")).contains("nombre");
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {

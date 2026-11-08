@@ -30,7 +30,9 @@ final class CorrectorEstructuralPlan {
     static int corregir(ObjectNode plan, String requisito) {
         if (!(plan.path("classes") instanceof ArrayNode) || !(plan.path("relations") instanceof ArrayNode)) return 0;
         String pedido = normal(requisito);
-        return generalizarSubtiposSueltos(plan, pedido)
+        return limpiarAuditoria(plan)
+                + generalizarSubtiposSueltos(plan, pedido)
+                + retirarAtributosHeredados(plan)
                 + conectarDetallesSinCabecera(plan)
                 + corregirUnoAUnoDeRegistros(plan)
                 + registrarCuposEnSalida(plan, pedido)
@@ -67,6 +69,44 @@ final class CorrectorEstructuralPlan {
             quitarAuditoria(plan, generalizadas);
             auditar(plan, "El backend modelo " + String.join(" y ", generalizadas) + " como subclase(s) de " + baseUsada
                     + " (GENERALIZATION); heredan sus datos comunes y participan en ventas, inventario y garantias.");
+        }
+        return cambios;
+    }
+
+    /**
+     * Turismo 2026-11-08: el modelo dejo en audit "]}**Nota:** El campo `classes_count`
+     * en el JSON anterior...". Restos de formato o comentarios sobre el JSON no son auditoria.
+     */
+    static int limpiarAuditoria(ObjectNode plan) {
+        if (!(plan.path("audit") instanceof ArrayNode audit)) return 0;
+        int cambios = 0;
+        for (int i = audit.size() - 1; i >= 0; i--) {
+            String original = audit.get(i).asText(), punto = original.replace("**", "").trim(), n = normal(punto);
+            boolean basura = punto.isEmpty() || !Character.isLetter(punto.codePointAt(0))
+                    || punto.contains("]}") || punto.contains("{\"")
+                    || n.contains("json") || n.contains("esquema solicitado") || n.contains("classescount");
+            if (basura) { audit.remove(i); cambios++; }
+            else if (!punto.equals(original)) audit.set(i, audit.textNode(punto));
+        }
+        return cambios;
+    }
+
+    /** Componente hereda nombre de Producto: repetirlo en la subclase lo duplica. */
+    static int retirarAtributosHeredados(ObjectNode plan) {
+        int cambios = 0;
+        for (JsonNode r : plan.path("relations")) {
+            if (!"GENERALIZATION".equals(r.path("kind").asText())) continue;
+            String hija = r.path("source").asText(), padre = r.path("target").asText();
+            if (hija.equals(padre) || clase(plan, n -> n.equals(normal(hija))) == null
+                    || clase(plan, n -> n.equals(normal(padre))) == null) continue;
+            ArrayNode propios = (ArrayNode) objeto(plan, hija).path("attributes");
+            for (int i = propios.size() - 1; i >= 0; i--) {
+                JsonNode a = propios.get(i);
+                if (!a.path("pk").asBoolean() && tieneAtributo(plan, padre, a.path("name").asText())) {
+                    propios.remove(i);
+                    cambios++;
+                }
+            }
         }
         return cambios;
     }
