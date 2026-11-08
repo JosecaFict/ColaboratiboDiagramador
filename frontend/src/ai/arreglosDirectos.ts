@@ -15,7 +15,7 @@ export interface ArregloDirecto {
 }
 
 // Registros que se acumulan en el tiempo: del lado de uno de ellos va 0..*.
-const REGISTRO = /^(prestamo|venta|compra|pedido|pago|reserva|movimiento|transferencia|cita|inscripcion|factura|cuota)/i
+const REGISTRO = /^(prestamo|venta|compra|pedido|pago|reserva|movimiento|transferencia|cita|inscripcion|factura|cuota|control|tratamiento|aplicacion|vacunacion|diagnostico|consulta|evaluacion)/i
 
 const normal = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
 // Las palabras de "forma" (Detalle, Asignacion...) no indican de que concepto se trata.

@@ -70,6 +70,15 @@ describe('arreglos directos', () => {
       .cambios[0].payload).toMatchObject({ sourceClassId: 'Prestamo', targetClassId: 'Cliente', sourceMultiplicity: '0..*' })
   })
 
+  it('ganaderia: un control sanitario uno a uno sugiere varios controles por animal', () => {
+    const ganaderia: EstadoModelo = { diagramId: 'd', layout: {},
+      classes: ['Animal', 'ControlSanitario'].map(clase),
+      relationships: [rel('c1', 'ControlSanitario', 'Animal', '1', '1')] }
+    const [primera] = arreglosDirectos('La relacion ControlSanitario [1] - [1] Animal es uno a uno; verifica que no deba conservar multiples instancias historicas.', ganaderia)
+    expect(primera).toMatchObject({ etiqueta: 'Un Animal tiene varios ControlSanitario', sugerido: true })
+    expect(primera.cambios[0].payload).toMatchObject({ relationId: 'c1', sourceMultiplicity: '0..*', targetMultiplicity: '1' })
+  })
+
   it('el itinerario sugiere pertenecer al paquete', () => {
     const [primera] = arreglosDirectos('Itinerario no identifica el paquete o la salida al que pertenece', turismo)
     expect(primera).toMatchObject({ etiqueta: 'Pertenece a Paquete', sugerido: true })
