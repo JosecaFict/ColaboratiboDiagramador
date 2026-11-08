@@ -73,7 +73,7 @@ final class ValidadorPlanFinal {
             String n = entrada.getKey().toLowerCase(Locale.ROOT);
             if (grafo.size() > 1 && entrada.getValue().isEmpty())
                 errores.add("Clase desconectada: " + entrada.getKey());
-            else if ((n.contains("detalle") || n.startsWith("titular") || n.contains("prerrequisito")
+            else if ((n.contains("detalle") || (n.startsWith("titular") && !titularEsPersona(nombresDeAtributos(plan, entrada.getKey()))) || n.contains("prerrequisito")
                     || n.contains("asignacion") || n.contains("membresia") || n.contains("aplicacionproducto")) && conexiones.getOrDefault(entrada.getKey(), 0) < 2)
                 errores.add("La clase asociativa " + entrada.getKey() + " no conecta sus dos extremos o roles.");
             // Tener dos enlaces no basta: DetalleItinerario debe pertenecer a
@@ -121,6 +121,28 @@ final class ValidadorPlanFinal {
                 + " cambios y el limite es " + Lote.TOPE_DISENO_TEXTO
                 + "; compacta el diseno sin eliminar requisitos esenciales.");
         return List.copyOf(errores);
+    }
+
+    /**
+     * TitularCuenta (porcentaje) une Cliente y Cuenta; TitularReserva con nombre y
+     * email es la persona que reserva y le basta una relacion.
+     */
+    static boolean titularEsPersona(List<String> atributos) {
+        boolean persona = false, participacion = false;
+        for (String a : atributos) {
+            String n = a.toLowerCase(Locale.ROOT);
+            if (n.contains("nombre") || n.contains("email") || n.contains("correo") || n.contains("documento")
+                    || n.contains("telefono") || n.contains("dni")) persona = true;
+            if (n.contains("porcentaje") || n.contains("participacion") || n.contains("rol")) participacion = true;
+        }
+        return persona && !participacion;
+    }
+
+    private static List<String> nombresDeAtributos(JsonNode plan, String clase) {
+        List<String> nombres = new ArrayList<>();
+        for (JsonNode c : plan.path("classes")) if (c.path("name").asText().equals(clase))
+            for (JsonNode a : c.path("attributes")) nombres.add(a.path("name").asText());
+        return nombres;
     }
 
     private static boolean esTraslado(String nombre) {

@@ -478,9 +478,11 @@ final class NormalizadorPlanUml {
             for (JsonNode a : c.path("attributes")) {
                 if (a.path("pk").asBoolean()) continue;
                 String campo = a.path("name").asText();
-                String referencia = campo.matches("id[A-Z].*") ? campo.substring(2)
-                        : campo.endsWith("Id") ? campo.substring(0, campo.length() - 2) : "";
                 String tipo = a.path("dataType").asText();
+                // periodoAcademico: uuid tambien es una FK a PeriodoAcademico.
+                String referencia = campo.matches("id[A-Z].*") ? campo.substring(2)
+                        : campo.endsWith("Id") ? campo.substring(0, campo.length() - 2)
+                        : tipo.equals("uuid") ? campo : "";
                 List<String> candidatas = new java.util.ArrayList<>();
                 for (JsonNode destino : plan.path("classes")) {
                     String n = destino.path("name").asText();
@@ -613,14 +615,24 @@ final class NormalizadorPlanUml {
                 r.put(ladoRecurso, r.path(ladoEvento).asText()); r.put(ladoEvento, anterior);
                 rol = normal(r.path(ladoRecurso).asText()); cambios++;
             }
+            // El modelo tambien pone "origen" solo del lado del evento (rol "movimientos" en Lote).
+            if (!rol.contains("origen") && !rol.contains("destino")) {
+                boolean o = rolEvento.contains("origen"), d = rolEvento.contains("destino");
+                if (o ^ d) {
+                    rol = o ? "origen" : "destino";
+                    r.put(ladoRecurso, identificador(recurso + " " + rol, false));
+                    r.put(ladoEvento, o ? "movimientosSalientes" : "movimientosEntrantes");
+                    cambios++;
+                }
+            }
             if (rol.contains("origen") && !rol.contains("destino")) {
                 if (!presentes.add("origen")) duplicadas.add(r);
             }
             else if (rol.contains("destino") && !rol.contains("origen")) {
                 if (!presentes.add("destino")) duplicadas.add(r);
             }
-            else if (rol.isBlank() || rol.equals(normal(recurso)) || rol.contains("origen") && rol.contains("destino"))
-                genericas.add(r);
+            // Cualquier otro rol (loteActual, movimientos...) no distingue el extremo: se reutiliza.
+            else genericas.add(r);
         }
         for (int i = relaciones.size() - 1; i >= 0; i--) {
             JsonNode actual = relaciones.get(i);
@@ -636,6 +648,11 @@ final class NormalizadorPlanUml {
             r.put(directa ? "sourceRole" : "targetRole", rol.equals("origen") ? "movimientosSalientes" : "movimientosEntrantes");
             r.put("name", rol.equals("origen") ? "saleDe" : "llegaA");
             cambios++;
+        }
+        // Con origen y destino ya presentes, otra relacion evento-recurso sin rol propio sobra:
+        // ganaderia llego a tener cuatro MovimientoAnimal-Lote.
+        for (ObjectNode sobrante : genericas) {
+            for (int i = relaciones.size() - 1; i >= 0; i--) if (relaciones.get(i) == sobrante) { relaciones.remove(i); cambios++; }
         }
         return cambios;
     }
@@ -1083,9 +1100,12 @@ final class NormalizadorPlanUml {
                 JsonNode atributo = atributos.get(i);
                 if (atributo.path("pk").asBoolean(false)) continue;
                 String nombre = normal(atributo.path("name").asText()).replace("_", "");
+                // Un uuid que nombra una clase vecina (detallePlanOrigen) es una FK con rol.
+                boolean uuid = "uuid".equals(atributo.path("dataType").asText());
                 boolean duplicada = vecinas.stream().map(NormalizadorPlanUml::normal)
                         .map(n -> n.replace("_", ""))
-                        .anyMatch(relacionada -> esReferenciaA(nombre, relacionada));
+                        .anyMatch(relacionada -> esReferenciaA(nombre, relacionada)
+                                || (uuid && nombre.startsWith(relacionada)));
                 if (duplicada) {
                     atributos.remove(i);
                     retiradas++;

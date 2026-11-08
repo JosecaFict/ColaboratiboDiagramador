@@ -149,6 +149,89 @@ class CorrectorEstructuralPlanTest {
         assertThat(p.path("audit").toString()).doesNotContain("Proveedor se vincula");
     }
 
+    // --- segunda ronda de la interfaz (2026-11-08) ---
+
+    @Test
+    void ventas_un_pago_opcional_por_venta_pasa_a_varios_pagos() throws Exception {
+        ObjectNode plan = plan("""
+                Venta: fecha:date, total:decimal
+                Pago: monto:decimal, fechaPago:date
+                ---
+                Pago 0..1 -- 1 Venta
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, VENTAS).comandos().getFirst().parametros();
+        assertThat(relaciones(p)).contains("Pago 0..* -- 1 Venta");
+    }
+
+    @Test
+    void banco_la_directa_cliente_cuenta_sobra_aunque_tenga_roles() throws Exception {
+        ObjectNode plan = plan("""
+                Cliente: nombre:string
+                Cuenta: saldo:decimal
+                TitularCuenta: porcentajePropiedad:decimal
+                ---
+                Cliente * -- 0..* Cuenta roles=titulares/cuentas
+                Cuenta 1 -- 0..* TitularCuenta
+                TitularCuenta 0..* -- 1 Cliente
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, BANCO).comandos().getFirst().parametros();
+        assertThat(relaciones(p)).noneMatch(x -> x.startsWith("Cliente") && x.endsWith("Cuenta"));
+    }
+
+    @Test
+    void academico_un_uuid_con_nombre_de_clase_se_convierte_en_asociacion() throws Exception {
+        ObjectNode plan = plan("""
+                PeriodoAcademico: nombre:string, anio:int
+                Docente: nombre:string
+                AsignacionDocente: periodoAcademico:uuid, horasSemanales:int
+                DetallePlan: orden:int
+                Prerrequisito: detallePlanOrigen:uuid, condicion:string
+                ---
+                Docente 1 -- 0..* AsignacionDocente
+                DetallePlan 1 -- 0..* AsignacionDocente
+                Prerrequisito 1 -- 0..* DetallePlan
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, ACADEMICO).comandos().getFirst().parametros();
+        assertThat(relaciones(p)).anyMatch(x -> x.contains("AsignacionDocente") && x.contains("PeriodoAcademico"));
+        assertThat(atributos(p, "AsignacionDocente")).doesNotContain("periodoAcademico");
+        assertThat(atributos(p, "Prerrequisito")).doesNotContain("detallePlanOrigen");
+    }
+
+    @Test
+    void ganaderia_cuatro_movimientos_a_lote_quedan_en_origen_y_destino() throws Exception {
+        ObjectNode plan = plan("""
+                Lote: codigo:string
+                Animal: fechaNacimiento:date
+                MovimientoAnimal: fechaMovimiento:date
+                ---
+                Animal 1 -- 0..* MovimientoAnimal
+                MovimientoAnimal 0..* -- 1 Lote roles=loteOrigen/movimientos
+                MovimientoAnimal 0..* -- 1 Lote roles=loteDestino/movimientos
+                MovimientoAnimal 0..* -- 1 Lote
+                MovimientoAnimal 0..* -- 1 Lote roles=/loteActual
+                """, "Uno.", "Dos.");
+        String ganaderia = "Ganaderia: lotes, animales, historial de movimientos entre lotes con origen y destino.";
+        RespuestaIA r = normalizar(plan, ganaderia);
+        JsonNode p = r.comandos().getFirst().parametros();
+        List<String> roles = new ArrayList<>();
+        for (JsonNode x : p.path("relations")) if (x.path("target").asText().equals("Lote")
+                || x.path("source").asText().equals("Lote")) roles.add(x.path("targetRole").asText());
+        assertThat(roles).containsExactlyInAnyOrder("loteOrigen", "loteDestino");
+        assertThat(RevisorCoberturaPlan.revisar(r, ganaderia)).noneMatch(h -> h.contains("origen y destino"));
+    }
+
+    @Test
+    void turismo_titular_persona_con_una_relacion_no_es_asociativa_incompleta() throws Exception {
+        ObjectNode plan = plan("""
+                Reserva: fechaCreacion:datetime
+                TitularReserva: nombre:string, email:string
+                ---
+                Reserva 0..* -- 1 TitularReserva
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, TURISMO);
+        assertThat(ValidadorPlanFinal.revisar(r)).noneMatch(h -> h.contains("TitularReserva"));
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {
@@ -169,9 +252,14 @@ class CorrectorEstructuralPlanTest {
                 }
             } else {
                 String[] t = linea.split("\\s+");
-                relaciones.addObject().put("source", t[0]).put("sourceMultiplicity", t[1])
-                        .put("targetMultiplicity", t[3]).put("target", t[4])
-                        .put("kind", t.length > 5 ? t[5] : "ASSOCIATION");
+                ObjectNode r = relaciones.addObject().put("source", t[0]).put("sourceMultiplicity", t[1])
+                        .put("targetMultiplicity", t[3]).put("target", t[4]).put("kind", "ASSOCIATION");
+                for (int i = 5; i < t.length; i++) {
+                    if (t[i].startsWith("roles=")) {
+                        String[] roles = t[i].substring(6).split("/", -1);
+                        r.put("sourceRole", roles[0]).put("targetRole", roles[1]);
+                    } else r.put("kind", t[i]);
+                }
             }
         }
         ArrayNode audit = plan.putArray("audit");

@@ -104,7 +104,10 @@ final class AuditorDePropuestaIA {
             boolean origenHistorico = esHistorica(origen, atributos.getOrDefault(origenId, List.of()));
             boolean destinoHistorico = esHistorica(destino, atributos.getOrDefault(destinoId, List.of()));
             boolean historica = origenHistorico || destinoHistorico;
-            boolean patronEspecial = esPatronEspecial(origen, destino);
+            // Reserva [1] - [1..*] Participante: la reserva es la duena de sus viajeros, no un historial limitado.
+            boolean patronEspecial = esPatronEspecial(origen, destino)
+                    || (origenHistorico && mDestino.contains("*") && esDependiente(destino))
+                    || (destinoHistorico && mOrigen.contains("*") && esDependiente(origen));
             if (origenHistorico && !destinoHistorico && !patronEspecial && !mOrigen.equals("0..*")) {
                 avisos.add("La multiplicidad junto a la entidad historica " + origen + " es " + mOrigen
                         + "; podria limitar el historial. Normalmente debe permitir 0..* registros.");
@@ -186,6 +189,8 @@ final class AuditorDePropuestaIA {
                 || nombre.contains("asignacion") || nombre.contains("inscripcion")
                 || nombre.contains("membresia") || nombre.contains("indicacion")
                 || nombre.contains("titular") || nombre.contains("prerrequisito");
+        if (nombre.startsWith("titular") && ValidadorPlanFinal.titularEsPersona(
+                atributos.stream().map(Atributo::nombre).toList())) return false;
         if (!nombre.contains("participante")) return asociativa;
         boolean rol = atributos.stream().map(a -> normal(a.nombre()))
                 .anyMatch(a -> a.contains("rol") || a.contains("permiso"));
@@ -201,6 +206,12 @@ final class AuditorDePropuestaIA {
                 || (b.startsWith("garantia") && a.contains("detalleventa"))
                 || (a.contains("inventario") && (b.contains("producto") || b.contains("articulo") || b.contains("insumo")))
                 || (b.contains("inventario") && (a.contains("producto") || a.contains("articulo") || a.contains("insumo")));
+    }
+
+    private static boolean esDependiente(String clase) {
+        String n = normal(clase);
+        return n.startsWith("participante") || n.startsWith("viajero") || n.startsWith("pasajero")
+                || n.startsWith("huesped") || n.startsWith("acompanante") || n.startsWith("cuota");
     }
 
     private static boolean esPatronEspecial(String origen, String destino) {

@@ -35,6 +35,7 @@ final class CorrectorEstructuralPlan {
                 + corregirUnoAUnoDeRegistros(plan)
                 + registrarCuposEnSalida(plan, pedido)
                 + corregirPersonasDeReserva(plan, pedido)
+                + permitirVariosPagos(plan, pedido)
                 + retirarMuchosAMuchosCubiertos(plan)
                 + retirarGarantiaAlCatalogo(plan)
                 + alinearCicloDeVidaConAuditoria(plan)
@@ -154,6 +155,24 @@ final class CorrectorEstructuralPlan {
         return cambios;
     }
 
+    /** "historial de pagos": Venta [1] - [0..1] Pago impide registrar mas de un pago. */
+    static int permitirVariosPagos(ObjectNode plan, String pedido) {
+        if (!pedido.contains("pagos")) return 0;
+        int cambios = 0;
+        for (JsonNode nodo : plan.path("relations")) {
+            ObjectNode r = (ObjectNode) nodo;
+            if (!"ASSOCIATION".equals(r.path("kind").asText("ASSOCIATION"))) continue;
+            String s = normal(r.path("source").asText()), t = normal(r.path("target").asText());
+            if (s.startsWith("pago") == t.startsWith("pago")) continue;
+            String juntoPago = s.startsWith("pago") ? "sourceMultiplicity" : "targetMultiplicity";
+            String juntoDueno = s.startsWith("pago") ? "targetMultiplicity" : "sourceMultiplicity";
+            String m = r.path(juntoPago).asText();
+            if ((m.equals("1") || m.equals("0..1")) && "1".equals(r.path(juntoDueno).asText()))
+                cambios += poner(r, juntoPago, "0..*");
+        }
+        return cambios;
+    }
+
     /** Cliente [*] - [*] Cuenta junto a Titular, que ya une ambos: la directa sobra. */
     static int retirarMuchosAMuchosCubiertos(ObjectNode plan) {
         ArrayNode relaciones = (ArrayNode) plan.path("relations");
@@ -163,7 +182,7 @@ final class CorrectorEstructuralPlan {
             String s = r.path("source").asText(), t = r.path("target").asText();
             if (!"ASSOCIATION".equals(r.path("kind").asText("ASSOCIATION")) || s.equals(t)) continue;
             if (!r.path("sourceMultiplicity").asText().contains("*") || !r.path("targetMultiplicity").asText().contains("*")) continue;
-            if (!r.path("sourceRole").asText().isBlank() || !r.path("targetRole").asText().isBlank()) continue;
+            // Aunque el modelo le ponga roles (titulares/cuentas), repite lo que ya dice la intermedia.
             boolean cubierta = false;
             for (JsonNode c : plan.path("classes")) {
                 String intermedia = c.path("name").asText(), n = normal(intermedia);

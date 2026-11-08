@@ -26,6 +26,24 @@ class AuditorDePropuestaIATest {
     }
 
     @Test
+    void turismo_reserva_duena_de_participantes_y_titular_persona_no_generan_avisos() {
+        // Prueba desde la interfaz, 2026-11-08: dos avisos falsos sobre un diseno correcto.
+        ObjectNode participantes = J.objectNode().put("sourceClassId", "reserva").put("targetClassId", "participante")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "1..*");
+        ObjectNode titular = J.objectNode().put("sourceClassId", "reserva").put("targetClassId", "titular")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "0..*").put("targetMultiplicity", "1");
+        var avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, clase("reserva", "Reserva")),
+                aceptado(CommandType.CREATE_CLASS, clase("participante", "Participante")),
+                aceptado(CommandType.CREATE_CLASS, clase("titular", "TitularReserva")),
+                aceptado(CommandType.ADD_ATTRIBUTE, J.objectNode().put("classId", "titular").put("name", "nombre")),
+                aceptado(CommandType.ADD_ATTRIBUTE, J.objectNode().put("classId", "titular").put("name", "email")),
+                aceptado(CommandType.CREATE_RELATION, participantes),
+                aceptado(CommandType.CREATE_RELATION, titular)));
+        assertThat(avisos).noneMatch(a -> a.contains("limitar el historial") || a.contains("TitularReserva solo tiene"));
+    }
+
+    @Test
     void una_garantia_unica_por_detalle_no_se_marca_como_historial_limitado() {
         ObjectNode r = J.objectNode().put("sourceClassId", "garantia").put("targetClassId", "detalle")
                 .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "1");
