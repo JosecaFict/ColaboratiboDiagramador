@@ -44,6 +44,17 @@ class AuditorDePropuestaIATest {
     }
 
     @Test
+    void un_cambio_sobre_clases_existentes_nombra_las_clases_reales() {
+        // Banco, 2026-11-08: el aviso decia "clase origen [1] - [1] clase destino".
+        ObjectNode r = J.objectNode().put("sourceClassId", "p-1").put("targetClassId", "c-1")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "1");
+        var avisos = AuditorDePropuestaIA.auditar(List.of(aceptado(CommandType.CREATE_RELATION, r)),
+                java.util.Map.of("p-1", "Prestamo", "c-1", "Cliente"));
+        assertThat(avisos).anyMatch(a -> a.contains("Prestamo [1] - [1] Cliente"))
+                .noneMatch(a -> a.contains("clase origen"));
+    }
+
+    @Test
     void una_garantia_unica_por_detalle_no_se_marca_como_historial_limitado() {
         ObjectNode r = J.objectNode().put("sourceClassId", "garantia").put("targetClassId", "detalle")
                 .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "1");

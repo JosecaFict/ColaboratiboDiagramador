@@ -357,7 +357,8 @@ public class ServicioDeIA {
                 .map(v -> new PropuestaDeIA.ComandoAceptado(v.tipo(), v.payload(), v.resumen()))
                 .toList();
 
-        List<String> advertencias = AuditorDePropuestaIA.auditar(aceptados);
+        List<String> advertencias = AuditorDePropuestaIA.auditar(aceptados, existentes.stream()
+                .collect(java.util.stream.Collectors.toMap(c -> c.getId().toString(), UmlClass::getName, (a, b) -> a)));
         return new PropuestaDeIA(diagramId, origin, aceptados, List.copyOf(rechazados), descartadosPorTope,
                 advertencias, respuesta.comandos().size(), respuesta.notaDelModelo(), modelo, null);
     }

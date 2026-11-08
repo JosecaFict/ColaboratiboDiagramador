@@ -41,6 +41,9 @@ final class CorrectorEstructuralPlan {
                 + retirarMuchosAMuchosCubiertos(plan)
                 + retirarGarantiaAlCatalogo(plan)
                 + retirarRecursivaCubierta(plan)
+                + completarImportes(plan, pedido)
+                + conectarPrestatario(plan, pedido)
+                + conectarAsociativaConSuNombre(plan)
                 + alinearCicloDeVidaConAuditoria(plan)
                 + retirarAfirmacionesFalsas(plan);
     }
@@ -286,6 +289,79 @@ final class CorrectorEstructuralPlan {
             relaciones.remove(i);
             auditar(plan, "El backend retiro la asociacion recursiva de " + c
                     + ": la clase de prerrequisitos ya representa esa dependencia.");
+            cambios++;
+        }
+        return cambios;
+    }
+
+    /** Banco 2026-11-08: Transferencia sin importe. Un pago o una transferencia sin monto no registra la operacion. */
+    static int completarImportes(ObjectNode plan, String pedido) {
+        int cambios = 0;
+        for (JsonNode c : plan.path("classes")) {
+            String n = normal(c.path("name").asText());
+            boolean operacion = (n.startsWith("pago") && pedido.contains("pago"))
+                    || (n.contains("transferencia") && pedido.contains("transferencia"));
+            if (!operacion || tieneAtributoParecido(plan, c.path("name").asText(), "monto", "importe", "valor")) continue;
+            ((ArrayNode) c.path("attributes")).addObject().put("name", "importe").put("dataType", "decimal")
+                    .put("required", true).put("unique", false).put("pk", false);
+            auditar(plan, "El backend agrego el importe a " + c.path("name").asText() + ".");
+            cambios++;
+        }
+        return cambios;
+    }
+
+    /** Banco 2026-11-08: "Cada prestamo identifica al cliente prestatario" y Prestamo quedo sin Cliente. */
+    static int conectarPrestatario(ObjectNode plan, String pedido) {
+        if (!pedido.contains("prestamo") || !pedido.contains("cliente")) return 0;
+        String prestamo = clase(plan, n -> n.equals("prestamo")), cliente = clase(plan, n -> n.equals("cliente"));
+        if (prestamo == null || cliente == null || relacionados(plan, prestamo, cliente)) return 0;
+        boolean intermedio = vecinas(plan, prestamo).stream().anyMatch(v ->
+                (normal(v).contains("prestatario") || normal(v).startsWith("titular")) && relacionados(plan, v, cliente));
+        if (intermedio) return 0;
+        ((ArrayNode) plan.path("relations")).addObject().put("source", prestamo).put("target", cliente)
+                .put("kind", "ASSOCIATION").put("name", "prestatario").put("targetRole", "prestatario")
+                .put("sourceMultiplicity", "0..*").put("targetMultiplicity", "1");
+        auditar(plan, "El backend conecto " + prestamo + " con su cliente prestatario.");
+        return 1;
+    }
+
+    /**
+     * Academico 2026-11-08: AsignacionDocente unida a Periodo, Plan y Asignatura, pero no a Docente,
+     * y al lado una Docente [*] - [*] PeriodoAcademico directa. El nombre de la asociativa dice a
+     * quien une: la directa pasa a ser AsignacionDocente-Docente o, si no hay, se agrega.
+     */
+    static int conectarAsociativaConSuNombre(ObjectNode plan) {
+        ArrayNode relaciones = (ArrayNode) plan.path("relations");
+        int cambios = 0;
+        for (JsonNode c : plan.path("classes")) {
+            String asociativa = c.path("name").asText(), n = normal(asociativa);
+            String prefijo = List.of("asignacion", "inscripcion", "membresia", "participacion").stream()
+                    .filter(n::startsWith).findFirst().orElse(null);
+            if (prefijo == null || n.length() <= prefijo.length()) continue;
+            String nombrada = clase(plan, x -> x.equals(n.substring(prefijo.length())));
+            if (nombrada == null || nombrada.equals(asociativa) || relacionados(plan, asociativa, nombrada)) continue;
+            Set<String> vecinas = vecinas(plan, asociativa);
+            ObjectNode directa = null;
+            for (JsonNode r : relaciones) {
+                String s = r.path("source").asText(), t = r.path("target").asText();
+                String otro = s.equals(nombrada) ? t : t.equals(nombrada) ? s : null;
+                if (otro != null && vecinas.contains(otro) && "ASSOCIATION".equals(r.path("kind").asText("ASSOCIATION"))
+                        && r.path("sourceMultiplicity").asText().contains("*") && r.path("targetMultiplicity").asText().contains("*"))
+                    directa = (ObjectNode) r;
+            }
+            if (directa != null) {
+                boolean nombradaEsOrigen = directa.path("source").asText().equals(nombrada);
+                directa.put(nombradaEsOrigen ? "target" : "source", asociativa)
+                        .put(nombradaEsOrigen ? "targetMultiplicity" : "sourceMultiplicity", "0..*")
+                        .put(nombradaEsOrigen ? "sourceMultiplicity" : "targetMultiplicity", "1");
+                directa.remove("sourceRole");
+                directa.remove("targetRole");
+                directa.put("name", "relacionaCon" + nombrada);
+            } else {
+                relaciones.addObject().put("source", asociativa).put("target", nombrada).put("kind", "ASSOCIATION").put("name", "relacionaCon" + nombrada)
+                        .put("sourceMultiplicity", "0..*").put("targetMultiplicity", "1");
+            }
+            auditar(plan, "El backend conecto " + asociativa + " con " + nombrada + ", la clase que su nombre indica.");
             cambios++;
         }
         return cambios;

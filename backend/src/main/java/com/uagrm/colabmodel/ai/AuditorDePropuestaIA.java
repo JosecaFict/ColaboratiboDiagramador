@@ -24,7 +24,16 @@ final class AuditorDePropuestaIA {
     private AuditorDePropuestaIA() { }
 
     static List<String> auditar(List<PropuestaDeIA.ComandoAceptado> comandos) {
-        Map<String, String> clases = new HashMap<>();
+        return auditar(comandos, Map.of());
+    }
+
+    /**
+     * @param existentes id -> nombre de las clases que ya estan en el diagrama: una propuesta
+     *                   MODIFICAR relaciona clases existentes, y sin sus nombres el aviso decia
+     *                   "clase origen [1] - [1] clase destino" (banco, 2026-11-08).
+     */
+    static List<String> auditar(List<PropuestaDeIA.ComandoAceptado> comandos, Map<String, String> existentes) {
+        Map<String, String> clases = new HashMap<>(existentes);
         Map<String, List<Atributo>> atributos = new HashMap<>();
         Set<String> creadas = new HashSet<>();
         List<JsonNode> relaciones = new ArrayList<>();

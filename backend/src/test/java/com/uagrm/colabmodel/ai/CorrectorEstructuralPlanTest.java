@@ -373,6 +373,50 @@ class CorrectorEstructuralPlanTest {
         assertThat(relaciones(p)).anyMatch(x -> x.startsWith("Asignatura") && x.endsWith("Asignatura"));
     }
 
+    // --- sexta ronda (2026-11-08) ---
+
+    @Test
+    void banco_transferencia_sin_importe_y_prestamo_sin_cliente_se_completan() throws Exception {
+        ObjectNode plan = plan("""
+                Cliente: nombre:string
+                Cuenta: saldo:decimal
+                Titular: porcentajePropiedad:decimal
+                Transferencia: fechaEjecucion:datetime, estado:string
+                Prestamo: montoTotal:decimal
+                Cuota: monto:decimal
+                ---
+                Cliente 1 -- 0..* Titular
+                Titular 0..* -- 1 Cuenta
+                Transferencia 0..* -- 1 Cuenta roles=/cuentaOrigen
+                Transferencia 0..* -- 1 Cuenta roles=/cuentaDestino
+                Prestamo 1 -- 1..* Cuota
+                """, "Uno.", "Dos.");
+        RespuestaIA r = normalizar(plan, BANCO);
+        JsonNode p = r.comandos().getFirst().parametros();
+        assertThat(atributos(p, "Transferencia")).contains("importe");
+        assertThat(relaciones(p)).containsAnyOf("Prestamo 0..* -- 1 Cliente", "Cliente 1 -- 0..* Prestamo");
+        List<String> hallazgos = new ArrayList<>(ValidadorPlanFinal.revisar(r));
+        hallazgos.addAll(RevisorCoberturaPlan.revisar(r, BANCO));
+        assertThat(hallazgos).noneMatch(h -> h.contains("importe") || h.contains("prestatario") || h.contains("sin conexion"));
+    }
+
+    @Test
+    void academico_asignacion_docente_sin_docente_toma_la_directa_docente_periodo() throws Exception {
+        ObjectNode plan = plan("""
+                Docente: nombre:string
+                PeriodoAcademico: nombre:string
+                DetallePlan: orden:int
+                AsignacionDocente: horasSemanales:int
+                ---
+                Docente 0..* -- 0..* PeriodoAcademico
+                AsignacionDocente 0..* -- 1 DetallePlan
+                AsignacionDocente 0..* -- 1 PeriodoAcademico
+                """, "Uno.", "Dos.");
+        JsonNode p = normalizar(plan, ACADEMICO).comandos().getFirst().parametros();
+        assertThat(relaciones(p)).contains("Docente 1 -- 0..* AsignacionDocente")
+                .noneMatch(x -> x.contains("Docente") && x.contains("PeriodoAcademico") && !x.contains("Asignacion"));
+    }
+
     // --- planes compactos: "Clase: attr:tipo, ..." y "A m -- m B [KIND]" ---
 
     private static ObjectNode plan(String texto, String... auditoria) {
