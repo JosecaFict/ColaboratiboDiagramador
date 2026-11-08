@@ -103,7 +103,7 @@ class ServicioDeIATest {
     }
 
     @Test
-    void un_plan_desconectado_no_se_entrega_como_propuesta_completa() {
+    void un_plan_desconectado_se_entrega_con_el_hallazgo_como_advertencia() {
         ObjectNode p = J.objectNode();
         var clases = p.putArray("classes");
         for (String nombre : List.of("Producto", "Venta", "InventarioProducto")) {
@@ -115,8 +115,44 @@ class ServicioDeIATest {
         p.putArray("audit").add("supuesto").add("restriccion");
         ServicioDeIA servicio = servicioSinNadaEnElDiagrama(new RespuestaIA(List.of(
                 new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p)), ""));
-        assertThatThrownBy(() -> servicio.generar(diagramId, "Disena ventas", Origin.TEXT, ModoIA.DISENAR, null))
-                .isInstanceOf(ProveedorIAException.class).hasMessageContaining("InventarioProducto");
+        // El modelo no logra repararlo; el plan es aplicable, asi que se entrega
+        // con el pendiente visible en vez de dejar al usuario sin propuesta.
+        var propuesta = servicio.generar(diagramId, "Disena ventas", Origin.TEXT, ModoIA.DISENAR, null);
+        assertThat(propuesta.aceptados()).anyMatch(c -> c.payload().path("name").asText().equals("InventarioProducto"));
+        assertThat(propuesta.advertencias()).anyMatch(a -> a.startsWith("Sin resolver por la IA")
+                && a.contains("InventarioProducto"));
+    }
+
+    @Test
+    void una_reparacion_que_borra_clases_se_descarta_y_se_conserva_el_borrador() {
+        ObjectNode p = J.objectNode();
+        var clases = p.putArray("classes");
+        for (String nombre : List.of("Cliente", "Cuenta", "Prestamo", "Cuota")) {
+            clases.addObject().put("name", nombre).putArray("attributes")
+                    .addObject().put("name", "nombre").put("dataType", "string");
+        }
+        var rs = p.putArray("relations");
+        rs.addObject().put("source", "Cliente").put("target", "Cuenta").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+        rs.addObject().put("source", "Prestamo").put("target", "Cuota").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "1").put("targetMultiplicity", "1..*");
+        p.putArray("audit").add("supuesto").add("restriccion");
+        // La "reparacion" del modelo deja una sola clase para cumplir un presupuesto imaginario.
+        ObjectNode destruido = J.objectNode();
+        destruido.putArray("classes").addObject().put("name", "Cliente").putArray("attributes")
+                .addObject().put("name", "nombre").put("dataType", "string");
+        destruido.putArray("relations");
+        destruido.putArray("audit").add("simplificado").add("presupuesto");
+        RespuestaIA borrador = new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p)), "");
+        RespuestaIA roto = new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, destruido)), "");
+        ProveedorDeIA proveedor = mock(ProveedorDeIA.class);
+        when(proveedor.nombre()).thenReturn("falso");
+        when(proveedor.generar(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(borrador, roto, roto, new RespuestaIA(List.of(), ""));
+        var propuesta = servicioConProveedor(proveedor).generar(diagramId, "Banco con prestamos",
+                Origin.TEXT, ModoIA.DISENAR, null);
+        assertThat(propuesta.aceptados()).filteredOn(c -> c.tipo() == CommandType.CREATE_CLASS).hasSize(4);
+        assertThat(propuesta.advertencias()).anyMatch(a -> a.contains("grupos sin conexion"));
     }
 
     // ------------------------------------------------ EL TOPE DEL PLAN COMPLETO

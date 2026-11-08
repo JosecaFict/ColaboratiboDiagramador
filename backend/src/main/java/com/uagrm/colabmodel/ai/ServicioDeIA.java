@@ -33,6 +33,8 @@ public class ServicioDeIA {
 
     private static final JsonNodeFactory J = JsonNodeFactory.instance;
 
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ServicioDeIA.class);
+
     private final ProveedorDeIA proveedor;
     private final UmlClassRepository classes;
     private final UmlAttributeRepository attributes;
@@ -103,17 +105,28 @@ public class ServicioDeIA {
         RespuestaIA respuesta = proveedor.generar(new SolicitudIA(prompt, modo, contexto, relaciones, herramientas, modelo));
         boolean planCompleto = modo == ModoIA.DISENAR && respuesta.comandos().stream()
                 .anyMatch(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo()));
+        List<String> sinResolver = List.of();
         if (modo == ModoIA.DISENAR) {
             respuesta = revisarPlan(prompt, respuesta, contexto, relaciones, modelo);
             respuesta = NormalizadorPlanUml.normalizar(respuesta, prompt);
             List<String> pendientes = hallazgosFinales(respuesta, prompt, contexto);
             if (!pendientes.isEmpty()) {
-                respuesta = repararPlanFinal(prompt, respuesta, pendientes, contexto, relaciones, modelo);
+                try {
+                    respuesta = repararPlanFinal(prompt, respuesta, pendientes, contexto, relaciones, modelo);
+                } catch (ProveedorIAException e) {
+                    // El modelo local no siempre logra corregir lo que el revisor
+                    // pide. Si el plan se puede aplicar, se entrega igual con los
+                    // pendientes a la vista: el usuario decide y Recomendar los
+                    // vuelve a senalar sobre el diagrama real.
+                    if (pendientes.stream().anyMatch(ServicioDeIA::impideAplicar)) throw e;
+                    LOG.info("Se entrega el plan con {} hallazgo(s) sin resolver: {}", pendientes.size(), pendientes);
+                    sinResolver = pendientes;
+                }
             }
             respuesta = ExpansorPlanUml.expandir(respuesta);
         }
 
-        PropuestaDeIA propuesta = validar(diagramId, origin, respuesta, existentes, atributosPorClase, metodosPorClase,
+        PropuestaDeIA propuesta = validar(diagramId, origin, modo, respuesta, existentes, atributosPorClase, metodosPorClase,
                 relacionesExistentes, modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo);
         if (planCompleto && (propuesta.truncada() || !propuesta.rechazados().isEmpty())) {
             throw new ProveedorIAException("El plan no pudo convertirse completo en cambios validos: "
@@ -121,7 +134,36 @@ public class ServicioDeIA {
                     .collect(java.util.stream.Collectors.joining("; "))
                     + (propuesta.truncada() ? "; se excedio el limite de cambios" : ""));
         }
+        if (!sinResolver.isEmpty()) {
+            List<String> advertencias = new ArrayList<>(propuesta.advertencias());
+            sinResolver.forEach(h -> advertencias.add("Sin resolver por la IA, revisalo antes de aplicar: " + h));
+            propuesta = new PropuestaDeIA(propuesta.diagramId(), propuesta.origin(), propuesta.aceptados(),
+                    propuesta.rechazados(), propuesta.descartadosPorTope(), List.copyOf(advertencias),
+                    propuesta.propuestosPorElModelo(), propuesta.notaDelModelo(), propuesta.modelo(),
+                    propuesta.interaccionId());
+        }
         return propuesta;
+    }
+
+    /** Hallazgos que dejarian el lote sin poder aplicarse; los demas son de diseno y se pueden revisar despues. */
+    private static boolean impideAplicar(String hallazgo) {
+        return hallazgo.startsWith("Relacion con extremo inexistente") || hallazgo.startsWith("Clase duplicada")
+                || hallazgo.contains("cambios y el limite es");
+    }
+
+    /** Una revision que pierde varias clases del borrador lo destruye, aunque tenga menos hallazgos; una sola puede ser una clase sobrante legitima. */
+    private static boolean pierdeClases(RespuestaIA borrador, RespuestaIA reparada) {
+        java.util.Set<String> despues = new java.util.HashSet<>();
+        reparada.comandos().stream().filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst()
+                .ifPresent(c -> c.parametros().path("classes")
+                        .forEach(k -> despues.add(k.path("name").asText().toLowerCase(java.util.Locale.ROOT))));
+        return borrador.comandos().stream().filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst()
+                .map(c -> {
+                    int perdidas = 0;
+                    for (var k : c.parametros().path("classes"))
+                        if (!despues.contains(k.path("name").asText().toLowerCase(java.util.Locale.ROOT))) perdidas++;
+                    return perdidas > 1;
+                }).orElse(false);
     }
 
     /**
@@ -172,6 +214,7 @@ public class ServicioDeIA {
                     .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
             if (ProveedorOllama.errorDeFormatoDelPlan(planRevisado) != null) return borrador;
             RespuestaIA candidata = NormalizadorPlanUml.normalizar(revisada, requisito);
+            if (pierdeClases(baseNormalizada, candidata)) return borrador;
             return hallazgosFinales(candidata, requisito, contexto).size() > hallazgosBase.size()
                     ? borrador : revisada;
         } catch (ProveedorIAException e) {
@@ -213,6 +256,10 @@ public class ServicioDeIA {
         boolean tienePlan = reparada.comandos().stream().anyMatch(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo()));
         if (!tienePlan) return repararConAjustes(requisito, borrador, hallazgos, modelo);
         reparada = NormalizadorPlanUml.normalizar(reparada, requisito);
+        if (pierdeClases(borrador, reparada)) {
+            LOG.info("La reparacion completa elimino clases del borrador; se descarta y se corrige el borrador");
+            return repararConAjustes(requisito, borrador, hallazgos, modelo);
+        }
         List<String> pendientes = hallazgosFinales(reparada, requisito, contexto);
         if (!pendientes.isEmpty()) return pendientes.size() > hallazgos.size()
                 ? repararConAjustes(requisito, borrador, hallazgos, modelo)
@@ -243,14 +290,18 @@ public class ServicioDeIA {
                 + "\nLas clases y sus atributos estan en el contexto adjunto; no los regeneres ni los dupliques. "
                 + "Los indices anteriores son estables durante este lote de ajustes. "
                 + "Resuelve todos los hallazgos con cambios concretos, no promesas de cambios posteriores.";
+        RespuestaIA ajustes = null;
         try {
-            RespuestaIA ajustes = proveedor.generar(new SolicitudIA(pedido, ModoIA.MODIFICAR, virtuales, List.of(),
+            ajustes = proveedor.generar(new SolicitudIA(pedido, ModoIA.MODIFICAR, virtuales, List.of(),
                     ReparadorDirigidoPlan.herramientas(), modelo));
             RespuestaIA reparada = NormalizadorPlanUml.normalizar(ReparadorDirigidoPlan.aplicar(borrador, ajustes), requisito);
             List<String> restantes = hallazgosFinales(reparada, requisito, virtuales);
             if (restantes.isEmpty()) return reparada;
             throw new ProveedorIAException("El plan sigue incompleto tras los ajustes dirigidos: " + String.join("; ", restantes));
         } catch (ProveedorIAException e) {
+            // Sin el plan y los ajustes no hay forma de saber si fallo el modelo o el validador.
+            LOG.warn("Reparacion dirigida fallida. Hallazgos: {}\nPlan: {}\nAjustes: {}", pendientes,
+                    plan.parametros(), ajustes == null ? "(sin respuesta)" : ajustes.comandos());
             throw new ProveedorIAException("El plan sigue incompleto tras la reparacion: " + String.join("; ", pendientes)
                     + ". Reparacion dirigida: " + e.getMessage());
         }
@@ -259,7 +310,7 @@ public class ServicioDeIA {
     private record Candidato(int posicion, CommandType tipo, com.fasterxml.jackson.databind.JsonNode payload,
                              String resumen) { }
 
-    private PropuestaDeIA validar(UUID diagramId, Origin origin, RespuestaIA respuesta, List<UmlClass> existentes,
+    private PropuestaDeIA validar(UUID diagramId, Origin origin, ModoIA modo, RespuestaIA respuesta, List<UmlClass> existentes,
                                   Map<UUID, List<UmlAttribute>> atributosPorClase,
                                   Map<UUID, List<UmlMethod>> metodosPorClase,
                                   List<UmlRelationship> relacionesExistentes, String modelo) {
@@ -293,7 +344,7 @@ public class ServicioDeIA {
             }
         }
 
-        int tope = Lote.TOPE_TEXTO_O_VOZ;
+        int tope = modo == ModoIA.DISENAR ? Lote.TOPE_DISENO_TEXTO : Lote.TOPE_TEXTO_O_VOZ;
         boolean excede = validos.size() > tope;
         List<Candidato> aceptadosLista = excede ? validos.subList(0, tope) : validos;
         List<String> descartadosPorTope = excede
