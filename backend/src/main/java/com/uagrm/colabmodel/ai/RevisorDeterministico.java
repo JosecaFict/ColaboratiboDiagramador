@@ -37,7 +37,9 @@ final class RevisorDeterministico {
     static List<Hallazgo> revisar(ServicioDeRecomendaciones.Diagrama d, String requisito) {
         List<Hallazgo> hallazgos = new ArrayList<>();
         estructura(d, hallazgos);
+        grupos(d, hallazgos);
         relaciones(d, hallazgos);
+        rolesDuplicados(d, hallazgos);
         identificadores(d, hallazgos);
         nombres(d, hallazgos);
         if (requisito != null && PIDE_CONSERVAR.matcher(normal(requisito)).find()) composiciones(d, hallazgos);
@@ -93,10 +95,71 @@ final class RevisorDeterministico {
                     : t + "|" + s + "|" + texto(r.getTargetRole()) + "|" + texto(r.getSourceRole())) + "|" + kind;
             if (!vistas.add(clave)) hallazgos.add(new Hallazgo("Hay relaciones " + kind + " repetidas entre " + s + " y "
                     + t + " sin roles que las distingan.", "RELACION", "MEDIA", List.of(s, t)));
-            if (CON_MULTIPLICIDAD.contains(kind) && muchos(r.getSourceMultiplicity()) && muchos(r.getTargetMultiplicity()))
+            boolean recursiva = r.getSourceClassId().equals(r.getTargetClassId());
+            if (CON_MULTIPLICIDAD.contains(kind) && muchos(r.getSourceMultiplicity()) && muchos(r.getTargetMultiplicity())
+                    && !recursiva)
                 hallazgos.add(new Hallazgo("La relacion " + s + " - " + t + " es muchos a muchos; si la participacion "
                         + "tiene datos propios (cantidad, precio, orden, fecha), conviene una clase asociativa.",
                         "RELACION", "BAJA", List.of(s, t)));
+            if (recursiva && CON_MULTIPLICIDAD.contains(kind) && (vacio(r.getSourceRole()) || vacio(r.getTargetRole())))
+                hallazgos.add(new Hallazgo("La asociacion recursiva de " + s + " no nombra los roles de ambos extremos; "
+                        + "sin ellos no se distingue cual es cual (por ejemplo previa/siguiente o madre/descendiente).",
+                        "RELACION", "MEDIA", List.of(s)));
+            if (CON_MULTIPLICIDAD.contains(kind) && !recursiva && "1".equals(r.getSourceMultiplicity())
+                    && "1".equals(r.getTargetMultiplicity()))
+                hallazgos.add(new Hallazgo("La relacion " + s + " [1] - [1] " + t + " es uno a uno obligatorio; "
+                        + "verifica que ninguno de los dos extremos deba admitir varias instancias o ninguna.",
+                        "MULTIPLICIDAD", "BAJA", List.of(s, t)));
+        }
+    }
+
+    /**
+     * Clases sueltas ya se informan una por una; aca se detecta el caso en que
+     * el diagrama queda partido en islas de varias clases cada una.
+     */
+    private static void grupos(ServicioDeRecomendaciones.Diagrama d, List<Hallazgo> hallazgos) {
+        Map<UUID, Set<UUID>> vecinas = vecinas(d);
+        Set<UUID> visitadas = new HashSet<>();
+        List<List<String>> islas = new ArrayList<>();
+        for (UmlClass c : d.clases()) {
+            if (!vecinas.containsKey(c.getId()) || visitadas.contains(c.getId())) continue;
+            List<String> isla = new ArrayList<>();
+            Deque<UUID> pendientes = new ArrayDeque<>(List.of(c.getId()));
+            while (!pendientes.isEmpty()) {
+                UUID actual = pendientes.removeFirst();
+                if (!visitadas.add(actual)) continue;
+                isla.add(nombre(d, actual));
+                pendientes.addAll(vecinas.getOrDefault(actual, Set.of()));
+            }
+            islas.add(isla);
+        }
+        if (islas.size() < 2) return;
+        List<String> elementos = islas.stream().flatMap(List::stream).toList();
+        hallazgos.add(new Hallazgo("El diagrama esta partido en " + islas.size() + " grupos sin relacion entre si: "
+                + islas.stream().map(i -> "[" + String.join(", ", i) + "]").reduce((a, b) -> a + " y " + b).orElse("")
+                + ". Revisa que asociacion del requisito los une (por ejemplo, quien participa en cada uno).",
+                "RELACION", "ALTA", elementos));
+    }
+
+    /**
+     * Una clase cuyo nombre es otra clase con un prefijo (PadreAnimal, MadreAnimal)
+     * cuando esa otra ya tiene una asociacion recursiva: el rol se expresa en la
+     * asociacion, no con una clase que duplica la entidad.
+     */
+    private static void rolesDuplicados(ServicioDeRecomendaciones.Diagrama d, List<Hallazgo> hallazgos) {
+        Set<UUID> conRecursiva = new HashSet<>();
+        for (UmlRelationship r : d.relaciones())
+            if (r.getSourceClassId().equals(r.getTargetClassId())) conRecursiva.add(r.getSourceClassId());
+        for (UmlClass base : d.clases()) {
+            if (!conRecursiva.contains(base.getId())) continue;
+            String b = base.getName();
+            for (UmlClass c : d.clases()) {
+                String n = c.getName();
+                if (c.getId().equals(base.getId()) || n.length() <= b.length() || !n.endsWith(b)) continue;
+                hallazgos.add(new Hallazgo(n + " parece duplicar " + b + " como un rol, y " + b + " ya tiene una "
+                        + "asociacion recursiva que expresa ese rol. Elimina " + n + " y nombra el rol en la asociacion.",
+                        "RELACION", "MEDIA", List.of(n, b)));
+            }
         }
     }
 

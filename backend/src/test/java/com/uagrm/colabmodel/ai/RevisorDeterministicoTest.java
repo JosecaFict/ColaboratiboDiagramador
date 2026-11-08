@@ -126,6 +126,62 @@ class RevisorDeterministicoTest {
     }
 
     @Test
+    void senala_un_diagrama_partido_en_grupos_sin_relacion() {
+        UmlClass cliente = clase("Cliente", "id:pk", "nombre");
+        UmlClass cuenta = clase("Cuenta", "id:pk", "saldo");
+        UmlClass prestamo = clase("Prestamo", "id:pk", "monto");
+        UmlClass cuota = clase("Cuota", "id:pk", "numero");
+        relacion(cliente, cuenta, RelationKind.ASSOCIATION);
+        relacion(prestamo, cuota, RelationKind.ASSOCIATION);
+
+        var hallazgo = revisar(null).stream().filter(h -> h.texto().contains("partido en 2 grupos"))
+                .findFirst().orElseThrow();
+        assertThat(hallazgo.texto()).contains("[Cliente, Cuenta]").contains("[Prestamo, Cuota]");
+        assertThat(hallazgo.gravedad()).isEqualTo("ALTA");
+    }
+
+    @Test
+    void un_diagrama_conexo_no_se_marca_como_partido() {
+        UmlClass a = clase("Cliente", "id:pk", "nombre");
+        UmlClass b = clase("Cuenta", "id:pk", "saldo");
+        UmlClass c = clase("Prestamo", "id:pk", "monto");
+        relacion(a, b, RelationKind.ASSOCIATION);
+        relacion(a, c, RelationKind.ASSOCIATION);
+        assertThat(textos(null)).noneMatch(t -> t.contains("grupos sin relacion"));
+    }
+
+    @Test
+    void una_asociacion_recursiva_sin_roles_y_una_clase_que_duplica_el_rol() {
+        UmlClass animal = clase("Animal", "id:pk", "nombre");
+        UmlClass padre = clase("PadreAnimal", "id:pk", "nombre");
+        relacion(animal, animal, RelationKind.ASSOCIATION);
+        relacion(animal, padre, RelationKind.ASSOCIATION);
+
+        assertThat(textos(null))
+                .anyMatch(t -> t.startsWith("La asociacion recursiva de Animal no nombra los roles"))
+                .anyMatch(t -> t.startsWith("PadreAnimal parece duplicar Animal como un rol"))
+                .noneMatch(t -> t.contains("muchos a muchos"));
+    }
+
+    @Test
+    void una_asociacion_recursiva_con_roles_no_se_senala() {
+        UmlClass asignatura = clase("Asignatura", "id:pk", "nombre");
+        relacion(asignatura, asignatura, RelationKind.ASSOCIATION);
+        relaciones.getLast().setSourceRole("siguiente");
+        relaciones.getLast().setTargetRole("previa");
+        assertThat(textos(null)).noneMatch(t -> t.contains("recursiva"));
+    }
+
+    @Test
+    void senala_uno_a_uno_obligatorio() {
+        UmlClass salida = clase("Salida", "id:pk", "fecha");
+        UmlClass reserva = clase("Reserva", "id:pk", "fecha");
+        relacion(reserva, salida, RelationKind.ASSOCIATION);
+        relaciones.getLast().setTargetMultiplicity("1");
+        assertThat(textos(null)).anyMatch(t -> t.startsWith("La relacion Reserva [1] - [1] Salida es uno a uno"));
+    }
+
+    @Test
     void las_recomendaciones_verificadas_van_primero_a_igual_gravedad_y_se_marcan() throws Exception {
         UmlClass carrera = clase("Carrera", "id:pk", "nombre");
         UmlClass plan = clase("PlanAcademico", "id:pk", "version");
