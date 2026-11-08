@@ -1,0 +1,66 @@
+Actúa como Arquitecto de Software Senior y diseña desde cero el modelo conceptual UML para administrar una explotación ganadera.
+
+El diagrama está vacío. Deduce autónomamente las clases, atributos, asociaciones y cardinalidades. No te indicaré las entidades específicas.
+
+ALCANCE FUNCIONAL
+
+El sistema debe gestionar:
+
+- establecimientos o propiedades ganaderas;
+- animales identificables individualmente;
+- especies o razas;
+- lotes o grupos de animales;
+- propietarios;
+- movimientos de animales entre lotes o establecimientos;
+- controles sanitarios;
+- vacunas y tratamientos;
+- reproducción y parentesco;
+- historial completo de cada animal.
+
+REGLAS DE NEGOCIO
+
+El modelo debe permitir:
+
+- identificar individualmente cada animal;
+- saber su ubicación y lote actual;
+- conservar todos sus movimientos históricos;
+- registrar controles sanitarios, vacunas y tratamientos con fecha;
+- conocer qué producto o tratamiento fue aplicado;
+- representar padre y madre cuando se conozcan;
+- permitir animales sin ascendencia registrada;
+- evitar que cambiar un animal de lote elimine su ubicación anterior;
+- conservar información histórica aunque un animal sea vendido, trasladado o dado de baja;
+- evitar duplicar asociaciones mediante atributos terminados en Id.
+
+REGLAS DE MODELADO
+
+- Usa nombres en español y nombres técnicos sin tildes ni letra ñ.
+- Usa PascalCase singular para clases y camelCase para atributos.
+- Cada clase debe tener identidad o responsabilidad propia.
+- Incluye identificadores, obligatoriedad y unicidad cuando correspondan.
+- No agregues métodos.
+- Especifica multiplicidad en ambos extremos.
+- Modela el parentesco mediante relaciones y roles claros.
+- Utiliza entidades históricas para movimientos y controles.
+- Evita clases Estado o Tipo que solo contengan un valor.
+- No utilices composición si pudiera eliminar registros históricos.
+
+AUTOVERIFICACIÓN
+
+Revisa silenciosamente:
+
+- que cada animal pueda rastrearse individualmente;
+- que la ubicación actual pueda obtenerse sin perder los traslados anteriores;
+- que un animal pueda recibir múltiples controles y tratamientos;
+- que el producto aplicado no se confunda con el evento sanitario;
+- que padre y madre sean opcionales y no creen relaciones ambiguas;
+- que todas las clases estén conectadas;
+- que todas las relaciones tengan multiplicidad completa.
+
+SALIDA
+
+Genera directamente una única propuesta editable de ColabModel con clases, atributos y relaciones.
+
+No respondas con Mermaid, PlantUML ni JSON manual.
+
+Incluye una Auditoría de diseño breve sobre trazabilidad animal, historial sanitario, movimientos y restricciones de negocio.

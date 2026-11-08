@@ -1,0 +1,68 @@
+Actúa como Arquitecto de Software Senior y diseña desde cero el modelo conceptual UML para una agencia de turismo.
+
+El diagrama está vacío. Deduce autónomamente las clases, atributos, asociaciones y cardinalidades necesarias. No te indicaré qué entidades debes crear.
+
+ALCANCE FUNCIONAL
+
+El sistema debe gestionar:
+
+- destinos turísticos;
+- paquetes de viaje;
+- itinerarios y actividades;
+- clientes o viajeros;
+- reservas;
+- participantes incluidos en cada reserva;
+- servicios turísticos como alojamiento, transporte o excursiones;
+- pagos;
+- fechas de salida;
+- disponibilidad y cupos;
+- historial de reservas y cancelaciones.
+
+REGLAS DE NEGOCIO
+
+El modelo debe permitir:
+
+- que un paquete visite uno o varios destinos;
+- que el orden de los destinos o actividades forme parte del itinerario;
+- que un paquete tenga diferentes salidas programadas;
+- que una reserva corresponda a una salida concreta;
+- incluir varios viajeros dentro de una misma reserva;
+- conservar el precio acordado aunque cambie el precio actual del paquete;
+- registrar varios pagos para una reserva;
+- conservar reservas canceladas;
+- controlar conceptualmente que los participantes no excedan el cupo disponible;
+- diferenciar el catálogo de servicios de los servicios incluidos en un paquete;
+- evitar atributos de claves foráneas cuando exista una asociación UML.
+
+REGLAS DE MODELADO
+
+- Usa nombres en español y nombres técnicos sin tildes ni letra ñ.
+- Usa PascalCase singular para clases y camelCase para atributos.
+- Cada clase debe tener responsabilidad clara y al menos un atributo esencial.
+- Incluye identificadores, obligatoriedad y unicidad cuando correspondan.
+- No agregues métodos.
+- Especifica multiplicidad en ambos extremos.
+- Usa clases asociativas cuando la relación contenga orden, cantidad, precio u otros datos propios.
+- Conserva reservas, pagos e información histórica.
+- Evita clases Estado que solamente contengan un valor.
+
+AUTOVERIFICACIÓN
+
+Revisa silenciosamente:
+
+- que una reserva identifique una salida concreta;
+- que una reserva pueda incluir varios viajeros;
+- que el itinerario conserve el orden de destinos y actividades;
+- que los pagos estén vinculados a la reserva;
+- que el precio histórico no dependa del precio actual;
+- que una cancelación no elimine la reserva;
+- que no existan clases vacías o desconectadas;
+- que todas las relaciones tengan cardinalidad completa.
+
+SALIDA
+
+Genera directamente una única propuesta editable de ColabModel con clases, atributos y relaciones en la misma respuesta.
+
+No respondas con Mermaid, PlantUML ni JSON manual.
+
+Incluye una Auditoría de diseño breve sobre itinerarios, cupos, precios históricos, reservas y restricciones que deberán validarse mediante lógica de negocio.

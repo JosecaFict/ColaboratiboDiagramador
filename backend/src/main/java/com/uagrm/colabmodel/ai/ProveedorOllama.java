@@ -112,6 +112,11 @@ public class ProveedorOllama implements ProveedorDeIA {
                 boolean piensa = modelos.usaThinking(model);
                 return generarConFormato(body, solicitud.herramientas().get(0), piensa ? 6144 : 2048, piensa);
             }
+            if (solicitud.herramientas().size() == 1
+                    && EsquemaVerificacionRegla.NOMBRE.equals(solicitud.herramientas().get(0).nombre())) {
+                boolean piensa = modelos.usaThinking(model);
+                return generarConFormato(body, solicitud.herramientas().get(0), piensa ? 4096 : 768, piensa);
+            }
             boolean planCompleto = solicitud.herramientas().size() == 1
                     && EsquemaPlanUml.NOMBRE.equals(solicitud.herramientas().get(0).nombre());
             if (planCompleto) {

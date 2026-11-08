@@ -1,0 +1,66 @@
+Actúa como Arquitecto de Software Senior y diseña desde cero el modelo conceptual UML para un sistema de ventas de computadoras y componentes tecnológicos.
+
+El diagrama está vacío. Deduce autónomamente las clases, atributos, asociaciones y cardinalidades. No te indicaré qué clases crear porque quiero evaluar tu capacidad de diseño.
+
+ALCANCE FUNCIONAL
+
+El sistema debe gestionar:
+
+- catálogo de productos tecnológicos;
+- computadoras completas y componentes;
+- clientes;
+- inventario y unidades disponibles;
+- ventas realizadas;
+- productos y cantidades incluidas en cada venta;
+- pagos de una venta;
+- historial de ventas;
+- garantías asociadas a los productos vendidos.
+
+REGLAS DE NEGOCIO
+
+El modelo debe permitir:
+
+- identificar individualmente cada producto del catálogo;
+- conocer las existencias disponibles;
+- registrar una venta con varios productos y diferentes cantidades;
+- conservar el precio utilizado en el momento de cada venta aunque el precio actual cambie;
+- conservar todas las ventas históricas de un cliente;
+- registrar uno o varios pagos para una venta;
+- evitar que una venta sea tratada como una relación directa muchos a muchos sin datos propios;
+- identificar qué producto vendido tiene garantía y su periodo de vigencia;
+- evitar duplicar asociaciones mediante atributos terminados en Id.
+
+REGLAS DE MODELADO
+
+- Usa nombres en español para clases y relaciones.
+- Usa identificadores técnicos sin tildes ni letra ñ.
+- Usa PascalCase y singular para clases.
+- Usa camelCase para atributos.
+- Cada clase debe tener una responsabilidad clara y al menos un atributo esencial.
+- Incluye identificadores, obligatoriedad y unicidad cuando correspondan.
+- No agregues métodos.
+- No agregues claves foráneas como atributos cuando exista una asociación UML equivalente.
+- Especifica multiplicidad en ambos extremos.
+- Usa asociaciones simples salvo que otra relación UML sea realmente necesaria.
+- No crees clases Estado que solamente contengan un valor.
+- Conserva los registros históricos aunque un producto deje de venderse.
+
+AUTOVERIFICACIÓN
+
+Antes de responder, revisa silenciosamente:
+
+- que ninguna clase quede vacía o desconectada;
+- que una venta pueda contener varios productos;
+- que la cantidad y el precio histórico pertenezcan al detalle de la venta;
+- que un producto pueda aparecer en muchas ventas;
+- que el inventario no se confunda con el historial de ventas;
+- que los pagos estén asociados a la venta correspondiente;
+- que todas las relaciones tengan cardinalidad en ambos extremos.
+
+SALIDA
+
+Genera directamente una única propuesta editable de ColabModel con clases, atributos y relaciones en la misma respuesta.
+
+No respondas con Mermaid, PlantUML ni JSON manual.
+
+Incluye una Auditoría de diseño breve que explique la conservación del historial, el manejo del inventario y las restricciones que deberán validarse mediante lógica de negocio.

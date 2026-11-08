@@ -6,6 +6,7 @@ import com.uagrm.colabmodel.modelcore.metamodel.*;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -55,6 +56,10 @@ public class ServicioDeRecomendaciones {
             throw new IllegalArgumentException("El diagrama esta vacio: primero aplica un diseno o agrega clases");
         }
         List<String> hallazgos = hallazgosEstructurales(d);
+        String nombreModelo = modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo;
+        List<ReglasDelRequisito.Regla> reglas = ReglasDelRequisito.extraer(requisito);
+        if (!reglas.isEmpty()) return verificarReglas(diagramId, requisito, reglas, hallazgos, d, modelo, nombreModelo);
+
         RespuestaIA respuesta = proveedor.generar(new SolicitudIA(pedido(requisito, hallazgos), ModoIA.RECOMENDAR,
                 contexto(d), relacionesEnContexto(d), List.of(EsquemaRecomendaciones.herramienta()), modelo));
         JsonNode salida = respuesta.comandos().stream()
@@ -63,8 +68,125 @@ public class ServicioDeRecomendaciones {
                 .orElseThrow(() -> new ProveedorIAException("El modelo no devolvio recomendaciones"
                         + (respuesta.notaDelModelo().isBlank() ? "" : ": " + respuesta.notaDelModelo())));
         return new RecomendacionesIA(diagramId, salida.path("resumen").asText(""),
-                depurar(salida.path("recomendaciones"), d), hallazgos,
-                modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo);
+                depurar(salida.path("recomendaciones"), d), List.of(), hallazgos, nombreModelo);
+    }
+
+    /**
+     * Una pregunta pequena por regla en vez de una revision abierta. El texto
+     * comun (requisito y diagrama) va primero y la regla al final: Ollama
+     * reutiliza el prefijo ya procesado y cada regla extra cuesta pocos segundos.
+     */
+    private RecomendacionesIA verificarReglas(UUID diagramId, String requisito, List<ReglasDelRequisito.Regla> reglas,
+                                              List<String> hallazgos, Diagrama d, String modelo, String nombreModelo) {
+        String comun = "REQUISITO DEL USUARIO (contexto):\n" + requisito.trim()
+                + new SolicitudIA("", ModoIA.VERIFICAR, contexto(d), relacionesEnContexto(d), List.of())
+                        .mensajeParaElModelo();
+        List<RecomendacionesIA.Verificacion> verificaciones = new ArrayList<>();
+        List<RecomendacionesIA.Recomendacion> recomendaciones = new ArrayList<>();
+        for (ReglasDelRequisito.Regla regla : reglas) {
+            String pedido = comun + "\n\nREGLA A VERIFICAR:\n" + regla.texto();
+            JsonNode salida;
+            try {
+                salida = proveedor.generar(new SolicitudIA(pedido, ModoIA.VERIFICAR, List.of(), List.of(),
+                        List.of(EsquemaVerificacionRegla.herramienta()), modelo)).comandos().stream()
+                        .filter(c -> EsquemaVerificacionRegla.NOMBRE.equals(c.tipo()))
+                        .map(ComandoPropuestoIA::parametros).findFirst().orElse(null);
+            } catch (ProveedorIAException e) {
+                salida = null; // una regla sin respuesta no tira las demas
+            }
+            var resultado = evaluar(regla, salida, d);
+            verificaciones.add(resultado.verificacion());
+            if (resultado.recomendacion() != null) recomendaciones.add(resultado.recomendacion());
+        }
+        for (String h : hallazgos) recomendaciones.add(new RecomendacionesIA.Recomendacion(0, h, "MEDIA",
+                categoriaDe(h), "", elementosCitados(h, d), h, "Corregir: " + h));
+
+        List<RecomendacionesIA.Recomendacion> numeradas = new ArrayList<>();
+        recomendaciones.stream().sorted(Comparator.comparingInt(r -> rangoDeGravedad(r.gravedad())))
+                .forEach(r -> numeradas.add(new RecomendacionesIA.Recomendacion(numeradas.size() + 1, r.titulo(),
+                        r.gravedad(), r.categoria(), r.regla(), r.elementos(), r.problema(), r.accion())));
+        long cumplen = verificaciones.stream().filter(v -> v.estado().equals("CUMPLE")).count();
+        String resumen = "Se verificaron " + verificaciones.size() + " reglas del requisito: " + cumplen + " se cumplen, "
+                + (verificaciones.size() - cumplen) + " no se cumplen o no se pudieron verificar. "
+                + hallazgos.size() + " hallazgo(s) estructural(es).";
+        return new RecomendacionesIA(diagramId, resumen, List.copyOf(numeradas), List.copyOf(verificaciones),
+                hallazgos, nombreModelo);
+    }
+
+    record Evaluacion(RecomendacionesIA.Verificacion verificacion, RecomendacionesIA.Recomendacion recomendacion) { }
+
+    /**
+     * El veredicto del modelo solo vale si su evidencia existe. Citar un
+     * atributo que no esta en esa clase es exactamente la invencion que hace
+     * fallar a un modelo local: esa verificacion queda NO_VERIFICABLE.
+     */
+    static Evaluacion evaluar(ReglasDelRequisito.Regla regla, JsonNode salida, Diagrama d) {
+        String seccion = regla.seccion().name();
+        if (salida == null) return new Evaluacion(new RecomendacionesIA.Verificacion(regla.numero(), regla.texto(),
+                seccion, "NO_VERIFICABLE", List.of(), "El modelo no respondio esta regla."), null);
+        List<String> validos = new ArrayList<>();
+        List<String> inventados = new ArrayList<>();
+        for (JsonNode e : salida.path("evidencia")) {
+            String citado = e.asText("").trim();
+            if (citado.isEmpty()) continue;
+            String resuelto = resolverElemento(citado, d);
+            if (resuelto != null) validos.add(resuelto); else inventados.add(citado);
+        }
+        String explicacion = salida.path("explicacion").asText("").trim();
+        boolean cumple = salida.path("cumple").asBoolean(false);
+        if (!inventados.isEmpty() && validos.isEmpty()) {
+            return new Evaluacion(new RecomendacionesIA.Verificacion(regla.numero(), regla.texto(), seccion,
+                    "NO_VERIFICABLE", List.of(), "El modelo cito elementos que no existen en el diagrama: "
+                    + String.join(", ", inventados) + "."), null);
+        }
+        var verificacion = new RecomendacionesIA.Verificacion(regla.numero(), regla.texto(), seccion,
+                cumple ? "CUMPLE" : "NO_CUMPLE", List.copyOf(validos), explicacion);
+        String accion = salida.path("accion").asText("").trim();
+        if (cumple || accion.isEmpty()) return new Evaluacion(verificacion, null);
+        Set<String> clases = new LinkedHashSet<>();
+        for (String v : validos) for (String parte : v.split("-")) clases.add(parte);
+        return new Evaluacion(verificacion, new RecomendacionesIA.Recomendacion(0, "Regla " + regla.numero()
+                + " no se cumple", regla.seccion() == ReglasDelRequisito.Seccion.NEGOCIO ? "ALTA" : "MEDIA",
+                "REQUISITO", regla.texto(), List.copyOf(clases), explicacion, accion));
+    }
+
+    /** Clase, Clase.atributo o ClaseA-ClaseB, con el nombre exacto del diagrama; null si no existe. */
+    static String resolverElemento(String citado, Diagrama d) {
+        // Los modelos citan con el mismo formato del contexto que reciben:
+        // "Clase X", "Clase.X.atributo" o "A [1] --COMPOSITION--> B [0..*]".
+        String limpio = citado.replaceAll("\\[[^\\]]*\\]", " ").replaceAll("(?i)\\bclase\\b[\\s.:]*", "").trim();
+        String[] relacion = limpio.split("\\s*(?:--[A-Za-z_]*-->|<-+|-+>?|\u2014|\u2013)\\s*");
+        if (relacion.length > 2) return null;
+        if (relacion.length == 2) {
+            String a = resolverElemento(relacion[0], d), b = resolverElemento(relacion[1], d);
+            if (a == null || b == null || a.contains(".") || b.contains(".")) return null;
+            // Citar como evidencia una relacion que no existe tambien es inventar.
+            boolean existe = d.relaciones().stream().anyMatch(r -> {
+                String s = nombre(d, r.getSourceClassId()), t = nombre(d, r.getTargetClassId());
+                return (s.equals(a) && t.equals(b)) || (s.equals(b) && t.equals(a));
+            });
+            return existe ? a + "-" + b : null;
+        }
+        String[] partes = limpio.split("\\.", 2);
+        UmlClass clase = d.clases().stream().filter(c -> c.getName().equalsIgnoreCase(partes[0].trim()))
+                .findFirst().orElse(null);
+        if (clase == null) return null;
+        if (partes.length == 1) return clase.getName();
+        return d.atributos().getOrDefault(clase.getId(), List.of()).stream()
+                .filter(a -> a.getName().equalsIgnoreCase(partes[1].trim())).findFirst()
+                .map(a -> clase.getName() + "." + a.getName()).orElse(null);
+    }
+
+    private static String categoriaDe(String hallazgo) {
+        if (hallazgo.contains("clave primaria")) return "CLAVE";
+        if (hallazgo.contains("atributo")) return "ATRIBUTO";
+        if (hallazgo.contains("multiplicidad")) return "MULTIPLICIDAD";
+        return "RELACION";
+    }
+
+    private static List<String> elementosCitados(String texto, Diagrama d) {
+        return d.clases().stream().map(UmlClass::getName)
+                .filter(n -> texto.matches("(?s).*\\b" + Pattern.quote(n) + "\\b.*")).toList();
     }
 
     /** Las recomendaciones elegidas, convertidas en UNA propuesta MODIFICAR para revisar y confirmar. */

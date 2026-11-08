@@ -7,5 +7,7 @@ public enum ModoIA {
     DISENAR,
     MODIFICAR,
     /** Revisa el diagrama real y devuelve recomendaciones aplicables, sin cambiar nada. */
-    RECOMENDAR
+    RECOMENDAR,
+    /** Uso interno de RECOMENDAR: verifica UNA regla del requisito contra el diagrama. */
+    VERIFICAR
 }

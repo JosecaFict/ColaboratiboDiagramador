@@ -1,0 +1,66 @@
+Actúa como Arquitecto de Software Senior y diseña desde cero el modelo conceptual UML para un sistema bancario básico.
+
+El diagrama está vacío. Deduce autónomamente las clases, atributos, asociaciones y cardinalidades. No te indicaré cuáles deben ser.
+
+ALCANCE FUNCIONAL
+
+El sistema debe gestionar:
+
+- clientes;
+- cuentas bancarias;
+- cuentas con uno o varios titulares;
+- movimientos de dinero;
+- depósitos y retiros;
+- transferencias entre cuentas;
+- préstamos bancarios;
+- cuotas y pagos de préstamos;
+- historial financiero completo.
+
+REGLAS DE NEGOCIO
+
+El modelo debe permitir:
+
+- identificar cada cuenta de forma única;
+- que un cliente tenga varias cuentas;
+- que una cuenta pueda tener varios titulares;
+- conservar todos los movimientos históricos de una cuenta;
+- representar una transferencia con cuenta de origen y cuenta de destino;
+- evitar modelar una transferencia como dos registros sin vínculo entre ellos;
+- conservar importe, fecha y estado de cada operación;
+- que un préstamo tenga varias cuotas;
+- registrar pagos de cuotas sin eliminar la deuda histórica;
+- impedir conceptualmente saldos o pagos inválidos, aunque esas restricciones requieran lógica de negocio;
+- no duplicar asociaciones mediante atributos de claves foráneas.
+
+REGLAS DE MODELADO
+
+- Usa nombres en español y nombres técnicos sin tildes ni letra ñ.
+- Usa PascalCase singular para clases y camelCase para atributos.
+- Cada clase debe tener responsabilidad clara y atributos esenciales.
+- Incluye identificadores, obligatoriedad y unicidad cuando correspondan.
+- No agregues métodos.
+- No uses una clase Estado si solamente contiene un valor.
+- Especifica multiplicidad en ambos extremos.
+- Conserva entidades transaccionales e históricas.
+- No uses composición cuando pueda provocar la eliminación conceptual del historial.
+- Usa roles claros cuando una clase se relacione dos veces con otra, como origen y destino.
+
+AUTOVERIFICACIÓN
+
+Revisa silenciosamente:
+
+- que las cuentas y sus titulares estén correctamente representados;
+- que una transferencia identifique origen y destino;
+- que ningún movimiento histórico dependa de borrar una cuenta;
+- que un préstamo pueda tener múltiples cuotas y pagos;
+- que no se utilice una relación uno a uno donde se necesita historial;
+- que todas las clases estén conectadas;
+- que todas las relaciones tengan cardinalidad completa.
+
+SALIDA
+
+Genera directamente una propuesta editable de ColabModel con clases, atributos y relaciones en la misma respuesta.
+
+No respondas con Mermaid, PlantUML ni JSON manual.
+
+Incluye una Auditoría de diseño breve sobre trazabilidad financiera, conservación histórica y restricciones que debe implementar la lógica de negocio.

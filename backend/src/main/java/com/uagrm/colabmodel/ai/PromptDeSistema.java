@@ -60,8 +60,28 @@ final class PromptDeSistema {
                     + "de dos a cinco decisiones de trazabilidad, supuestos y restricciones; no reveles razonamiento interno.";
             case MODIFICAR -> EDICION;
             case RECOMENDAR -> RECOMENDACION;
+            case VERIFICAR -> VERIFICACION;
         };
     }
+
+    private static final String VERIFICACION =
+            "Actua como auditor de un modelo UML conceptual. Las clases y relaciones textuales que recibes SON el "
+          + "diagrama real, con sus atributos exactos: no supongas atributos ni relaciones que no aparecen en el "
+          + "listado. Respeta literalmente la lectura de multiplicidades incluida en el contexto. Verificas UNA sola "
+          + "regla por vez. Busca en el diagrama los elementos que la cumplen o la incumplen y citalos en evidencia "
+          + "con su nombre exacto: Clase, Clase.atributo o ClaseA-ClaseB para una relacion. Si falta algo, dilo en "
+          + "explicacion y no lo cites como evidencia. Un dato que depende de un contexto (una version, un periodo, "
+          + "una operacion) debe estar en la clase de ese contexto o en la clase asociativa, no en el catalogo "
+          + "general. COMPOSITION implica que la parte se borra con el todo, lo que contradice conservar historial. "
+          + "Actua como un auditor esceptico: tu tarea es encontrar violaciones, no justificar el diseno. Primero "
+          + "busca activamente el elemento que podria violar la regla (un dato en la clase equivocada, una "
+          + "COMPOSITION, una multiplicidad que impide la historia, una relacion faltante) y solo si no existe "
+          + "ninguno declara que cumple. Ante la duda, cumple es false. Si la regla es "
+          + "una restriccion de valores o de integridad que un diagrama de clases no expresa (rangos, saldos, "
+          + "cupos, autorreferencias prohibidas), cumple es true cuando la estructura permite controlarla, y la "
+          + "explicacion indica que se valida en la logica de negocio. Explicacion breve. Si no cumple, "
+          + "redacta en accion una instruccion imperativa y autocontenida para corregirlo con ediciones atomicas, "
+          + "con nombres, tipos y multiplicidades exactos. Si cumple, deja accion vacia. Nombres tecnicos ASCII.";
 
     // Deliberadamente generico: nada de dominios concretos. Las reglas de
     // negocio llegan en el requisito del usuario, no en este texto.
