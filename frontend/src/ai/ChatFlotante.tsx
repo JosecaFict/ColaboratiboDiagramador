@@ -159,7 +159,10 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle }
       <form className="chat-entrada" onSubmit={(e) => { e.preventDefault(); mandar() }}>
         <div className="chat-intencion">
           <span>Lo haré como:</span>
-          <select value={intencion} onChange={(e) => setIntencionManual(e.target.value as Intencion)}>
+          {/* Sin texto todavia no hay intencion que mostrar: "Preguntar" por defecto confundia. */}
+          <select value={!texto.trim() && !intencionManual ? '' : intencion}
+            onChange={(e) => setIntencionManual(e.target.value ? e.target.value as Intencion : null)}>
+            {!texto.trim() && !intencionManual && <option value="">según lo que escribas</option>}
             {INTENCIONES.map((i) => <option key={i} value={i}>{NOMBRE_INTENCION[i]}</option>)}
           </select>
         </div>
