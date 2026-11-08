@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -30,28 +33,43 @@ import java.util.List;
 @ConditionalOnProperty(prefix = "colabmodel.ai", name = "proveedor", havingValue = "ollama")
 public class ProveedorOllama implements ProveedorDeIA {
 
+    private static final Logger log = LoggerFactory.getLogger(ProveedorOllama.class);
+
     private static final int MAX_RONDAS_DE_HERRAMIENTAS = 8;
     private static final int MAX_LLAMADAS_ACUMULADAS = 48;
+    /** Ollama recorta el principio del prompt sin avisar cuando supera num_ctx. */
+    static final double UMBRAL_AVISO_CONTEXTO = 0.9;
+    static final String KEEP_ALIVE_PREDETERMINADO = "10m";
 
     private final String baseUrl;
     private final CatalogoModelosOllama modelos;
     private final int contexto;
     private final double temperatura;
     private final Duration timeout;
+    private final String keepAlive;
     private final ObjectMapper mapper;
-    private final HttpClient http = HttpClient.newHttpClient();
+    // Si Ollama no esta levantado, falla en segundos y no tras el timeout de inferencia.
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
+    public ProveedorOllama(String baseUrl, int contexto, double temperatura, long timeoutMs,
+                           ObjectMapper mapper, CatalogoModelosOllama modelos) {
+        this(baseUrl, contexto, temperatura, timeoutMs, KEEP_ALIVE_PREDETERMINADO, mapper, modelos);
+    }
+
+    @Autowired
     public ProveedorOllama(
             @Value("${colabmodel.ai.ollama.base-url:http://localhost:11434}") String baseUrl,
             @Value("${colabmodel.ai.ollama.contexto:4096}") int contexto,
             @Value("${colabmodel.ai.ollama.temperatura:0.1}") double temperatura,
             @Value("${colabmodel.ai.ollama.timeout-ms:120000}") long timeoutMs,
+            @Value("${colabmodel.ai.ollama.keep-alive:" + KEEP_ALIVE_PREDETERMINADO + "}") String keepAlive,
             ObjectMapper mapper, CatalogoModelosOllama modelos) {
         this.baseUrl = baseUrl;
         this.modelos = modelos;
         this.contexto = contexto;
         this.temperatura = temperatura;
         this.timeout = Duration.ofMillis(timeoutMs);
+        this.keepAlive = keepAlive;
         this.mapper = mapper;
     }
 
@@ -67,6 +85,9 @@ public class ProveedorOllama implements ProveedorDeIA {
         body.put("model", model);
         body.put("stream", false);
         body.put("think", modelos.usaThinking(model));
+        // Cada pedido reinicia el temporizador: mientras se usa la IA el modelo
+        // sigue en la GPU, y tras ese tiempo sin uso Ollama libera la VRAM solo.
+        body.put("keep_alive", keepAlive);
         body.putObject("options").put("num_ctx", contexto).put("temperature", temperatura);
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", solicitud.instruccionDeSistema());
@@ -350,7 +371,41 @@ public class ProveedorOllama implements ProveedorDeIA {
         if (resp.statusCode() / 100 != 2) {
             throw new ProveedorIAException("Ollama respondio " + resp.statusCode() + ": " + resp.body());
         }
+        registrarTelemetria(body, resp.body());
         return parsearTurno(resp.body());
+    }
+
+    /** Lo que Ollama ya informa en cada respuesta; las duraciones vienen en nanosegundos. */
+    record Telemetria(int tokensPrompt, int tokensSalida, long cargaMs, long totalMs, double tokensPorSegundo) {
+        boolean cercaDelLimite(int contexto) {
+            return tokensPrompt >= contexto * UMBRAL_AVISO_CONTEXTO;
+        }
+    }
+
+    static Telemetria leerTelemetria(JsonNode raiz) {
+        long generacionNs = raiz.path("eval_duration").asLong(0);
+        int salida = raiz.path("eval_count").asInt(0);
+        return new Telemetria(raiz.path("prompt_eval_count").asInt(0), salida,
+                raiz.path("load_duration").asLong(0) / 1_000_000, raiz.path("total_duration").asLong(0) / 1_000_000,
+                generacionNs > 0 ? salida * 1_000_000_000.0 / generacionNs : 0);
+    }
+
+    private void registrarTelemetria(ObjectNode body, String cuerpo) {
+        Telemetria t;
+        try {
+            t = leerTelemetria(mapper.readTree(cuerpo));
+        } catch (IOException e) {
+            return; // parsearTurno informa el error con su propio mensaje
+        }
+        int contextoPedido = body.path("options").path("num_ctx").asInt(contexto);
+        log.info("Ollama {}: prompt={} tokens, salida={} tokens, {} tok/s, carga={} ms, total={} ms",
+                body.path("model").asText(), t.tokensPrompt(), t.tokensSalida(),
+                String.format(java.util.Locale.ROOT, "%.1f", t.tokensPorSegundo()), t.cargaMs(), t.totalMs());
+        if (t.cercaDelLimite(contextoPedido)) {
+            log.warn("El prompt uso {} de {} tokens de contexto: Ollama pudo recortar el principio "
+                    + "(instrucciones de sistema). Subir colabmodel.ai.ollama.contexto o acortar el pedido.",
+                    t.tokensPrompt(), contextoPedido);
+        }
     }
 
     private RespuestaIA parsear(String cuerpo) {

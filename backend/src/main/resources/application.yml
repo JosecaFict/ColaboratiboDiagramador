@@ -88,6 +88,10 @@ colabmodel:
       # Si el primer intento no usa la herramienta, la recuperacion estructurada
       # dispone de su propio intento con el mismo limite.
       timeout-ms: 180000
+      # Cuanto tiempo queda el modelo en la VRAM despues del ultimo pedido.
+      # Cada pedido reinicia la cuenta: Disenar y luego el asistente usan el
+      # modelo ya cargado. Pasado este tiempo sin uso, Ollama libera la GPU.
+      keep-alive: 10m
   vision:
     # Unico endpoint que acepta un binario arbitrario de afuera.
     max-bytes: 8388608        # 8 MB del archivo comprimido
