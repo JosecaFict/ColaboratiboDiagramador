@@ -62,6 +62,33 @@ describe('listo para generar', () => {
       .not.toContain('El atributo Venta.estado usa el tipo "EstadoVenta", que el generador no conoce.')
   })
 
+  it('academico real: periodo como texto, creditos en el catalogo y un unico prerrequisito', () => {
+    const academico: EstadoModelo = { diagramId: 'd', layout: {},
+      classes: [
+        clase('pa', 'PlanAcademico', [atributo('pa1', 'id', 'uuid', true), atributo('pa2', 'nombreVersion', 'string')]),
+        clase('pe', 'PeriodoAcademico', [atributo('pe1', 'id', 'uuid', true), atributo('pe2', 'nombre', 'string')]),
+        clase('de', 'DetallePlan', [atributo('de1', 'id', 'uuid', true), atributo('de2', 'caracter', 'string')]),
+        clase('as', 'Asignatura', [atributo('as1', 'id', 'uuid', true), atributo('as2', 'creditos', 'int'), atributo('as3', 'cargaHoraria', 'int')]),
+        clase('pr', 'Prerrequisito', [atributo('pr1', 'id', 'uuid', true), atributo('pr2', 'periodoMinimo', 'int')]),
+        clase('ad', 'AsignacionDocente', [atributo('ad1', 'id', 'uuid', true), atributo('ad2', 'periodoAcademico', 'string')]),
+      ],
+      relationships: [rel('r1', 'pa', 'de', '1', '0..*'), rel('r2', 'de', 'as', '0..*', '1'), rel('r3', 'de', 'pr', '0..*', '1'),
+        rel('r4', 'pr', 'as', '0..*', '1'), rel('r5', 'ad', 'de', '0..*', '1')] }
+    const r = revisarParaGenerar(academico, null, null)
+    const buscar = (inicio: string) => r.recomendaciones.find((x) => x.titulo.startsWith(inicio))!
+
+    const periodo = buscar('AsignacionDocente.periodoAcademico guarda como texto')
+    expect(r.arreglos![periodo.id][0].cambios.map((c) => c.tipo)).toEqual(['CREATE_RELATION', 'REMOVE_ATTRIBUTE'])
+
+    const creditos = buscar('creditos, cargaHoraria estan en Asignatura')
+    expect(r.arreglos![creditos.id][0].etiqueta).toBe('Pasar creditos, cargaHoraria a DetallePlan')
+    expect(r.arreglos![creditos.id][0].cambios.map((c) => c.tipo)).toEqual(['ADD_ATTRIBUTE', 'REMOVE_ATTRIBUTE', 'ADD_ATTRIBUTE', 'REMOVE_ATTRIBUTE'])
+
+    const prerrequisito = buscar('DetallePlan - Prerrequisito obliga')
+    expect(r.arreglos![prerrequisito.id][0].cambios[0].payload).toMatchObject({ relationId: 'r3', sourceMultiplicity: '1', targetMultiplicity: '0..*' })
+    expect(r.recomendaciones.some((x) => x.titulo.startsWith('Prerrequisito - Asignatura'))).toBe(false)
+  })
+
   it('arma identificadores Java validos', () => {
     expect(identificadorJava('Año de ingreso', false)).toBe('anoDeIngreso')
     expect(identificadorJava('class', false)).toBe('classValor')

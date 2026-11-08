@@ -105,6 +105,59 @@ export function revisarParaGenerar(modelo: EstadoModelo, resumen: ResumenCodegen
       [completar('0..*', '1'), completar('1', '0..*')])
   }
 
+  // Academico 2026-11-08: tres errores de modelo que el generador acepta, pero que producen una base equivocada.
+  const vecinas = (id: string) => new Set(modelo.relationships.flatMap((r) =>
+    r.sourceClassId === id ? [r.targetClassId] : r.targetClassId === id ? [r.sourceClassId] : []))
+  for (const c of modelo.classes) {
+    for (const a of c.attributes) {
+      // 1. periodoAcademico: string -> una clave foranea guardada como texto libre.
+      const destino = !a.pk && modelo.classes.find((d) => d.id !== c.id && d.name.toLowerCase() === a.name.toLowerCase())
+      if (!destino) continue
+      const yaUnidas = vecinas(c.id).has(destino.id)
+      agregar('MEDIA', `${c.name}.${a.name} guarda como texto una referencia a ${destino.name}: no habra clave foranea `
+        + `y se podra escribir un ${destino.name} que no existe.`, [c.name, destino.name], [{
+        etiqueta: yaUnidas ? `Quitar ${a.name} (la relacion con ${destino.name} ya existe)` : `Convertir en relacion con ${destino.name}`,
+        cambios: [
+          ...(yaUnidas ? [] : [{ tipo: 'CREATE_RELATION' as const, payload: { relationId: uuid(), sourceClassId: c.id,
+            targetClassId: destino.id, kind: 'ASSOCIATION', sourceMultiplicity: '0..*', targetMultiplicity: a.required ? '1' : '0..1' },
+            resumen: `Crear relacion ASSOCIATION entre ${c.name} y ${destino.name} [0..*] — [${a.required ? '1' : '0..1'}]` }]),
+          { tipo: 'REMOVE_ATTRIBUTE' as const, payload: { attributeId: a.id }, resumen: `Quitar el atributo ${c.name}.${a.name}` },
+        ] }])
+    }
+  }
+  // 2. Creditos y carga horaria en el catalogo, cuando hay una clase que une la asignatura con el plan.
+  for (const asig of modelo.classes.filter((c) => /^(asignatura|materia)/i.test(c.name))) {
+    const datos = asig.attributes.filter((a) => !a.pk && /^(credito|cargahoraria|horas|nivel|caracter|obligatori|electiv)/i.test(a.name))
+    const detalle = modelo.classes.find((d) => d.id !== asig.id && !/^plan/i.test(d.name) && vecinas(asig.id).has(d.id)
+      && [...vecinas(d.id)].some((v) => /^plan/i.test(nombre(v))))
+    if (!datos.length || !detalle) continue
+    const lista = datos.map((a) => a.name).join(', ')
+    agregar('MEDIA', `${lista} esta${datos.length === 1 ? '' : 'n'} en ${asig.name}: valen igual para todos los planes, `
+      + `y un cambio en una version nueva reescribe las anteriores.`, [asig.name, detalle.name], [{
+      etiqueta: `Pasar ${lista} a ${detalle.name}`,
+      cambios: datos.flatMap((a) => [
+        ...(detalle.attributes.some((x) => x.name.toLowerCase() === a.name.toLowerCase()) ? [] : [{ tipo: 'ADD_ATTRIBUTE' as const,
+          payload: { attributeId: uuid(), classId: detalle.id, name: a.name, dataType: a.dataType, required: a.required,
+            unique: false, pk: false }, resumen: `Agregar atributo ${a.name} (${a.dataType}) a ${detalle.name}` }]),
+        { tipo: 'REMOVE_ATTRIBUTE' as const, payload: { attributeId: a.id }, resumen: `Quitar el atributo ${asig.name}.${a.name}` },
+      ]) }])
+  }
+  // 3. Detalle [0..*] - [1] Prerrequisito: cada asignatura con exactamente un prerrequisito.
+  for (const r of modelo.relationships) {
+    const s = nombre(r.sourceClassId), t = nombre(r.targetClassId)
+    const requisitoEsOrigen = /^prerrequisito/i.test(s)
+    if (requisitoEsOrigen === /^prerrequisito/i.test(t)) continue
+    const mRequisito = requisitoEsOrigen ? r.sourceMultiplicity : r.targetMultiplicity
+    const mOtro = (requisitoEsOrigen ? r.targetMultiplicity : r.sourceMultiplicity) ?? ''
+    if (!(mRequisito === '1' || mRequisito === '0..1') || !mOtro.includes('*')) continue
+    const otro = requisitoEsOrigen ? t : s
+    agregar('MEDIA', `${s} - ${t} obliga a que cada ${otro} tenga exactamente un prerrequisito: no admite materias sin `
+      + `prerrequisitos ni con varios.`, [s, t], [{ etiqueta: `Un ${otro} con 0..* prerrequisitos`, cambios: [{
+        tipo: 'UPDATE_RELATION', payload: { relationId: r.id,
+          sourceMultiplicity: requisitoEsOrigen ? '0..*' : '1', targetMultiplicity: requisitoEsOrigen ? '1' : '0..*' },
+        resumen: `Cambiar ${s} - ${t}: un ${otro} tiene 0..* prerrequisitos` }] }])
+  }
+
   for (const c of resumen?.correcciones ?? []) {
     agregar('MEDIA', `Nombre de relacion: ${c.descripcion}`, [], [{ etiqueta: `Renombrar a ${c.name}`,
       cambios: [{ tipo: 'UPDATE_RELATION', payload: { relationId: c.relationId, name: c.name }, resumen: c.descripcion }] }])
