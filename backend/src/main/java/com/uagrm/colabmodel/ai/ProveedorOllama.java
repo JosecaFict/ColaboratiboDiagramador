@@ -105,6 +105,13 @@ public class ProveedorOllama implements ProveedorDeIA {
         }
 
         try {
+            if (solicitud.herramientas().size() == 1
+                    && EsquemaRecomendaciones.NOMBRE.equals(solicitud.herramientas().get(0).nombre())) {
+                // Revisar exige razonar sobre el diagrama: si el modelo piensa,
+                // el razonamiento consume del mismo presupuesto de salida.
+                boolean piensa = modelos.usaThinking(model);
+                return generarConFormato(body, solicitud.herramientas().get(0), piensa ? 6144 : 2048, piensa);
+            }
             boolean planCompleto = solicitud.herramientas().size() == 1
                     && EsquemaPlanUml.NOMBRE.equals(solicitud.herramientas().get(0).nombre());
             if (planCompleto) {
@@ -182,6 +189,28 @@ public class ProveedorOllama implements ProveedorDeIA {
         if (segundoError == null) return respuestaEstructurada;
         throw new ProveedorIAException("Ollama no pudo producir un plan UML completo. Primer intento: "
                 + primerError + "; recuperacion estructurada: " + segundoError);
+    }
+
+    /**
+     * Salida restringida por gramatica desde el primer intento: Ollama solo
+     * puede emitir JSON que cumple el esquema, asi que no hay herramienta que
+     * el modelo olvide llamar. Se envuelve como la llamada que espera el servicio.
+     */
+    private RespuestaIA generarConFormato(ObjectNode body, HerramientaIA herramienta, int maximoTokens,
+                                          boolean piensa) throws IOException, InterruptedException {
+        body.remove("tools");
+        body.put("think", piensa);
+        body.set("format", herramienta.parametros().deepCopy());
+        ((ObjectNode) body.path("options")).put("num_predict", maximoTokens);
+        String contenido = enviarTurno(body).respuesta().notaDelModelo();
+        try {
+            JsonNode salida = mapper.readTree(extraerObjetoJson(contenido));
+            if (!salida.isObject()) throw new IOException("no es un objeto");
+            return new RespuestaIA(List.of(new ComandoPropuestoIA(herramienta.nombre(), salida)), "");
+        } catch (IOException e) {
+            throw new ProveedorIAException("Ollama devolvio una salida que no cumple el formato de "
+                    + herramienta.nombre() + " (posiblemente cortada por el limite de " + maximoTokens + " tokens)");
+        }
     }
 
     private static ComandoPropuestoIA buscarPlan(RespuestaIA respuesta) {

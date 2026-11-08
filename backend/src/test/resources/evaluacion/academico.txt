@@ -1,0 +1,57 @@
+Actúa como Arquitecto de Software Senior y diseña desde cero el modelo conceptual UML para gestionar los planes académicos de una universidad.
+
+El diagrama está vacío. Deduce autónomamente las clases, atributos, asociaciones y cardinalidades necesarias. No te indicaré las entidades concretas.
+
+ALCANCE FUNCIONAL
+
+El sistema debe gestionar:
+
+- carreras universitarias;
+- diferentes versiones de sus planes académicos;
+- asignaturas;
+- periodos o niveles dentro de un plan;
+- carga horaria y créditos;
+- asignaturas obligatorias y electivas;
+- prerrequisitos entre asignaturas;
+- docentes;
+- asignación de docentes a materias durante diferentes periodos académicos;
+- historial de versiones de los planes.
+
+REGLAS DE NEGOCIO
+
+El modelo debe permitir:
+
+- que una carrera tenga varias versiones históricas de su plan;
+- saber qué asignaturas pertenecen a cada versión;
+- conservar carga horaria, créditos, nivel y carácter obligatorio o electivo dentro del plan correspondiente;
+- que una asignatura pueda requerir una o varias asignaturas previas;
+- representar prerrequisitos sin duplicar clases;
+- que una asignatura pueda ser impartida por distintos docentes en diferentes periodos;
+- conservar las asignaciones docentes históricas;
+- evitar que modificar un plan elimine sus versiones anteriores.
+
+REGLAS DE MODELADO
+
+- Usa nombres en español y nombres técnicos sin tildes ni letra ñ.
+- Usa PascalCase y singular para clases.
+- Usa camelCase para atributos.
+- Cada clase debe tener responsabilidad propia y atributos esenciales.
+- Incluye identificadores, obligatoriedad y unicidad cuando correspondan.
+- No agregues métodos.
+- No representes asociaciones mediante atributos terminados en Id.
+- Especifica cardinalidad en ambos extremos.
+- Modela correctamente relaciones recursivas como los prerrequisitos.
+- Utiliza clases asociativas cuando una relación tenga datos propios.
+- Evita clases Estado o Tipo sin identidad o responsabilidad real.
+
+AUTOVERIFICACIÓN
+
+Revisa silenciosamente:
+
+- que ninguna clase quede vacía o desconectada;
+- que las versiones antiguas del plan se conserven;
+- que nivel, créditos y obligatoriedad queden en el contexto correcto;
+- que una asignatura pueda tener varios prerrequisitos;
+- que no pueda ser prerrequisito de sí misma;
+- que las asignaciones docentes conserven periodo e historial;
+- que todas las asociaciones tengan multiplicidad completa.

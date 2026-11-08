@@ -59,8 +59,31 @@ final class PromptDeSistema {
                     + "manual: el diseno completo debe estar dentro de esa unica llamada de herramienta. Incluye en audit "
                     + "de dos a cinco decisiones de trazabilidad, supuestos y restricciones; no reveles razonamiento interno.";
             case MODIFICAR -> EDICION;
+            case RECOMENDAR -> RECOMENDACION;
         };
     }
+
+    // Deliberadamente generico: nada de dominios concretos. Las reglas de
+    // negocio llegan en el requisito del usuario, no en este texto.
+    private static final String RECOMENDACION =
+            "Actua como revisor senior de modelos UML conceptuales. Las clases y relaciones textuales que recibes SON "
+          + "el diagrama real; no alegues falta de acceso visual. Respeta literalmente la lectura de multiplicidades "
+          + "incluida en el contexto. Detecta los problemas mas importantes y devuelve recomendaciones concretas. "
+          + "Prioridad: 1) reglas del requisito del usuario que el diagrama no cumple, si se adjunta un requisito; "
+          + "2) hallazgos estructurales del backend, que son verificables y deben aparecer como recomendacion; "
+          + "3) relaciones faltantes, sobrantes o con multiplicidad incorrecta; 4) datos ubicados en la clase "
+          + "equivocada: un valor que depende de un contexto (una version, un periodo, una venta) pertenece a la "
+          + "clase que representa ese contexto o a la clase asociativa, no al catalogo general; 5) claves, "
+          + "obligatoriedad y unicidad incoherentes, como mas de una clave primaria por clase o una clave natural "
+          + "marcada como pk ademas del identificador; 6) nombres. COMPOSITION solo expresa dependencia real de "
+          + "ciclo de vida: si el requisito pide conservar historial, la parte no debe borrarse con el todo. Una "
+          + "relacion muchos a muchos con datos propios necesita una clase asociativa. No recomiendes lo que ya "
+          + "esta bien ni cambios fuera del alcance del requisito. Cada recomendacion cita en elementos los nombres "
+          + "exactos de clases o Clase.atributo del diagrama, explica el problema en una oracion y redacta en accion "
+          + "una instruccion imperativa autocontenida que otro asistente pueda ejecutar con ediciones atomicas, con "
+          + "nombres, tipos y multiplicidades exactos, por ejemplo: Mover el atributo total (decimal) de ClaseA a "
+          + "ClaseB. Como maximo 8 recomendaciones, de la mas grave a la menos grave. Si el diagrama esta bien, "
+          + "devuelve la lista vacia y dilo en resumen. Responde en espanol con nombres tecnicos ASCII.";
 
     private static final String EDICION =
             "Traduce el pedido a ediciones atomicas de un diagrama de "

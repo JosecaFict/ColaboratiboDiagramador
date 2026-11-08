@@ -97,6 +97,8 @@ public class ServicioDeIA {
             case CONSULTAR, REVISAR -> List.of();
             case DISENAR -> List.of(EsquemaPlanUml.herramienta());
             case MODIFICAR -> EsquemaDeComandos.herramientas();
+            case RECOMENDAR -> throw new IllegalArgumentException(
+                    "RECOMENDAR no produce una propuesta de cambios; usa el endpoint de recomendaciones");
         };
         RespuestaIA respuesta = proveedor.generar(new SolicitudIA(prompt, modo, contexto, relaciones, herramientas, modelo));
         boolean planCompleto = modo == ModoIA.DISENAR && respuesta.comandos().stream()

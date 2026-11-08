@@ -5,5 +5,7 @@ public enum ModoIA {
     CONSULTAR,
     REVISAR,
     DISENAR,
-    MODIFICAR
+    MODIFICAR,
+    /** Revisa el diagrama real y devuelve recomendaciones aplicables, sin cambiar nada. */
+    RECOMENDAR
 }
