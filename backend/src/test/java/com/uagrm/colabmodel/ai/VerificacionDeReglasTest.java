@@ -143,6 +143,32 @@ class VerificacionDeReglasTest {
     }
 
     @Test
+    void un_auditor_externo_revisa_todo_en_una_llamada_y_el_proveedor_local_no_interviene() throws Exception {
+        academico();
+        UmlClassRepository classes = mock(UmlClassRepository.class);
+        when(classes.findByDiagramIdAndDeletedAtIsNullOrderByNameAsc(diagramId)).thenReturn(clases);
+        UmlAttributeRepository attributes = mock(UmlAttributeRepository.class);
+        when(attributes.findByClassIdInOrderByOrdinalAsc(any())).thenReturn(atributos);
+        UmlRelationshipRepository relationships = mock(UmlRelationshipRepository.class);
+        when(relationships.findByDiagramIdAndDeletedAtIsNull(diagramId)).thenReturn(relaciones);
+        ProveedorDeIA local = mock(ProveedorDeIA.class);
+        ProveedorDeIA externo = mock(ProveedorDeIA.class);
+        when(externo.nombre()).thenReturn("claude");
+        when(externo.generar(any())).thenReturn(new RespuestaIA(List.of(new ComandoPropuestoIA(
+                EsquemaRecomendaciones.NOMBRE, mapper.readTree("{\"resumen\":\"ok\",\"recomendaciones\":[]}"))), ""));
+        var servicio = ServicioDeRecomendaciones.conAuditor(local, externo, classes, attributes, relationships,
+                mock(ServicioDeIA.class));
+
+        var r = servicio.recomendar(diagramId, "REGLAS DE NEGOCIO\n- conservar creditos;\n- otra regla;\n",
+                "qwen3.5:9b-q4_K_M");
+
+        verify(externo, times(1)).generar(any());
+        verifyNoInteractions(local);
+        assertThat(r.modelo()).isEqualTo("claude");
+        assertThat(r.verificaciones()).isEmpty();
+    }
+
+    @Test
     void con_reglas_hace_una_pregunta_por_regla_y_la_regla_va_al_final_del_pedido() throws Exception {
         academico();
         UmlClassRepository classes = mock(UmlClassRepository.class);

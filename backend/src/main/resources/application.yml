@@ -51,6 +51,14 @@ colabmodel:
     # "claude", "gemini" u "ollama" (ADR-017). El resto del codigo no sabe
     # cual esta activa: cambiar esto no toca ninguna otra clase.
     proveedor: ollama
+    auditoria:
+      # Quien revisa el diagrama y recomienda mejoras (modo RECOMENDAR):
+      #   activo -> el mismo proveedor de arriba (con Ollama: regla por regla)
+      #   claude -> SOLO la auditoria va a Claude, en una llamada; Disenar,
+      #             Modificar y Consultar siguen en el proveedor activo.
+      #             Requiere ANTHROPIC_API_KEY; revisar antes claude.model,
+      #             que define el costo por auditoria.
+      proveedor: activo
     # La misma conexion sirve al prompt de texto y a la lectura de imagen
     # (vision.nivel2.proveedor: claude). ADR-025.
     claude:

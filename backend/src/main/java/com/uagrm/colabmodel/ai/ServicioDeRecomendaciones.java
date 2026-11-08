@@ -3,6 +3,8 @@ package com.uagrm.colabmodel.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.uagrm.colabmodel.modelcore.command.Origin;
 import com.uagrm.colabmodel.modelcore.metamodel.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -22,8 +24,13 @@ import java.util.stream.Collectors;
 @Service
 public class ServicioDeRecomendaciones {
 
-
-    private final ProveedorDeIA proveedor;
+    /**
+     * Quien audita. Por defecto el mismo proveedor que disena; con
+     * `colabmodel.ai.auditoria.proveedor: claude` solo la auditoria va a Claude
+     * y Disenar, Modificar y Consultar siguen en el proveedor activo.
+     */
+    private final ProveedorDeIA auditor;
+    private final String nombreAuditor;
     private final UmlClassRepository classes;
     private final UmlAttributeRepository attributes;
     private final UmlRelationshipRepository relationships;
@@ -32,11 +39,36 @@ public class ServicioDeRecomendaciones {
     public ServicioDeRecomendaciones(ProveedorDeIA proveedor, UmlClassRepository classes,
                                      UmlAttributeRepository attributes, UmlRelationshipRepository relationships,
                                      ServicioDeIA servicioDeIA) {
-        this.proveedor = proveedor;
+        this(proveedor, null, classes, attributes, relationships, servicioDeIA);
+    }
+
+    @Autowired
+    public ServicioDeRecomendaciones(ProveedorDeIA proveedor, ClienteClaude claude,
+                                     @Value("${colabmodel.ai.auditoria.proveedor:activo}") String auditoria,
+                                     @Value("${colabmodel.ai.claude.timeout-ms:60000}") long timeoutClaudeMs,
+                                     UmlClassRepository classes, UmlAttributeRepository attributes,
+                                     UmlRelationshipRepository relationships, ServicioDeIA servicioDeIA) {
+        this(proveedor, "claude".equalsIgnoreCase(auditoria) && !"claude".equals(proveedor.nombre())
+                        ? new ProveedorClaude(claude, timeoutClaudeMs) : null,
+                classes, attributes, relationships, servicioDeIA);
+    }
+
+    private ServicioDeRecomendaciones(ProveedorDeIA proveedor, ProveedorDeIA auditorExterno, UmlClassRepository classes,
+                                      UmlAttributeRepository attributes, UmlRelationshipRepository relationships,
+                                      ServicioDeIA servicioDeIA) {
+        this.auditor = auditorExterno == null ? proveedor : auditorExterno;
+        this.nombreAuditor = auditorExterno == null ? null : auditorExterno.nombre();
         this.classes = classes;
         this.attributes = attributes;
         this.relationships = relationships;
         this.servicioDeIA = servicioDeIA;
+    }
+
+    /** Solo para pruebas: un auditor distinto del proveedor que disena. */
+    static ServicioDeRecomendaciones conAuditor(ProveedorDeIA proveedor, ProveedorDeIA auditor,
+                                                UmlClassRepository classes, UmlAttributeRepository attributes,
+                                                UmlRelationshipRepository relationships, ServicioDeIA servicioDeIA) {
+        return new ServicioDeRecomendaciones(proveedor, auditor, classes, attributes, relationships, servicioDeIA);
     }
 
     /** El diagrama tal como lo ve la revision: clases con sus atributos y relaciones con nombres de clase. */
@@ -55,11 +87,18 @@ public class ServicioDeRecomendaciones {
         }
         List<RevisorDeterministico.Hallazgo> hallazgos = RevisorDeterministico.revisar(d, requisito);
         List<String> textos = hallazgos.stream().map(RevisorDeterministico.Hallazgo::texto).toList();
-        String nombreModelo = modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo;
+        // Un auditor externo recibe el modelo local elegido en la UI, que no le
+        // corresponde: se informa su propio nombre.
+        String nombreModelo = nombreAuditor != null ? nombreAuditor
+                : modelo == null || modelo.isBlank() ? auditor.nombre() : modelo;
         List<ReglasDelRequisito.Regla> reglas = ReglasDelRequisito.extraer(requisito);
-        if (!reglas.isEmpty()) return verificarReglas(diagramId, requisito, reglas, hallazgos, d, modelo, nombreModelo);
+        // Regla por regla es lo que un modelo local puede sostener. Un modelo
+        // grande revisa todo el requisito en una sola llamada, mas barata que
+        // repetir el contexto por cada regla.
+        if (!reglas.isEmpty() && nombreAuditor == null)
+            return verificarReglas(diagramId, requisito, reglas, hallazgos, d, modelo, nombreModelo);
 
-        RespuestaIA respuesta = proveedor.generar(new SolicitudIA(pedido(requisito, textos), ModoIA.RECOMENDAR,
+        RespuestaIA respuesta = auditor.generar(new SolicitudIA(pedido(requisito, textos), ModoIA.RECOMENDAR,
                 contexto(d), relacionesEnContexto(d), List.of(EsquemaRecomendaciones.herramienta()), modelo));
         JsonNode salida = respuesta.comandos().stream()
                 .filter(c -> EsquemaRecomendaciones.NOMBRE.equals(c.tipo()))
@@ -106,7 +145,7 @@ public class ServicioDeRecomendaciones {
             String pedido = comun + "\n\nREGLA A VERIFICAR:\n" + regla.texto();
             JsonNode salida;
             try {
-                salida = proveedor.generar(new SolicitudIA(pedido, ModoIA.VERIFICAR, List.of(), List.of(),
+                salida = auditor.generar(new SolicitudIA(pedido, ModoIA.VERIFICAR, List.of(), List.of(),
                         List.of(EsquemaVerificacionRegla.herramienta()), modelo)).comandos().stream()
                         .filter(c -> EsquemaVerificacionRegla.NOMBRE.equals(c.tipo()))
                         .map(ComandoPropuestoIA::parametros).findFirst().orElse(null);
