@@ -107,15 +107,15 @@ class LoteTest {
     }
 
     @Test
-    void desde_texto_o_voz_el_tope_es_treinta_y_dos_cambios() {
-        ObjectNode[] treintaYTres = new ObjectNode[33];
-        for (int i = 0; i < 33; i++) treintaYTres[i] = crearClase(UUID.randomUUID(), "C" + i);
+    void desde_texto_o_voz_el_tope_es_cuarenta_y_ocho_cambios() {
+        ObjectNode[] cuarentaYNueve = new ObjectNode[49];
+        for (int i = 0; i < 49; i++) cuarentaYNueve[i] = crearClase(UUID.randomUUID(), "C" + i);
 
         // Un plan completo pequeno entra; uno mayor se divide para mantenerlo revisable.
-        var e = catchThrowableOfType(() -> Lote.de(batch(Origin.TEXT, treintaYTres)), CommandRejectedException.class);
-        assertThat(e.getMessage()).contains("tope").contains("32");
+        var e = catchThrowableOfType(() -> Lote.de(batch(Origin.TEXT, cuarentaYNueve)), CommandRejectedException.class);
+        assertThat(e.getMessage()).contains("tope").contains("48");
         // La misma cantidad desde una importacion si entra.
-        assertThat(Lote.de(batch(Origin.XMI_IMPORT, treintaYTres)).comandos()).hasSize(33);
+        assertThat(Lote.de(batch(Origin.XMI_IMPORT, cuarentaYNueve)).comandos()).hasSize(49);
     }
 
     // ------------------------------------------------------------ APLICACION

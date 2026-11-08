@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
  * No alcanza con que `PropuestaDeIA` DIGA que hay un maximo de cambios: hay
  * que probar que, cuando eso se manda por el mismo camino que cualquier otro
  * BATCH (CommandApplier, ADR-002/ADR-016), el efecto real sobre el modelo
- * tampoco pasa de 32, aunque el proveedor haya propuesto 50.
+ * tampoco pasa de 48, aunque el proveedor haya propuesto 50.
  */
 class ServicioDeIABatchAplicacionTest {
 
@@ -31,7 +31,7 @@ class ServicioDeIABatchAplicacionTest {
     private final UUID diagramId = UUID.randomUUID();
 
     @Test
-    void aplicar_el_batch_de_la_ia_nunca_crea_mas_de_treinta_y_dos_clases_aunque_el_modelo_proponga_cincuenta() {
+    void aplicar_el_batch_de_la_ia_nunca_crea_mas_de_cuarenta_y_ocho_clases_aunque_el_modelo_proponga_cincuenta() {
         UmlClassRepository classes = mock(UmlClassRepository.class);
         when(classes.findByDiagramIdAndDeletedAtIsNullOrderByNameAsc(diagramId)).thenReturn(List.of());
         UmlAttributeRepository attributes = mock(UmlAttributeRepository.class);
@@ -50,7 +50,7 @@ class ServicioDeIABatchAplicacionTest {
 
         PropuestaDeIA propuesta = servicio.generar(diagramId, "disename un sistema completo de biblioteca", Origin.TEXT);
         Command batch = servicio.comandoBatchDe(propuesta);
-        assertThat(propuesta.aceptados()).hasSize(32);
+        assertThat(propuesta.aceptados()).hasSize(48);
 
         DiagramRepository diagrams = mock(DiagramRepository.class);
         Diagram d = new Diagram();
@@ -64,8 +64,8 @@ class ServicioDeIABatchAplicacionTest {
 
         applier.apply(batch, UUID.randomUUID());
 
-        // El efecto real, no solo la propuesta: 32 clases guardadas, ni una mas
+        // El efecto real, no solo la propuesta: 48 clases guardadas, ni una mas
         // de las 50 que el proveedor simulado ofrecio.
-        verify(classes, times(32)).saveAndFlush(any());
+        verify(classes, times(48)).saveAndFlush(any());
     }
 }

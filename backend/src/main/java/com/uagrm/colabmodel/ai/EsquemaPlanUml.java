@@ -32,15 +32,15 @@ final class EsquemaPlanUml {
         requeridos(clase, "name", "attributes");
 
         ObjectNode relacion = objeto();
-        propiedades(relacion).set("source", texto("Nombre exacto de la clase origen"));
-        propiedades(relacion).set("target", texto("Nombre exacto de la clase destino"));
+        propiedades(relacion).set("source", texto("Nombre exacto del origen. En GENERALIZATION es la SUBCLASE"));
+        propiedades(relacion).set("target", texto("Nombre exacto del destino. En GENERALIZATION es la SUPERCLASE"));
         propiedades(relacion).set("kind", enumerado("ASSOCIATION", "AGGREGATION", "COMPOSITION",
                 "GENERALIZATION", "DEPENDENCY"));
         propiedades(relacion).set("name", texto("Nombre verbal opcional en camelCase"));
         propiedades(relacion).set("sourceMultiplicity", multiplicidad());
         propiedades(relacion).set("targetMultiplicity", multiplicidad());
-        propiedades(relacion).set("sourceRole", texto("Rol opcional del origen"));
-        propiedades(relacion).set("targetRole", texto("Rol opcional del destino"));
+        propiedades(relacion).set("sourceRole", texto("Rol de la clase source en este extremo, no de la clase target"));
+        propiedades(relacion).set("targetRole", texto("Rol de la clase target. Transferencia->Cuenta usa aqui cuentaOrigen o cuentaDestino en DOS relaciones distintas"));
         requeridos(relacion, "source", "target", "kind", "sourceMultiplicity", "targetMultiplicity");
 
         ObjectNode raiz = objeto();
@@ -57,7 +57,11 @@ final class EsquemaPlanUml {
 
         return new HerramientaIA(NOMBRE,
                 "Propone UN modelo UML conceptual completo en una sola llamada. Incluye todas las clases con al menos "
-                        + "un atributo y todas las relaciones con multiplicidad en ambos extremos. Los atributos solo "
+                        + "un atributo. Presupuesto total: " + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ
+                        + " cambios; cada clase, cada atributo y cada relacion consume un cambio. Calcula el total antes "
+                        + "de emitir. Conserva requisitos esenciales, usa roles en lugar de clases redundantes y elimina "
+                        + "atributos secundarios antes de exceder el presupuesto. Incluye "
+                        + "todas las relaciones con multiplicidad en ambos extremos. Los atributos solo "
                         + "representan datos propios; nunca simulan asociaciones ni usan tipos de otras clases. "
                         + "Las entidades historicas (prestamos, reservas, eventos) se relacionan con ASSOCIATION: "
                         + "AGGREGATION y COMPOSITION no representan reglas de borrado o conservacion. "

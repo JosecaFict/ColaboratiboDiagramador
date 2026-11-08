@@ -1,7 +1,7 @@
-services:
+﻿services:
   db:
     image: postgres:16-alpine
-    container_name: colabmodel-db
+    container_name: colaboratibo-diagramador-db
     environment:
       POSTGRES_DB: colabmodel
       POSTGRES_USER: colabmodel
@@ -18,3 +18,4 @@ services:
 
 volumes:
   pgdata:
+

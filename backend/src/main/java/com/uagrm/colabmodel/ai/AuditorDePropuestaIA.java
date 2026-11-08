@@ -48,8 +48,13 @@ final class AuditorDePropuestaIA {
         for (String id : creadas) {
             String nombre = clases.get(id);
             List<Atributo> attrs = atributos.getOrDefault(id, List.of());
+            long conexiones = relaciones.stream().filter(r -> id.equals(r.path("sourceClassId").asText())
+                    || id.equals(r.path("targetClassId").asText())).count();
             if (attrs.isEmpty()) {
                 avisos.add("La clase " + nombre + " quedaria sin atributos; confirma que tenga identidad o responsabilidad propia.");
+            } else if (attrs.stream().allMatch(a -> a.pk() || esIdSurrogado(a.nombre()))
+                    && !(esClaseAsociativa(nombre, attrs) && conexiones >= 2)) {
+                avisos.add("La clase " + nombre + " solo contiene identificadores; faltan datos de negocio esenciales.");
             }
             String normal = normal(nombre);
             if ((normal.equals("status") || normal.equals("estado")) && attrs.size() <= 1) {
@@ -69,13 +74,11 @@ final class AuditorDePropuestaIA {
                             + "o usa id: uuid como PK y conserva este campo como unique.");
                 }
             }
-            long conexiones = relaciones.stream().filter(r -> id.equals(r.path("sourceClassId").asText())
-                    || id.equals(r.path("targetClassId").asText())).count();
             if (conexiones == 0 && creadas.size() > 1) {
                 avisos.add("La clase " + nombre + " queda desconectada del resto del modelo.");
-            } else if (esHistorica(nombre, attrs) && conexiones < 2) {
-                avisos.add("La entidad historica " + nombre + " solo tiene " + conexiones
-                        + " relacion; verifica que conecte tanto al actor como al objeto del evento.");
+            } else if (esClaseAsociativa(nombre, attrs) && conexiones < 2) {
+                avisos.add("La posible clase asociativa " + nombre + " solo tiene " + conexiones
+                        + " relacion; debe conectar los dos conceptos cuya relacion describe.");
             }
         }
 
@@ -87,11 +90,13 @@ final class AuditorDePropuestaIA {
             String mOrigen = relacion.path("sourceMultiplicity").asText("");
             String mDestino = relacion.path("targetMultiplicity").asText("");
             String tipo = relacion.path("kind").asText("ASSOCIATION");
+            if (tipo.equals("GENERALIZATION") || tipo.equals("DEPENDENCY")) continue;
 
             if (mOrigen.isBlank() || mDestino.isBlank()) {
                 avisos.add("La relacion " + origen + " - " + destino
                         + " no define multiplicidad en ambos extremos.");
-            } else if (mOrigen.equals("1") && mDestino.equals("1")) {
+            } else if (mOrigen.equals("1") && mDestino.equals("1")
+                    && !esUnoAUnoDeEstadoActual(origen, destino)) {
                 avisos.add("La relacion " + origen + " [1] - [1] " + destino
                         + " es uno a uno; verifica que no deba conservar multiples instancias historicas.");
             }
@@ -99,11 +104,12 @@ final class AuditorDePropuestaIA {
             boolean origenHistorico = esHistorica(origen, atributos.getOrDefault(origenId, List.of()));
             boolean destinoHistorico = esHistorica(destino, atributos.getOrDefault(destinoId, List.of()));
             boolean historica = origenHistorico || destinoHistorico;
-            if (origenHistorico && !mOrigen.contains("*")) {
+            boolean patronEspecial = esPatronEspecial(origen, destino);
+            if (origenHistorico && !destinoHistorico && !patronEspecial && !mOrigen.equals("0..*")) {
                 avisos.add("La multiplicidad junto a la entidad historica " + origen + " es " + mOrigen
                         + "; podria limitar el historial. Normalmente debe permitir 0..* registros.");
             }
-            if (destinoHistorico && !mDestino.contains("*")) {
+            if (destinoHistorico && !origenHistorico && !patronEspecial && !mDestino.equals("0..*")) {
                 avisos.add("La multiplicidad junto a la entidad historica " + destino + " es " + mDestino
                         + "; podria limitar el historial. Normalmente debe permitir 0..* registros.");
             }
@@ -118,24 +124,97 @@ final class AuditorDePropuestaIA {
             advertirReferenciaDuplicada(avisos, atributos.getOrDefault(origenId, List.of()), origen, destino);
             advertirReferenciaDuplicada(avisos, atributos.getOrDefault(destinoId, List.of()), destino, origen);
         }
+        for (int i = 0; i < relaciones.size(); i++) {
+            JsonNode a = relaciones.get(i);
+            for (int j = i + 1; j < relaciones.size(); j++) {
+                JsonNode b = relaciones.get(j);
+                String tipoA = a.path("kind").asText("ASSOCIATION");
+                if (!tipoA.equals(b.path("kind").asText("ASSOCIATION"))
+                        || tipoA.equals("GENERALIZATION") || tipoA.equals("DEPENDENCY")) continue;
+                boolean misma = a.path("sourceClassId").equals(b.path("sourceClassId"))
+                        && a.path("targetClassId").equals(b.path("targetClassId"));
+                boolean inversa = a.path("sourceClassId").equals(b.path("targetClassId"))
+                        && a.path("targetClassId").equals(b.path("sourceClassId"));
+                if (!(misma || inversa)) continue;
+                String rolA = a.path("sourceRole").asText() + "|" + a.path("targetRole").asText();
+                String rolB = misma ? b.path("sourceRole").asText() + "|" + b.path("targetRole").asText()
+                        : b.path("targetRole").asText() + "|" + b.path("sourceRole").asText();
+                if (rolA.equals(rolB)) avisos.add("Hay relaciones repetidas entre "
+                        + clases.getOrDefault(a.path("sourceClassId").asText(), "origen") + " y "
+                        + clases.getOrDefault(a.path("targetClassId").asText(), "destino")
+                        + "; verifica duplicados o define roles distintos en ambos extremos.");
+            }
+        }
         return List.copyOf(new java.util.LinkedHashSet<>(avisos));
     }
 
     private static void advertirReferenciaDuplicada(List<String> avisos, List<Atributo> atributos,
                                                      String clase, String relacionada) {
-        String esperada = normal(relacionada) + "id";
-        atributos.stream().filter(a -> normal(a.nombre()).equals(esperada)).findFirst().ifPresent(a ->
+        String relacionadaNormal = normal(relacionada);
+        atributos.stream().filter(a -> esReferenciaA(normal(a.nombre()), relacionadaNormal)).findFirst().ifPresent(a ->
                 avisos.add(clase + "." + a.nombre() + " duplica la asociacion con " + relacionada
                         + " en un modelo conceptual."));
+    }
+
+    private static boolean esReferenciaA(String atributo, String relacionada) {
+        if (atributo.equals(relacionada) || atributo.equals(relacionada + "id")
+                || atributo.equals("id" + relacionada)) return true;
+        String base = atributo.endsWith("id") ? atributo.substring(0, atributo.length() - 2) : atributo;
+        return base.length() >= 4 && relacionada.startsWith(base);
     }
 
     private static boolean esHistorica(String clase, List<Atributo> atributos) {
         String nombre = normal(clase);
         if (nombre.contains("prestamo") || nombre.contains("reserva") || nombre.contains("historial")
-                || nombre.contains("transaccion") || nombre.contains("movimiento")) return true;
+                || nombre.contains("transaccion") || nombre.contains("movimiento") || nombre.contains("evento")
+                || nombre.contains("transferencia") || nombre.contains("traslado")
+                || nombre.contains("cancelacion")
+                || nombre.contains("cita") || nombre.contains("consulta") || nombre.contains("diagnostico")
+                || nombre.contains("receta") || nombre.contains("pedido") || nombre.contains("pago")
+                || nombre.contains("aplicacionproducto") || nombre.contains("aplicacionmedicamento")
+                || nombre.contains("version") || nombre.contains("asignacion")) return true;
         return atributos.stream().map(a -> normal(a.nombre())).anyMatch(a ->
                 a.contains("fechadevolucion") || a.contains("fechavencimiento") || a.equals("inicio")
                         || a.equals("fin") || a.contains("fechacierre"));
+    }
+
+    private static boolean esClaseAsociativa(String clase, List<Atributo> atributos) {
+        String nombre = normal(clase);
+        boolean asociativa = nombre.contains("detalle") || nombre.contains("linea") || nombre.contains("item")
+                || nombre.contains("asignacion") || nombre.contains("inscripcion")
+                || nombre.contains("membresia") || nombre.contains("indicacion")
+                || nombre.contains("titular") || nombre.contains("prerrequisito");
+        if (!nombre.contains("participante")) return asociativa;
+        boolean rol = atributos.stream().map(a -> normal(a.nombre()))
+                .anyMatch(a -> a.contains("rol") || a.contains("permiso"));
+        boolean persona = atributos.stream().map(a -> normal(a.nombre()))
+                .anyMatch(a -> a.contains("nombre") || a.contains("documento") || a.contains("correo"));
+        return rol && !persona;
+    }
+
+    private static boolean esUnoAUnoDeEstadoActual(String origen, String destino) {
+        String a = normal(origen);
+        String b = normal(destino);
+        return (a.startsWith("garantia") && b.contains("detalleventa"))
+                || (b.startsWith("garantia") && a.contains("detalleventa"))
+                || (a.contains("inventario") && (b.contains("producto") || b.contains("articulo") || b.contains("insumo")))
+                || (b.contains("inventario") && (a.contains("producto") || a.contains("articulo") || a.contains("insumo")));
+    }
+
+    private static boolean esPatronEspecial(String origen, String destino) {
+        String a = normal(origen);
+        String b = normal(destino);
+        return (esCabecera(a) && esDetalle(b)) || (esDetalle(a) && esCabecera(b));
+    }
+
+    private static boolean esCabecera(String nombre) {
+        return nombre.contains("reserva") || nombre.contains("paquete") || nombre.contains("receta") || nombre.contains("pedido") || nombre.contains("factura")
+                || nombre.contains("orden") || nombre.contains("venta") || nombre.contains("compra");
+    }
+
+    private static boolean esDetalle(String nombre) {
+        return nombre.contains("detalle") || nombre.contains("linea") || nombre.contains("item")
+                || nombre.contains("medicamentoindicado") || nombre.contains("indicacionmedicamento");
     }
 
     private static boolean identificadorTecnico(String texto) {

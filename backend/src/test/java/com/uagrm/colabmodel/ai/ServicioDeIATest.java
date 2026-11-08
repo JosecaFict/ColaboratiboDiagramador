@@ -28,11 +28,15 @@ class ServicioDeIATest {
     private final UUID diagramId = UUID.randomUUID();
 
     private ServicioDeIA servicioSinNadaEnElDiagrama(RespuestaIA respuesta) {
+        return servicioConProveedor(new ProveedorDeIAFalso(respuesta));
+    }
+
+    private ServicioDeIA servicioConProveedor(ProveedorDeIA proveedor) {
         UmlClassRepository classes = mock(UmlClassRepository.class);
         when(classes.findByDiagramIdAndDeletedAtIsNullOrderByNameAsc(diagramId)).thenReturn(List.of());
         UmlRelationshipRepository relationships = mock(UmlRelationshipRepository.class);
         when(relationships.findByDiagramIdAndDeletedAtIsNull(diagramId)).thenReturn(List.of());
-        return new ServicioDeIA(new ProveedorDeIAFalso(respuesta), classes, mock(UmlAttributeRepository.class),
+        return new ServicioDeIA(proveedor, classes, mock(UmlAttributeRepository.class),
                 mock(UmlMethodRepository.class), relationships);
     }
 
@@ -42,10 +46,83 @@ class ServicioDeIATest {
         return p;
     }
 
+    @Test
+    void una_ultima_reparacion_dirigida_completa_el_enlace_sin_regenerar_clases() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var p = mapper.readTree("""
+                {"classes":[{"name":"Producto","attributes":[{"name":"codigo","dataType":"string"}]},
+                {"name":"Venta","attributes":[{"name":"fecha","dataType":"date"}]},
+                {"name":"Inventario","attributes":[{"name":"cantidadDisponible","dataType":"int"}]}],
+                "relations":[{"source":"Producto","target":"Venta","kind":"ASSOCIATION",
+                "sourceMultiplicity":"1","targetMultiplicity":"0..*"}],"audit":["supuesto","restriccion"]}
+                """);
+        RespuestaIA incompleta = new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p)), "");
+        var ajuste = new RespuestaIA(List.of(new ComandoPropuestoIA("CREATE_RELATION", mapper.readTree("""
+                {"claseOrigen":"Producto","claseDestino":"Inventario","kind":"ASSOCIATION",
+                "sourceMultiplicity":"1","targetMultiplicity":"0..1"}
+                """))), "");
+        ProveedorDeIA proveedor = mock(ProveedorDeIA.class);
+        when(proveedor.nombre()).thenReturn("falso");
+        when(proveedor.generar(org.mockito.ArgumentMatchers.any())).thenReturn(incompleta, incompleta, incompleta, ajuste);
+        var propuesta = servicioConProveedor(proveedor).generar(diagramId, "Gestion de productos", Origin.TEXT, ModoIA.DISENAR, null);
+        assertThat(propuesta.rechazados()).isEmpty(); assertThat(propuesta.truncada()).isFalse();
+        assertThat(propuesta.aceptados()).filteredOn(c -> c.tipo() == CommandType.CREATE_CLASS).hasSize(3);
+        var solicitudes = org.mockito.ArgumentCaptor.forClass(SolicitudIA.class);
+        org.mockito.Mockito.verify(proveedor, org.mockito.Mockito.times(4)).generar(solicitudes.capture());
+        assertThat(solicitudes.getAllValues().get(3).modo()).isEqualTo(ModoIA.MODIFICAR);
+        assertThat(p.path("relations")).hasSize(1);
+    }
+
+    @Test
+    void repara_un_pago_sin_fecha_usando_el_hallazgo_y_entrega_el_plan_completo() {
+        ObjectNode p = J.objectNode();
+        var cs = p.putArray("classes");
+        cs.addObject().put("name", "Venta").putArray("attributes")
+                .addObject().put("name", "fechaVenta").put("dataType", "datetime");
+        cs.addObject().put("name", "Pago").putArray("attributes")
+                .addObject().put("name", "monto").put("dataType", "decimal");
+        p.putArray("relations").addObject().put("source", "Venta").put("target", "Pago")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+        p.putArray("audit").add("supuesto").add("restriccion");
+        ObjectNode completo = p.deepCopy();
+        ((com.fasterxml.jackson.databind.node.ArrayNode) completo.path("classes").get(1).path("attributes"))
+                .addObject().put("name", "fechaPago").put("dataType", "datetime");
+        RespuestaIA incompleta = new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p)), "");
+        RespuestaIA reparada = new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, completo)), "");
+        ProveedorDeIA proveedor = mock(ProveedorDeIA.class);
+        when(proveedor.nombre()).thenReturn("falso");
+        when(proveedor.generar(org.mockito.ArgumentMatchers.any())).thenReturn(incompleta, incompleta, reparada);
+        PropuestaDeIA propuesta = servicioConProveedor(proveedor).generar(diagramId,
+                "Historial completo de ventas y pagos", Origin.TEXT, ModoIA.DISENAR, null);
+        assertThat(propuesta.rechazados()).isEmpty();
+        assertThat(propuesta.truncada()).isFalse();
+        assertThat(propuesta.aceptados()).anyMatch(c -> c.payload().path("name").asText().equals("fechaPago"));
+        var solicitudes = org.mockito.ArgumentCaptor.forClass(SolicitudIA.class);
+        org.mockito.Mockito.verify(proveedor, org.mockito.Mockito.times(3)).generar(solicitudes.capture());
+        assertThat(solicitudes.getAllValues().get(2).prompt()).contains("Pago registra eventos pero no tiene fecha");
+    }
+
+    @Test
+    void un_plan_desconectado_no_se_entrega_como_propuesta_completa() {
+        ObjectNode p = J.objectNode();
+        var clases = p.putArray("classes");
+        for (String nombre : List.of("Producto", "Venta", "InventarioProducto")) {
+            clases.addObject().put("name", nombre).putArray("attributes")
+                    .addObject().put("name", "nombre").put("dataType", "string");
+        }
+        p.putArray("relations").addObject().put("source", "Producto").put("target", "Venta")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+        p.putArray("audit").add("supuesto").add("restriccion");
+        ServicioDeIA servicio = servicioSinNadaEnElDiagrama(new RespuestaIA(List.of(
+                new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p)), ""));
+        assertThatThrownBy(() -> servicio.generar(diagramId, "Disena ventas", Origin.TEXT, ModoIA.DISENAR, null))
+                .isInstanceOf(ProveedorIAException.class).hasMessageContaining("InventarioProducto");
+    }
+
     // ------------------------------------------------ EL TOPE DEL PLAN COMPLETO
 
     @Test
-    void con_cincuenta_comandos_del_modelo_nunca_acepta_mas_de_treinta_y_dos() {
+    void con_cincuenta_comandos_del_modelo_nunca_acepta_mas_de_cuarenta_y_ocho() {
         List<ComandoPropuestoIA> cincuenta = new ArrayList<>();
         for (int i = 1; i <= 50; i++) {
             cincuenta.add(new ComandoPropuestoIA("CREATE_CLASS", crearClase("Clase" + i)));
@@ -55,9 +132,9 @@ class ServicioDeIATest {
         PropuestaDeIA propuesta = servicio.generar(diagramId, "disename un sistema completo", Origin.TEXT);
 
         assertThat(propuesta.propuestosPorElModelo()).isEqualTo(50);
-        assertThat(propuesta.aceptados()).hasSize(32);
+        assertThat(propuesta.aceptados()).hasSize(48);
         assertThat(propuesta.truncada()).isTrue();
-        assertThat(propuesta.descartadosPorTope()).hasSize(18);
+        assertThat(propuesta.descartadosPorTope()).hasSize(2);
         assertThat(propuesta.rechazados()).isEmpty();
     }
 
@@ -107,7 +184,7 @@ class ServicioDeIATest {
     }
 
     @Test
-    void la_mezcla_realista_trunca_lo_que_sobra_y_rechaza_lo_invalido_por_separado() {
+    void la_mezcla_realista_acepta_lo_valido_y_rechaza_lo_invalido_por_separado() {
         List<ComandoPropuestoIA> comandos = new ArrayList<>();
         for (int i = 1; i <= 3; i++) comandos.add(new ComandoPropuestoIA("CREATE_CLASS", crearClase("Clase" + i)));
         comandos.add(new ComandoPropuestoIA("BORRAR_TODO", J.objectNode()));
@@ -127,11 +204,11 @@ class ServicioDeIATest {
         PropuestaDeIA propuesta = servicio.generar(diagramId, "disename un sistema completo", Origin.TEXT);
 
         assertThat(propuesta.propuestosPorElModelo()).isEqualTo(50);
-        assertThat(propuesta.aceptados()).hasSize(32);
+        assertThat(propuesta.aceptados()).hasSize(46);
         assertThat(propuesta.aceptados()).allSatisfy(a -> assertThat(a.tipo()).isEqualTo(CommandType.CREATE_CLASS));
         assertThat(propuesta.rechazados()).hasSize(4);
         assertThat(propuesta.rechazados()).allSatisfy(r -> assertThat(r.motivo()).isNotBlank());
-        assertThat(propuesta.descartadosPorTope()).hasSize(14); // 46 validos - 32 aceptados
+        assertThat(propuesta.descartadosPorTope()).isEmpty();
     }
 
     // ------------------------------------------------------------ EL ORIGEN

@@ -30,7 +30,7 @@ public record Lote(String descripcion, List<Command> comandos) {
      * revision. El catalogo cerrado, la validacion y la confirmacion humana
      * siguen siendo la barrera de seguridad; ocho obligaba a repetir prompts.
      */
-    public static final int TOPE_TEXTO_O_VOZ = 32;
+    public static final int TOPE_TEXTO_O_VOZ = 48;
 
     /** Una importacion trae un modelo entero, pero con limite: es una transaccion. */
     public static final int TOPE_IMPORTACION = 500;

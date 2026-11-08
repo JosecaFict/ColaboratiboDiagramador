@@ -82,7 +82,7 @@ colabmodel:
       model: qwen3:8b
       # La UI puede elegir tambien qwen3.5:9b-q4_K_M. El catalogo del backend
       # mantiene 8B con thinking y 9B sin thinking para evitar razonamiento circular.
-      contexto: 4096
+      contexto: 8192
       temperatura: 0.1
       # Hasta tres minutos por intento para disenos completos con el modelo 9B.
       # Si el primer intento no usa la herramienta, la recuperacion estructurada

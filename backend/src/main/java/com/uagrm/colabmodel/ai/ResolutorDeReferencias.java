@@ -275,7 +275,8 @@ class ResolutorDeReferencias {
         String cardinalidades = " [" + (multiplicidadOrigen == null ? "?" : multiplicidadOrigen) + "] — ["
                 + (multiplicidadDestino == null ? "?" : multiplicidadDestino) + "]";
         return new Traduccion(payload, "Crear relacion " + kind + " entre " + origenNombre + " y "
-                + destinoNombre + cardinalidades);
+                + destinoNombre + (kind == RelationKind.GENERALIZATION ? " (subclase -> superclase)"
+                : kind == RelationKind.DEPENDENCY ? "" : cardinalidades));
     }
 
     private Traduccion actualizarRelacion(JsonNode p) {

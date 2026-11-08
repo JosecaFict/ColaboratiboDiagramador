@@ -99,14 +99,27 @@ public class ServicioDeIA {
             case MODIFICAR -> EsquemaDeComandos.herramientas();
         };
         RespuestaIA respuesta = proveedor.generar(new SolicitudIA(prompt, modo, contexto, relaciones, herramientas, modelo));
+        boolean planCompleto = modo == ModoIA.DISENAR && respuesta.comandos().stream()
+                .anyMatch(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo()));
         if (modo == ModoIA.DISENAR) {
             respuesta = revisarPlan(prompt, respuesta, contexto, relaciones, modelo);
             respuesta = NormalizadorPlanUml.normalizar(respuesta, prompt);
+            List<String> pendientes = hallazgosFinales(respuesta, prompt, contexto);
+            if (!pendientes.isEmpty()) {
+                respuesta = repararPlanFinal(prompt, respuesta, pendientes, contexto, relaciones, modelo);
+            }
             respuesta = ExpansorPlanUml.expandir(respuesta);
         }
 
-        return validar(diagramId, origin, respuesta, existentes, atributosPorClase, metodosPorClase,
+        PropuestaDeIA propuesta = validar(diagramId, origin, respuesta, existentes, atributosPorClase, metodosPorClase,
                 relacionesExistentes, modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo);
+        if (planCompleto && (propuesta.truncada() || !propuesta.rechazados().isEmpty())) {
+            throw new ProveedorIAException("El plan no pudo convertirse completo en cambios validos: "
+                    + propuesta.rechazados().stream().map(PropuestaDeIA.ComandoRechazado::motivo)
+                    .collect(java.util.stream.Collectors.joining("; "))
+                    + (propuesta.truncada() ? "; se excedio el limite de cambios" : ""));
+        }
+        return propuesta;
     }
 
     /**
@@ -119,7 +132,10 @@ public class ServicioDeIA {
                                     List<SolicitudIA.RelacionEnContexto> relaciones, String modelo) {
         ComandoPropuestoIA plan = borrador.comandos().stream()
                 .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
-        if (ProveedorOllama.errorEstructuralDelPlan(plan) != null) return borrador;
+        if (ProveedorOllama.errorDeFormatoDelPlan(plan) != null) return borrador;
+
+        RespuestaIA baseNormalizada = NormalizadorPlanUml.normalizar(borrador, requisito);
+        List<String> hallazgosBase = hallazgosFinales(baseNormalizada, requisito, contexto);
 
         String pedidoRevision = """
                 ACTUA COMO REVISOR FINAL DEL PLAN UML, no como autor complaciente.
@@ -130,20 +146,32 @@ public class ServicioDeIA {
                 BORRADOR A AUDITAR:
                 %s
 
+                HALLAZGOS VERIFICABLES DEL BACKEND:
+                %s
+
                 Devuelve mediante PROPONER_MODELO_UML el modelo completo ya corregido, no una lista de consejos.
                 Comprueba uno por uno los requisitos del texto original y corrige omisiones y contradicciones.
                 Para cada relacion aplica esta regla sin excepciones: la multiplicidad junto a una clase indica
                 cuantas instancias DE ESA CLASE puede tener una instancia del extremo contrario. Verifica la lectura
                 en ambos sentidos antes de responder. Las entidades de evento o historial normalmente deben conectar
                 al menos al actor y al objeto involucrado. Comprueba que la auditoria describa exactamente las
-                relaciones realmente incluidas. Conserva lo correcto y no agregues funciones fuera del alcance.
-                """.formatted(requisito, plan.parametros().toPrettyString());
+                relaciones realmente incluidas. Antes de agregar atributos secundarios, garantiza que ninguna clase
+                quede desconectada y que toda clase asociativa conecte exactamente los conceptos que vincula. Reserva
+                primero el presupuesto para todas las clases, una identidad minima por clase y todas las relaciones
+                fundamentales; usa el espacio restante para atributos descriptivos. Conserva lo correcto y no agregues
+                funciones fuera del alcance.
+                """.formatted(requisito, baseNormalizada.comandos().getFirst().parametros().toString(),
+                        hallazgosBase.isEmpty() ? "Sin hallazgos estructurales; revisa la cobertura del requisito."
+                                : String.join("\n", hallazgosBase));
         try {
             RespuestaIA revisada = proveedor.generar(new SolicitudIA(pedidoRevision, ModoIA.DISENAR,
                     contexto, relaciones, List.of(EsquemaPlanUml.herramienta()), modelo));
             ComandoPropuestoIA planRevisado = revisada.comandos().stream()
                     .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
-            return ProveedorOllama.errorEstructuralDelPlan(planRevisado) == null ? revisada : borrador;
+            if (ProveedorOllama.errorDeFormatoDelPlan(planRevisado) != null) return borrador;
+            RespuestaIA candidata = NormalizadorPlanUml.normalizar(revisada, requisito);
+            return hallazgosFinales(candidata, requisito, contexto).size() > hallazgosBase.size()
+                    ? borrador : revisada;
         } catch (ProveedorIAException e) {
             return new RespuestaIA(borrador.comandos(), unirNotas(borrador.notaDelModelo(),
                     "La revision automatica no estuvo disponible; se conserva el primer plan validado."));
@@ -152,6 +180,78 @@ public class ServicioDeIA {
 
     private static String unirNotas(String primera, String segunda) {
         return primera == null || primera.isBlank() ? segunda : primera + "\n\n" + segunda;
+    }
+
+    private static List<String> hallazgosFinales(RespuestaIA respuesta, String requisito,
+            List<SolicitudIA.ClaseEnContexto> contexto) {
+        List<String> hallazgos = new ArrayList<>(ValidadorPlanFinal.revisar(respuesta,
+                contexto.stream().map(SolicitudIA.ClaseEnContexto::nombre).collect(Collectors.toSet())));
+        hallazgos.addAll(RevisorCoberturaPlan.revisar(respuesta, requisito));
+        return List.copyOf(new java.util.LinkedHashSet<>(hallazgos));
+    }
+
+    private RespuestaIA repararPlanFinal(String requisito, RespuestaIA borrador, List<String> hallazgos,
+            List<SolicitudIA.ClaseEnContexto> contexto, List<SolicitudIA.RelacionEnContexto> relaciones,
+            String modelo) {
+        String pedido = "REPARACION FINAL DEL PLAN UML. Devuelve el plan completo mediante PROPONER_MODELO_UML. "
+                + "Conserva las partes correctas. Corrige estos hallazgos verificables: " + String.join("\n", hallazgos)
+                + "\nNo agregues asociaciones sin respaldo en el requisito. Si repites una pareja usa roles distintos. "
+                + "Una cuenta puede intervenir en muchas transferencias por cada rol; cada transferencia identifica "
+                + "una cuenta por rol. Una entidad puede contener muchos detalles, cada detalle pertenece a su cabecera. "
+                + "Prioriza requisitos esenciales y evita clases artificiales para roles. "
+                + "La auditoria debe describir exclusivamente el plan que entregas.\nREQUISITO:\n" + requisito
+                + "\nPLAN NORMALIZADO:\n" + borrador.comandos().getFirst().parametros().toString();
+        RespuestaIA reparada;
+        try {
+            reparada = proveedor.generar(new SolicitudIA(pedido, ModoIA.DISENAR, contexto, relaciones,
+                    List.of(EsquemaPlanUml.herramienta()), modelo));
+        } catch (ProveedorIAException e) {
+            return repararConAjustes(requisito, borrador, hallazgos, modelo);
+        }
+        boolean tienePlan = reparada.comandos().stream().anyMatch(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo()));
+        if (!tienePlan) return repararConAjustes(requisito, borrador, hallazgos, modelo);
+        reparada = NormalizadorPlanUml.normalizar(reparada, requisito);
+        List<String> pendientes = hallazgosFinales(reparada, requisito, contexto);
+        if (!pendientes.isEmpty()) return pendientes.size() > hallazgos.size()
+                ? repararConAjustes(requisito, borrador, hallazgos, modelo)
+                : repararConAjustes(requisito, reparada, pendientes, modelo);
+        return reparada;
+    }
+
+    private RespuestaIA repararConAjustes(String requisito, RespuestaIA borrador, List<String> pendientes, String modelo) {
+        var plan = borrador.comandos().stream().filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElseThrow();
+        List<SolicitudIA.ClaseEnContexto> virtuales = new ArrayList<>();
+        for (var c : plan.parametros().path("classes")) {
+            List<String> attrs = new ArrayList<>();
+            for (var a : c.path("attributes")) attrs.add(a.path("name").asText() + ": " + a.path("dataType").asText());
+            virtuales.add(new SolicitudIA.ClaseEnContexto(c.path("name").asText(), attrs));
+        }
+        StringBuilder indices = new StringBuilder();
+        int indice = 0;
+        for (var r : plan.parametros().path("relations")) indices.append(indice++).append(": ").append(r.toString()).append('\n');
+        String pedido = "REPARACION DIRIGIDA DE UN BORRADOR VIRTUAL. Conserva las clases existentes; no regeneres todo el modelo. "
+                + "Puedes agregar hasta dos clases esenciales omitidas, solo si los hallazgos y el requisito las necesitan, "
+                + "con atributos propios y asociaciones completas en este mismo lote. Nunca borres ni reemplaces clases existentes. "
+                + "Usa solamente las herramientas disponibles para corregir los hallazgos enumerados. "
+                + "Las clases del contexto ya existen dentro del borrador. Devuelve hasta 16 ajustes necesarios en una respuesta. "
+                + "Conserva las relaciones y datos correctos. No agregues funciones fuera del requisito. "
+                + "Cada relacion nueva debe incluir multiplicidad en ambos extremos.\nREQUISITO ORIGINAL:\n" + requisito
+                + "\nHALLAZGOS A RESOLVER:\n" + String.join("\n", pendientes)
+                + "\nRELACIONES POR indiceRelacion (para UPDATE/DELETE, no adivines una pareja con varios roles):\n" + indices
+                + "\nLas clases y sus atributos estan en el contexto adjunto; no los regeneres ni los dupliques. "
+                + "Los indices anteriores son estables durante este lote de ajustes. "
+                + "Resuelve todos los hallazgos con cambios concretos, no promesas de cambios posteriores.";
+        try {
+            RespuestaIA ajustes = proveedor.generar(new SolicitudIA(pedido, ModoIA.MODIFICAR, virtuales, List.of(),
+                    ReparadorDirigidoPlan.herramientas(), modelo));
+            RespuestaIA reparada = NormalizadorPlanUml.normalizar(ReparadorDirigidoPlan.aplicar(borrador, ajustes), requisito);
+            List<String> restantes = hallazgosFinales(reparada, requisito, virtuales);
+            if (restantes.isEmpty()) return reparada;
+            throw new ProveedorIAException("El plan sigue incompleto tras los ajustes dirigidos: " + String.join("; ", restantes));
+        } catch (ProveedorIAException e) {
+            throw new ProveedorIAException("El plan sigue incompleto tras la reparacion: " + String.join("; ", pendientes)
+                    + ". Reparacion dirigida: " + e.getMessage());
+        }
     }
 
     private record Candidato(int posicion, CommandType tipo, com.fasterxml.jackson.databind.JsonNode payload,

@@ -12,6 +12,24 @@ class ExpansorPlanUmlTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
+    void herencia_no_exporta_multiplicidades_de_asociacion() throws Exception {
+        var plan = mapper.readTree("""
+                {"classes":[{"name":"Computadora","attributes":[{"name":"modelo","dataType":"string"}]},
+                {"name":"Producto","attributes":[{"name":"codigo","dataType":"string"}]}],
+                "relations":[{"source":"Computadora","target":"Producto","kind":"GENERALIZATION",
+                "sourceMultiplicity":"*","targetMultiplicity":"1"}],"audit":[]}
+                """);
+        var resultado = ExpansorPlanUml.expandir(new RespuestaIA(List.of(
+                new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan)), ""));
+        assertThat(resultado.comandos()).filteredOn(c -> c.tipo().equals("CREATE_RELATION"))
+                .singleElement().satisfies(c -> {
+                    assertThat(c.parametros().path("claseOrigen").asText()).isEqualTo("Computadora");
+                    assertThat(c.parametros().has("sourceMultiplicity")).isFalse();
+                    assertThat(c.parametros().has("targetMultiplicity")).isFalse();
+                });
+    }
+
+    @Test
     void expande_clases_antes_de_atributos_y_relaciones() throws Exception {
         var plan = mapper.readTree("""
                 {"classes":[
@@ -28,6 +46,55 @@ class ExpansorPlanUmlTest {
         assertThat(expandida.comandos()).extracting(ComandoPropuestoIA::tipo)
                 .containsExactly("CREATE_CLASS", "CREATE_CLASS", "ADD_ATTRIBUTE", "ADD_ATTRIBUTE", "CREATE_RELATION");
         assertThat(expandida.notaDelModelo()).contains("Auditoria de diseno", "Separa titulo", "Conserva trazabilidad");
+    }
+
+    @Test
+    void prioriza_identidades_y_relaciones_antes_que_atributos_secundarios() throws Exception {
+        var plan = mapper.readTree("""
+                {"classes":[
+                  {"name":"Paciente","attributes":[
+                    {"name":"idPaciente","dataType":"uuid","required":true,"unique":true,"pk":true},
+                    {"name":"nombreCompleto","dataType":"string","required":true,"unique":false,"pk":false}]},
+                  {"name":"Consulta","attributes":[
+                    {"name":"idConsulta","dataType":"uuid","required":true,"unique":true,"pk":true},
+                    {"name":"fechaHora","dataType":"datetime","required":true,"unique":false,"pk":false}]}
+                ],"relations":[
+                  {"source":"Paciente","target":"Consulta","kind":"ASSOCIATION",
+                   "sourceMultiplicity":"1","targetMultiplicity":"0..*"}
+                ],"audit":["Conserva historial","Relacion completa"]}
+                """);
+
+        RespuestaIA expandida = ExpansorPlanUml.expandir(new RespuestaIA(
+                List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan)), ""));
+
+        assertThat(expandida.comandos()).extracting(ComandoPropuestoIA::tipo)
+                .containsExactly("CREATE_CLASS", "CREATE_CLASS", "ADD_ATTRIBUTE", "ADD_ATTRIBUTE",
+                        "CREATE_RELATION", "ADD_ATTRIBUTE", "ADD_ATTRIBUTE");
+    }
+
+    @Test
+    void reparte_un_atributo_propio_por_clase_antes_de_agregar_mas_detalles() throws Exception {
+        var plan = mapper.readTree("""
+                {"classes":[
+                  {"name":"Primera","attributes":[
+                    {"name":"idPrimera","dataType":"uuid","pk":true},
+                    {"name":"datoPrimera","dataType":"string"},
+                    {"name":"extraPrimera","dataType":"string"}]},
+                  {"name":"Segunda","attributes":[
+                    {"name":"idSegunda","dataType":"uuid","pk":true},
+                    {"name":"datoSegunda","dataType":"string"}]}
+                ],"relations":[
+                  {"source":"Primera","target":"Segunda","kind":"ASSOCIATION",
+                   "sourceMultiplicity":"1","targetMultiplicity":"0..*"}
+                ],"audit":[]}
+                """);
+
+        RespuestaIA expandida = ExpansorPlanUml.expandir(new RespuestaIA(
+                List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan)), ""));
+
+        assertThat(expandida.comandos().stream().filter(c -> c.tipo().equals("ADD_ATTRIBUTE"))
+                .map(c -> c.parametros().path("name").asText()).toList())
+                .containsExactly("idPrimera", "idSegunda", "datoPrimera", "datoSegunda", "extraPrimera");
     }
 
     @Test

@@ -31,7 +31,7 @@ import java.util.List;
 public class ProveedorOllama implements ProveedorDeIA {
 
     private static final int MAX_RONDAS_DE_HERRAMIENTAS = 8;
-    private static final int MAX_LLAMADAS_ACUMULADAS = 32;
+    private static final int MAX_LLAMADAS_ACUMULADAS = 48;
 
     private final String baseUrl;
     private final CatalogoModelosOllama modelos;
@@ -87,9 +87,15 @@ public class ProveedorOllama implements ProveedorDeIA {
             boolean planCompleto = solicitud.herramientas().size() == 1
                     && EsquemaPlanUml.NOMBRE.equals(solicitud.herramientas().get(0).nombre());
             if (planCompleto) {
+                // Un plan de hasta 48 cambios no necesita una generacion ilimitada.
+                // Acota respuestas repetitivas sin aumentar los 180 s por peticion.
+                ((ObjectNode) body.path("options")).put("num_predict", 4096);
                 return generarPlanCompleto(body, messages);
             }
-            if (!solicitud.herramientas().isEmpty() && !modelos.usaThinking(model) && !planCompleto) {
+            boolean reparacionDirigida = !solicitud.herramientas().isEmpty() && solicitud.herramientas().stream()
+                    .allMatch(h -> ReparadorDirigidoPlan.OPERACIONES.contains(h.nombre()));
+            if (reparacionDirigida) ((ObjectNode) body.path("options")).put("num_predict", 2048);
+            if (!solicitud.herramientas().isEmpty() && !modelos.usaThinking(model) && !planCompleto && !reparacionDirigida) {
                 return generarPorRondas(body, messages);
             }
             RespuestaIA primera = enviar(body);
@@ -116,8 +122,14 @@ public class ProveedorOllama implements ProveedorDeIA {
             throws IOException, InterruptedException {
         Turno turno = enviarTurno(body);
         ComandoPropuestoIA plan = buscarPlan(turno.respuesta());
-        String primerError = errorEstructuralDelPlan(plan);
+        String primerError = errorDeFormatoDelPlan(plan);
         if (primerError == null) return turno.respuesta();
+
+        // A veces Qwen genera correctamente el objeto solicitado en content,
+        // pero omite el envoltorio tool_call. No se descarta ese trabajo: se
+        // valida con el mismo esquema antes de pedir una segunda inferencia.
+        RespuestaIA planEnContenido = planDesdeContenidoJson(mapper, turno.respuesta().notaDelModelo());
+        if (errorDeFormatoDelPlan(buscarPlan(planEnContenido)) == null) return planEnContenido;
 
         // Algunos modelos locales contestan en texto aunque Ollama les ofrezca
         // una unica herramienta. El segundo intento usa el mismo JSON Schema
@@ -125,16 +137,27 @@ public class ProveedorOllama implements ProveedorDeIA {
         // como la llamada de herramienta que espera el resto del backend.
         ObjectNode recuperacion = body.deepCopy();
         recuperacion.remove("tools");
+        // En una salida restringida a JSON no necesitamos razonamiento visible;
+        // algunos modelos dejan content vacio cuando think permanece activo.
+        recuperacion.put("think", false);
         recuperacion.set("format", EsquemaPlanUml.herramienta().parametros().deepCopy());
         ArrayNode mensajesRecuperacion = (ArrayNode) recuperacion.path("messages");
+        // La salida JSON no debe competir con una instruccion de sistema que
+        // obliga a llamar herramientas que ya no estan disponibles.
+        ((ObjectNode) mensajesRecuperacion.get(0)).put("content", instruccionPlanJson());
+        ComandoPropuestoIA candidato = plan != null ? plan : buscarPlan(planEnContenido);
+        if (candidato != null) mensajesRecuperacion.addObject().put("role", "assistant")
+                .put("content", candidato.parametros().toString());
         mensajesRecuperacion.addObject().put("role", "user").put("content",
                 "MODO DE RECUPERACION: devuelve exclusivamente el objeto JSON del plan UML completo que cumple el "
                         + "esquema solicitado. Debe contener classes, relations y audit; cada clase debe tener attributes. "
-                        + "No escribas Markdown ni explicaciones fuera del JSON.");
+                        + "No escribas Markdown ni explicaciones fuera del JSON. Corrige el error detectado: "
+                        + primerError + ". Si excede el presupuesto, reduce clases redundantes y modela roles "
+                        + "como asociaciones, conservando todos los requisitos esenciales y al menos un dato propio por clase.");
 
         Turno estructurado = enviarTurno(recuperacion);
         RespuestaIA respuestaEstructurada = planDesdeContenidoJson(mapper, estructurado.respuesta().notaDelModelo());
-        String segundoError = errorEstructuralDelPlan(buscarPlan(respuestaEstructurada));
+        String segundoError = errorDeFormatoDelPlan(buscarPlan(respuestaEstructurada));
         if (segundoError == null) return respuestaEstructurada;
         throw new ProveedorIAException("Ollama no pudo producir un plan UML completo. Primer intento: "
                 + primerError + "; recuperacion estructurada: " + segundoError);
@@ -145,14 +168,39 @@ public class ProveedorOllama implements ProveedorDeIA {
                 .findFirst().orElse(null);
     }
 
+    static String instruccionPlanJson() {
+        return "Sos el arquitecto UML de ColabModel. Devuelve exclusivamente un objeto JSON que cumpla el esquema format. "
+                + "No hay herramientas disponibles en este modo; no emitas llamadas ni Markdown. Usa el requisito y contexto "
+                + "del usuario como fuente de verdad. Incluye classes, relations y audit con el modelo completo, nunca por etapas. "
+                + "Presupuesto: " + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ
+                + " cambios contando cada clase, atributo y relacion. Prioriza las relaciones y los datos esenciales; "
+                + "las clases asociativas pueden tener solo identidad cuando sus roles y relaciones esten completos. "
+                + "Usa nombres espanoles ASCII. La multiplicidad junto a una clase cuenta instancias de ESA clase. "
+                + "En GENERALIZATION source es subclase y target superclase. No dupliques asociaciones con claves foraneas. "
+                + "Los eventos historicos requieren fechas y sus participantes. Usa roles para origen/destino y parentesco. "
+                + "La auditoria debe describir unicamente elementos realmente incluidos.";
+    }
+
     static RespuestaIA planDesdeContenidoJson(ObjectMapper mapper, String contenido) {
         if (contenido == null || contenido.isBlank()) return new RespuestaIA(List.of(), "");
         try {
-            JsonNode parametros = mapper.readTree(contenido);
+            JsonNode parametros = mapper.readTree(extraerObjetoJson(contenido));
             return new RespuestaIA(List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, parametros)), "");
         } catch (IOException e) {
             return new RespuestaIA(List.of(), contenido);
         }
+    }
+
+    private static String extraerObjetoJson(String contenido) {
+        String limpio = contenido.trim();
+        if (limpio.startsWith("```")) {
+            int finPrimeraLinea = limpio.indexOf('\n');
+            if (finPrimeraLinea >= 0) limpio = limpio.substring(finPrimeraLinea + 1);
+            if (limpio.endsWith("```")) limpio = limpio.substring(0, limpio.length() - 3).trim();
+        }
+        int inicio = limpio.indexOf('{');
+        int fin = limpio.lastIndexOf('}');
+        return inicio >= 0 && fin > inicio ? limpio.substring(inicio, fin + 1) : limpio;
     }
 
     static String errorEstructuralDelPlan(ComandoPropuestoIA plan) {
@@ -165,11 +213,61 @@ public class ProveedorOllama implements ProveedorDeIA {
             if (!clase.path("attributes").isArray() || clase.path("attributes").isEmpty()) {
                 return "la clase " + clase.path("name").asText("sin nombre") + " no tiene attributes";
             }
+            boolean datoPropio = false;
+            for (JsonNode atributo : clase.path("attributes")) {
+                String nombre = atributo.path("name").asText("");
+                if (!atributo.path("pk").asBoolean(false)
+                        && !nombre.equalsIgnoreCase("id") && !nombre.matches("^id[_A-Z].*")) datoPropio = true;
+            }
+            if (!datoPropio && !ValidadorPlanFinal.asociativaSinDatosValida(p, clase.path("name").asText())
+                    && !NormalizadorParentescoPlan.puedeSimplificar(p, clase)) {
+                String nombre = clase.path("name").asText();
+                if (nombre.matches("(?i)^(padre|madre)(animal|persona)?$")) return "la clase " + nombre
+                        + " solo contiene identidad y parece un rol familiar; representa parentesco mediante asociaciones "
+                        + "recursivas de la entidad Animal o Persona con roles padre/madre y descendientes, sin inventar atributos";
+                return "la clase " + nombre + " solo contiene identidad; agrega al menos un dato esencial";
+            }
         }
         if (!p.path("relations").isArray() || p.path("relations").isEmpty()) {
             return "relations esta vacio o ausente";
         }
+        // Presupuesto minimo: crear cada clase, identidad y un dato propio,
+        // ademas de conservar todas las asociaciones. Permite recortar datos
+        // secundarios, pero solicita un plan compacto si ni lo esencial cabe.
+        ObjectNode presupuesto = ((ObjectNode) p).deepCopy();
+        NormalizadorParentescoPlan.simplificar(presupuesto);
+        int minimo = presupuesto.path("relations").size();
+        for (JsonNode clase : presupuesto.path("classes")) minimo += ValidadorPlanFinal.asociativaSinDatosValida(
+                presupuesto, clase.path("name").asText()) ? 2 : 3;
+        if (minimo > com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ) {
+            return "el modelo necesita al menos " + minimo + " cambios esenciales; simplifica clases redundantes "
+                    + "y relaciones duplicadas para caber en "
+                    + com.uagrm.colabmodel.modelcore.command.Lote.TOPE_TEXTO_O_VOZ;
+        }
         if (!p.path("audit").isArray() || p.path("audit").size() < 2) return "audit debe contener 2 a 5 puntos";
+        return null;
+    }
+
+    /** Solo formato: la cobertura y el presupuesto se reparan en ServicioDeIA. */
+    static String errorDeFormatoDelPlan(ComandoPropuestoIA plan) {
+        if (plan == null) return "no llamo " + EsquemaPlanUml.NOMBRE;
+        JsonNode p = plan.parametros();
+        if (p == null || !p.isObject()) return "los argumentos no son un objeto";
+        if (!p.path("classes").isArray() || p.path("classes").isEmpty()) return "classes esta vacio o ausente";
+        for (JsonNode clase : p.path("classes")) {
+            if (!clase.isObject() || clase.path("name").asText().isBlank()) return "una clase no tiene name";
+            if (!clase.path("attributes").isArray() || clase.path("attributes").isEmpty()) return "una clase no tiene attributes";
+            for (JsonNode a : clase.path("attributes")) if (!a.isObject() || a.path("name").asText().isBlank())
+                return "un atributo no tiene name";
+        }
+        if (!p.path("relations").isArray() || p.path("relations").isEmpty()) return "relations esta vacio o ausente";
+        for (JsonNode r : p.path("relations")) {
+            if (!r.isObject() || r.path("source").asText().isBlank() || r.path("target").asText().isBlank())
+                return "una relacion no identifica sus extremos";
+            if (!java.util.Set.of("ASSOCIATION", "AGGREGATION", "COMPOSITION", "GENERALIZATION", "DEPENDENCY")
+                    .contains(r.path("kind").asText())) return "una relacion no define un tipo valido";
+        }
+        if (!p.path("audit").isArray()) return "audit esta ausente";
         return null;
     }
 

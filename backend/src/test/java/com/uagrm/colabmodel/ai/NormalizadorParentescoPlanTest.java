@@ -1,0 +1,78 @@
+package com.uagrm.colabmodel.ai;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.jupiter.api.Test;
+import java.util.List;
+import static org.assertj.core.api.Assertions.assertThat;
+
+class NormalizadorParentescoPlanTest {
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    @Test
+    void convierte_roles_redundantes_en_parentesco_con_orientacion_correcta() throws Exception {
+        ObjectNode p = plan();
+        assertThat(ProveedorOllama.errorEstructuralDelPlan(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p))).isNull();
+        var respuesta = NormalizadorPlanUml.normalizar(new RespuestaIA(List.of(
+                new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p)), ""), "Registrar padre y madre de cada animal");
+        var resultado = respuesta.comandos().getFirst().parametros();
+        assertThat(resultado.path("classes")).hasSize(1);
+        assertThat(resultado.path("relations")).hasSize(2).allSatisfy(r -> {
+            assertThat(r.path("source").asText()).isEqualTo("Animal");
+            assertThat(r.path("target").asText()).isEqualTo("Animal");
+            assertThat(r.path("sourceRole").asText()).isEqualTo("descendientes");
+            assertThat(r.path("sourceMultiplicity").asText()).isEqualTo("0..*");
+            assertThat(r.path("targetMultiplicity").asText()).isEqualTo("0..1");
+        });
+        assertThat(resultado.path("relations")).extracting(r -> r.path("targetRole").asText())
+                .containsExactlyInAnyOrder("padre", "madre");
+        assertThat(ValidadorPlanFinal.revisar(respuesta)).isEmpty();
+        assertThat(p.path("classes")).hasSize(3); // El borrador original no se modifica.
+    }
+
+    @Test
+    void no_descarta_atributos_propios_ni_claves_naturales_del_rol() throws Exception {
+        ObjectNode p = plan();
+        ((com.fasterxml.jackson.databind.node.ArrayNode) p.path("classes").get(1).path("attributes"))
+                .addObject().put("name", "registroGenealogico").put("dataType", "string").put("pk", true);
+        assertThat(NormalizadorParentescoPlan.puedeSimplificar(p, p.path("classes").get(1))).isFalse();
+        NormalizadorParentescoPlan.simplificar(p);
+        assertThat(p.path("classes")).hasSize(2);
+        assertThat(p.toString()).contains("registroGenealogico");
+    }
+
+    @Test
+    void no_convierte_subclases_en_roles_familiares() throws Exception {
+        ObjectNode p = plan();
+        ((ObjectNode) p.path("relations").get(0)).put("kind", "GENERALIZATION");
+        assertThat(NormalizadorParentescoPlan.puedeSimplificar(p, p.path("classes").get(1))).isFalse();
+    }
+
+    @Test
+    void calcula_el_presupuesto_despues_de_simplificar_roles_redundantes() throws Exception {
+        ObjectNode p = plan();
+        var cs = (com.fasterxml.jackson.databind.node.ArrayNode) p.path("classes");
+        var rs = (com.fasterxml.jackson.databind.node.ArrayNode) p.path("relations");
+        for (int i = 0; i < 10; i++) {
+            cs.addObject().put("name", "Concepto" + i).putArray("attributes")
+                    .addObject().put("name", "nombre").put("dataType", "string");
+            rs.addObject().put("source", "Animal").put("target", "Concepto" + i)
+                    .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+        }
+        assertThat(ProveedorOllama.errorEstructuralDelPlan(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, p))).isNull();
+        assertThat(p.path("classes")).hasSize(13);
+    }
+
+    private ObjectNode plan() throws Exception {
+        return (ObjectNode) mapper.readTree("""
+                {"classes":[
+                  {"name":"Animal","attributes":[{"name":"codigo","dataType":"string"}]},
+                  {"name":"Padre","attributes":[{"name":"idPadre","dataType":"uuid","pk":true}]},
+                  {"name":"MadreAnimal","attributes":[{"name":"codigo","dataType":"string"}]}],
+                "relations":[
+                  {"source":"Animal","target":"Padre","kind":"ASSOCIATION","sourceMultiplicity":"1","targetMultiplicity":"1"},
+                  {"source":"MadreAnimal","target":"Animal","kind":"ASSOCIATION","sourceMultiplicity":"1","targetMultiplicity":"0..*"}],
+                "audit":["parentesco","conservacion"]}
+                """);
+    }
+}

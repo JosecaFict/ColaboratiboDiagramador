@@ -14,6 +14,29 @@ class AuditorDePropuestaIATest {
     private static final JsonNodeFactory J = JsonNodeFactory.instance;
 
     @Test
+    void no_lee_la_herencia_de_un_evento_como_asociacion_uno_a_uno_o_historial() {
+        ObjectNode r = J.objectNode().put("sourceClassId", "pago").put("targetClassId", "operacion")
+                .put("kind", "GENERALIZATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "1");
+        var avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, clase("pago", "Pago")),
+                aceptado(CommandType.CREATE_CLASS, clase("operacion", "Operacion")),
+                aceptado(CommandType.CREATE_RELATION, r)));
+        assertThat(avisos).noneMatch(a -> a.contains("uno a uno") || a.contains("limitar el historial")
+                || a.contains("multiplicidad"));
+    }
+
+    @Test
+    void una_garantia_unica_por_detalle_no_se_marca_como_historial_limitado() {
+        ObjectNode r = J.objectNode().put("sourceClassId", "garantia").put("targetClassId", "detalle")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1").put("targetMultiplicity", "1");
+        var avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, clase("garantia", "Garantia")),
+                aceptado(CommandType.CREATE_CLASS, clase("detalle", "DetalleVenta")),
+                aceptado(CommandType.CREATE_RELATION, r)));
+        assertThat(avisos).noneMatch(a -> a.contains("uno a uno"));
+    }
+
+    @Test
     void advierte_uno_a_uno_y_clave_foranea_duplicada() {
         ObjectNode libro = clase("libro", "Book");
         ObjectNode copia = clase("copia", "Copy");
@@ -76,6 +99,94 @@ class AuditorDePropuestaIATest {
 
         assertThat(avisos).anyMatch(a -> a.contains("identificacionUniversitaria")
                 && a.contains("clave natural"));
+    }
+
+    @Test
+    void advierte_clase_asociativa_con_un_solo_extremo() {
+        ObjectNode receta = clase("receta", "Receta");
+        ObjectNode detalle = clase("detalle", "DetalleReceta");
+        ObjectNode relacion = J.objectNode().put("sourceClassId", "receta").put("targetClassId", "detalle")
+                .put("kind", "ASSOCIATION").put("sourceMultiplicity", "1")
+                .put("targetMultiplicity", "1..*");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, receta), aceptado(CommandType.CREATE_CLASS, detalle),
+                aceptado(CommandType.CREATE_RELATION, relacion)));
+
+        assertThat(avisos).anyMatch(a -> a.contains("posible clase asociativa DetalleReceta")
+                && a.contains("solo tiene 1 relacion"));
+    }
+
+    @Test
+    void participante_tambien_se_considera_clase_asociativa() {
+        ObjectNode modelo = clase("modelo", "ModeloColaborativo");
+        ObjectNode participante = clase("participante", "Participante");
+        ObjectNode rol = J.objectNode().put("classId", "participante").put("name", "rolAsignado");
+        ObjectNode relacion = J.objectNode().put("sourceClassId", "modelo")
+                .put("targetClassId", "participante").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, modelo), aceptado(CommandType.CREATE_CLASS, participante),
+                aceptado(CommandType.ADD_ATTRIBUTE, rol),
+                aceptado(CommandType.CREATE_RELATION, relacion)));
+
+        assertThat(avisos).anyMatch(a -> a.contains("posible clase asociativa Participante")
+                && a.contains("solo tiene 1 relacion"));
+    }
+
+    @Test
+    void participante_persona_no_se_confunde_con_clase_asociativa() {
+        ObjectNode reserva = clase("reserva", "Reserva");
+        ObjectNode participante = clase("participante", "Participante");
+        ObjectNode nombre = J.objectNode().put("classId", "participante").put("name", "nombreCompleto");
+        ObjectNode relacion = J.objectNode().put("sourceClassId", "reserva")
+                .put("targetClassId", "participante").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "1").put("targetMultiplicity", "1..*");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, reserva), aceptado(CommandType.CREATE_CLASS, participante),
+                aceptado(CommandType.ADD_ATTRIBUTE, nombre), aceptado(CommandType.CREATE_RELATION, relacion)));
+
+        assertThat(avisos).noneMatch(a -> a.contains("posible clase asociativa Participante"));
+    }
+
+    @Test
+    void no_marca_como_historial_incompleto_un_resultado_clinico_o_eventos_opcionales() {
+        ObjectNode cita = clase("cita", "Cita");
+        ObjectNode consulta = clase("consulta", "ConsultaMedica");
+        ObjectNode diagnostico = clase("diagnostico", "Diagnostico");
+        ObjectNode citaConsulta = J.objectNode().put("sourceClassId", "cita")
+                .put("targetClassId", "consulta").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "0..1").put("targetMultiplicity", "0..1");
+        ObjectNode consultaDiagnostico = J.objectNode().put("sourceClassId", "consulta")
+                .put("targetClassId", "diagnostico").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, cita), aceptado(CommandType.CREATE_CLASS, consulta),
+                aceptado(CommandType.CREATE_CLASS, diagnostico),
+                aceptado(CommandType.CREATE_RELATION, citaConsulta),
+                aceptado(CommandType.CREATE_RELATION, consultaDiagnostico)));
+
+        assertThat(avisos).noneMatch(a -> a.contains("entidad historica")
+                || a.contains("multiplicidad junto a la entidad historica"));
+    }
+
+    @Test
+    void no_marca_receta_como_historial_incompleto_cuando_conecta_su_indicacion() {
+        ObjectNode receta = clase("receta", "Receta");
+        ObjectNode indicacion = clase("indicacion", "IndicacionMedicamento");
+        ObjectNode relacion = J.objectNode().put("sourceClassId", "receta")
+                .put("targetClassId", "indicacion").put("kind", "ASSOCIATION")
+                .put("sourceMultiplicity", "1").put("targetMultiplicity", "1..*");
+
+        List<String> avisos = AuditorDePropuestaIA.auditar(List.of(
+                aceptado(CommandType.CREATE_CLASS, receta),
+                aceptado(CommandType.CREATE_CLASS, indicacion),
+                aceptado(CommandType.CREATE_RELATION, relacion)));
+
+        assertThat(avisos).noneMatch(a -> a.contains("multiplicidad junto a la entidad historica Receta"));
     }
 
     private static ObjectNode clase(String id, String nombre) {
