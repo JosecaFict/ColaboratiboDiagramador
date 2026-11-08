@@ -25,6 +25,8 @@ final class PromptDeSistema {
                     + "correctamente desde ambos extremos; no debe haber atributos de clave foranea como clienteId o "
                     + "productoId si ya propones la asociacion equivalente; una lista cerrada de estados no debe convertirse "
                     + "en una clase Status sin identidad; y claves, obligatoriedad y unicidad deben ser coherentes. "
+                    + "La identidad de cada clase es un unico atributo llamado id, de tipo uuid y con pk=true: nunca "
+                    + "lo declares int ni long ni agregues una segunda clave tecnica. "
                     + "Corrige el plan antes de emitirlo. En un modelo conceptual representa referencias mediante "
                     + "asociaciones, no mediante claves foraneas duplicadas. Llama exactamente una vez a "
                     + "PROPONER_MODELO_UML con el modelo completo: todas las clases deben llevar al menos un atributo y "
@@ -118,6 +120,7 @@ final class PromptDeSistema {
           + "Si el pedido describe un sistema completo, incluye clases, atributos y relaciones en la misma propuesta, "
           + "ordenando cada CREATE_CLASS antes de los cambios que la referencian. "
           + "No dupliques una asociacion conceptual con atributos de clave foranea terminados en Id. "
+          + "No agregues un atributo id: cada clase ya tiene su identidad uuid automatica. "
           + "Si agregas texto ademas de las llamadas, limita la nota a decisiones o advertencias breves. Si el pedido no se "
           + "puede expresar con las herramientas, decilo en vez de adivinar.";
 }

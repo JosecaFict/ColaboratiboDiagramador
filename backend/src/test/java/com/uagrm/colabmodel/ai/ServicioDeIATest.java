@@ -280,4 +280,59 @@ class ServicioDeIATest {
 
         assertThatThrownBy(() -> servicio.comandoBatchDe(propuesta)).isInstanceOf(IllegalStateException.class);
     }
+    // ------------------------------------------------ IDENTIDAD DE LA CLASE
+
+    private static ObjectNode atributo(String clase, String nombre, String tipo, boolean pk) {
+        ObjectNode a = J.objectNode();
+        a.put("clase", clase);
+        a.put("name", nombre);
+        a.put("dataType", tipo);
+        a.put("pk", pk);
+        return a;
+    }
+
+    @Test
+    void un_id_int_de_la_ia_pasa_a_ser_la_identidad_uuid_de_la_clase() {
+        List<ComandoPropuestoIA> comandos = List.of(
+                new ComandoPropuestoIA("CREATE_CLASS", crearClase("Categoria")),
+                new ComandoPropuestoIA("ADD_ATTRIBUTE", atributo("Categoria", "id", "int", false)));
+        ServicioDeIA servicio = servicioSinNadaEnElDiagrama(new RespuestaIA(comandos, ""));
+
+        PropuestaDeIA propuesta = servicio.generar(diagramId, "prueba", Origin.TEXT);
+
+        assertThat(propuesta.aceptados()).hasSize(2);
+        PropuestaDeIA.ComandoAceptado id = propuesta.aceptados().get(1);
+        assertThat(id.payload().path("dataType").asText()).isEqualTo("uuid");
+        assertThat(id.payload().path("pk").asBoolean()).isTrue();
+        assertThat(id.payload().path("required").asBoolean()).isTrue();
+        assertThat(id.resumen()).contains("uuid en vez de int");
+    }
+
+    @Test
+    void una_clase_no_recibe_una_segunda_identidad() {
+        List<ComandoPropuestoIA> comandos = List.of(
+                new ComandoPropuestoIA("CREATE_CLASS", crearClase("Cliente")),
+                new ComandoPropuestoIA("ADD_ATTRIBUTE", atributo("Cliente", "idCliente", "uuid", true)),
+                new ComandoPropuestoIA("ADD_ATTRIBUTE", atributo("Cliente", "id", "int", true)));
+        ServicioDeIA servicio = servicioSinNadaEnElDiagrama(new RespuestaIA(comandos, ""));
+
+        PropuestaDeIA propuesta = servicio.generar(diagramId, "prueba", Origin.TEXT);
+
+        assertThat(propuesta.aceptados()).hasSize(2);
+        assertThat(propuesta.rechazados()).singleElement()
+                .satisfies(r -> assertThat(r.motivo()).contains("ya tiene su identidad"));
+    }
+
+    @Test
+    void un_id_de_otra_clase_no_es_identidad_y_conserva_su_tipo() {
+        List<ComandoPropuestoIA> comandos = List.of(
+                new ComandoPropuestoIA("CREATE_CLASS", crearClase("Pedido")),
+                new ComandoPropuestoIA("ADD_ATTRIBUTE", atributo("Pedido", "idCliente", "int", false)));
+        ServicioDeIA servicio = servicioSinNadaEnElDiagrama(new RespuestaIA(comandos, ""));
+
+        PropuestaDeIA propuesta = servicio.generar(diagramId, "prueba", Origin.TEXT);
+
+        assertThat(propuesta.aceptados().get(1).payload().path("dataType").asText()).isEqualTo("int");
+        assertThat(propuesta.aceptados().get(1).payload().path("pk").asBoolean()).isFalse();
+    }
 }

@@ -151,6 +151,18 @@ class ResolutorDeReferencias {
             // tipo, se sugiere por el nombre en vez de caer siempre a string.
             dataType = InferenciaDeAtributos.sugerir(nombre, null, null, List.of()).dataType();
         }
+        // El generador toma un `id` (o `idClase`) como la identidad de la tabla
+        // solo si es uuid y pk (Regla 1). Si el modelo lo propone como int,
+        // la tabla terminaria con dos columnas id: se corrige aca, sin
+        // depender de que el modelo obedezca el prompt.
+        boolean identidad = esIdentidadTecnica(nombre, claseNombre);
+        if (identidad && attrs.keySet().stream().anyMatch(k -> esIdentidadTecnica(k, claseNombre))) {
+            throw new ComandoIAInvalidoException("la clase \"" + claseNombre
+                    + "\" ya tiene su identidad: no lleva un segundo atributo \"" + nombre + "\"");
+        }
+        String tipoPropuesto = dataType;
+        if (identidad) dataType = "uuid";
+
         UUID attributeId = UUID.randomUUID();
         ObjectNode payload = J.objectNode();
         payload.put("classId", classId.toString());
@@ -160,9 +172,25 @@ class ResolutorDeReferencias {
         copiarBooleano(p, payload, "required");
         copiarBooleano(p, payload, "unique");
         copiarBooleano(p, payload, "pk");
+        if (identidad) {
+            payload.put("required", true);
+            payload.put("unique", true);
+            payload.put("pk", true);
+        }
 
         attrs.put(normal(nombre), attributeId);
-        return new Traduccion(payload, "Agregar atributo " + nombre + " (" + dataType + ") a " + claseNombre);
+        String resumen = "Agregar atributo " + nombre + " (" + dataType + ") a " + claseNombre;
+        if (identidad && !"uuid".equalsIgnoreCase(tipoPropuesto)) {
+            resumen += " (identidad: se uso uuid en vez de " + tipoPropuesto + ")";
+        }
+        return new Traduccion(payload, resumen);
+    }
+
+    /** `id`, `idClase` o `id_clase` de la propia clase: su identidad tecnica, no un dato. */
+    static boolean esIdentidadTecnica(String atributo, String clase) {
+        String a = atributo == null ? "" : atributo.replaceAll("[^A-Za-z0-9]", "");
+        String c = clase == null ? "" : clase.replaceAll("[^A-Za-z0-9]", "");
+        return a.equalsIgnoreCase("id") || (!c.isEmpty() && a.equalsIgnoreCase("id" + c));
     }
 
     private Traduccion actualizarAtributo(JsonNode p) {

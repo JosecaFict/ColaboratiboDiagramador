@@ -19,4 +19,10 @@ class PromptDeSistemaTest {
         assertThat(PromptDeSistema.para(ModoIA.CONSULTAR))
                 .contains("SON el diagrama actual", "no digas que no puedes verlo", "lectura exacta");
     }
+
+    @Test
+    void la_identidad_es_un_id_uuid_y_modificar_no_agrega_otro() {
+        assertThat(PromptDeSistema.para(ModoIA.DISENAR)).contains("unico atributo llamado id, de tipo uuid");
+        assertThat(PromptDeSistema.para(ModoIA.MODIFICAR)).contains("No agregues un atributo id");
+    }
 }
