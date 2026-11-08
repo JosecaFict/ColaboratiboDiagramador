@@ -22,6 +22,28 @@ export function elegidas(lista: RecomendacionIA[], seleccion: Set<number>): Reco
   return lista.filter((r) => seleccion.has(r.id))
 }
 
+const PREFIJO_SIN_RESOLVER = 'Sin resolver por la IA, revisalo antes de aplicar: '
+
+/**
+ * Lo que Diseñar dejo pendiente, como tarjetas para elegir y corregir. Son hallazgos
+ * del validador del backend, por eso se marcan como verificados. Si no hay ninguno
+ * "sin resolver", se usan los avisos de la auditoria automatica.
+ */
+export function pendientesComoRecomendaciones(advertencias: string[]): RecomendacionesIA {
+  const sinResolver = advertencias.filter((a) => a.startsWith(PREFIJO_SIN_RESOLVER))
+    .map((a) => a.slice(PREFIJO_SIN_RESOLVER.length).trim())
+  const textos = sinResolver.length ? sinResolver : advertencias
+  const recomendaciones: RecomendacionIA[] = [...new Set(textos)].map((texto, i) => ({
+    id: i + 1, titulo: texto, gravedad: sinResolver.length ? 'ALTA' : 'MEDIA', categoria: 'ESTRUCTURA',
+    regla: '', elementos: [], problema: '', accion: `Corrige en el diagrama: ${texto}`, origen: 'VERIFICADO',
+  }))
+  return {
+    diagramId: '', modelo: null, verificaciones: [], hallazgosEstructurales: textos, recomendaciones,
+    resumen: `Diseñar dejó ${recomendaciones.length} punto${recomendaciones.length === 1 ? '' : 's'} pendiente${recomendaciones.length === 1 ? '' : 's'}. `
+      + 'Si alguno tiene más de una solución, escribí en su acción cuál querés (por ejemplo "conecta Itinerario con Paquete").',
+  }
+}
+
 export const etiquetaOrigen = (r: RecomendacionIA) =>
   r.origen === 'VERIFICADO' ? 'Verificado' : 'Sugerencia del modelo'
 

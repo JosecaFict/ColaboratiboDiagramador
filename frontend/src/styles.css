@@ -893,7 +893,14 @@ input.fis-col { font-family: ui-monospace, monospace; }
 .ia-recomendacion strong { display: block; font-size: 11px; line-height: 1.4; font-weight: 600; color: #354057; }
 .ia-recomendacion p { margin: 6px 0 0 24px; font-size: 10.5px; line-height: 1.45; color: #4a556b; }
 .ia-recomendacion small { display: block; margin: 5px 0 0 24px; font-size: 9.5px; color: var(--ia-suave); }
-.ia-accion b { color: #354057; }
+.ia-accion { display: flex; flex-direction: column; gap: 3px; margin: 7px 0 0 24px; font-size: 9px; color: var(--ia-suave); }
+.ia-accion b { color: #354057; text-transform: uppercase; letter-spacing: .04em; font-size: 8px; }
+.ia-accion textarea { width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid #d7dce5; border-radius: 5px;
+  font: inherit; font-size: 10.5px; line-height: 1.4; color: var(--ia-tinta); resize: vertical; }
+.ia-corregir { margin-top: 9px; padding: 6px 10px; border: 1px solid #c9a85a; border-radius: 6px; background: #fff;
+  color: #684b14; font-size: 11px; font-weight: 600; cursor: pointer; }
+.ia-corregir:disabled { opacity: .5; cursor: not-allowed; }
+.ia-auditoria > small { display: block; margin-top: 5px; font-size: 9.5px; }
 .ia-etiquetas { display: flex !important; gap: 5px; margin-bottom: 4px; }
 .ia-etiquetas em { font-style: normal; font-size: 8.5px; font-weight: 700; padding: 1px 6px; border-radius: 99px; letter-spacing: .03em; }
 .ia-gravedad.alta { background: #fde8e8; color: #a32020; }

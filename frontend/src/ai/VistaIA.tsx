@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid'
 import type { EstadoModelo } from '../canvas/applyOperation'
 import type { CambioDelLote } from '../importacion/propuesta'
 import type { EntradaHistorialIA, EstadoIA, MensajeIA, ModoIA, PropuestaIA, RecomendacionesIA } from './tipos'
-import { elegidas, etiquetaOrigen, ordenarRecomendaciones, seleccionInicial, textoDeRecomendaciones } from './recomendaciones'
+import { elegidas, etiquetaOrigen, ordenarRecomendaciones, pendientesComoRecomendaciones, seleccionInicial, textoDeRecomendaciones } from './recomendaciones'
 
 interface Props {
   diagramId: string
@@ -65,6 +65,7 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
   const [modeloIA, setModeloIA] = useState(() => localStorage.getItem('colabmodel.ai.modelo') ?? '')
   const [seleccionRec, setSeleccionRec] = useState<Set<number>>(new Set())
   const [panel, setPanel] = useState<'cambios' | 'recomendaciones'>('cambios')
+  const [accionesEditadas, setAccionesEditadas] = useState<Record<number, string>>({})
 
   useEffect(() => {
     let vivo = true
@@ -152,6 +153,7 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
           texto: textoDeRecomendaciones(recomendaciones),
         }])
         setSeleccionRec(seleccionInicial(recomendaciones.recomendaciones))
+        setAccionesEditadas({})
         setPanel('recomendaciones')
       } else {
         recibirPropuesta(await pedirIA('propuestas',
@@ -166,7 +168,9 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
 
   /** Las recomendaciones elegidas pasan a una propuesta MODIFICAR; nada se aplica sin confirmar. */
   const convertirRecomendaciones = async () => {
+    // La accion editada es la decision del usuario ("conecta Itinerario con Paquete").
     const lista = elegidas(recomendacionesOrdenadas, seleccionRec)
+      .map((r) => ({ ...r, accion: accionesEditadas[r.id]?.trim() || r.accion }))
     if (!lista.length || consultando) return
     setMensajes((m) => [...m, { id: uuid(), autor: 'usuario', modo: 'RECOMENDAR',
       texto: `Aplicar ${lista.length} ${lista.length === 1 ? 'recomendación' : 'recomendaciones'}: ${lista.map((r) => r.titulo).join('; ')}` }])
@@ -180,6 +184,17 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
     } finally {
       setConsultando(false)
     }
+  }
+
+  /** Lo que Diseñar dejo "sin resolver" pasa a tarjetas: el usuario elige, precisa y convierte. */
+  const corregirPendientes = () => {
+    if (!ultimaPropuesta?.advertencias?.length) return
+    const pendientes = pendientesComoRecomendaciones(ultimaPropuesta.advertencias)
+    setMensajes((m) => [...m, { id: uuid(), autor: 'asistente', modo: 'RECOMENDAR',
+      recomendaciones: pendientes, texto: pendientes.resumen }])
+    setSeleccionRec(new Set(pendientes.recomendaciones.map((r) => r.id)))
+    setAccionesEditadas({})
+    setPanel('recomendaciones')
   }
 
   const aplicar = () => {
@@ -299,7 +314,10 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
                 </span>
               </label>
               {r.problema && r.problema !== r.titulo && <p>{r.problema}</p>}
-              {r.accion && <p className="ia-accion"><b>Acción:</b> {r.accion}</p>}
+              {r.accion && <label className="ia-accion"><b>Acción</b>
+                <textarea rows={2} value={accionesEditadas[r.id] ?? r.accion} disabled={!marcada}
+                  onChange={(e) => setAccionesEditadas((a) => ({ ...a, [r.id]: e.target.value }))}/>
+              </label>}
               {!!r.elementos.length && <small>Afecta a: {r.elementos.join(', ')}</small>}
             </div>
           })}</div>
@@ -313,8 +331,13 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
             Convertir {seleccionRec.size || ''} en cambios</button>
             <small>{puedeEditar ? 'La IA prepara los cambios; los revisás en la pestaña Cambios antes de aplicar.' : 'Tu rol es de solo lectura.'}</small></div>
         </>}
-        {panel === 'cambios' && !ultimaPropuesta && <div className="ia-propuesta-vacia"><p>Cuando la IA sugiera cambios, aparecerán aquí antes de tocar el modelo.</p><small>Nada se aplica sin tu confirmación.</small></div>}
-        {panel === 'cambios' && ultimaPropuesta && <>
+        {modo === 'RECOMENDAR' && !ultimasRecomendaciones && !consultando && <div className="ia-propuesta-vacia">
+          <p><strong>Recomendar revisa el diagrama aplicado.</strong></p>
+          <p>Pegá el requisito en el cuadro central para verificarlo regla por regla, o dejalo vacío para revisar solo la estructura, y pulsá <strong>Revisar</strong>.</p>
+          <small>Las recomendaciones aparecerán aquí como tarjetas para elegir y convertir en cambios.</small>
+        </div>}
+        {!(modo === 'RECOMENDAR' && !ultimasRecomendaciones) && panel === 'cambios' && !ultimaPropuesta && <div className="ia-propuesta-vacia"><p>Cuando la IA sugiera cambios, aparecerán aquí antes de tocar el modelo.</p><small>Nada se aplica sin tu confirmación.</small></div>}
+        {!(modo === 'RECOMENDAR' && !ultimasRecomendaciones) && panel === 'cambios' && ultimaPropuesta && <>
           <div className="ia-cambios">{ultimaPropuesta.aceptados.map((c, i) => {
             const p = ediciones[String(i)] ?? c.payload
             const activo = seleccion[String(i)] !== false
@@ -351,7 +374,10 @@ export function VistaIA({ diagramId, token, modelo, conectado, puedeEditar, usua
             </div>
           })}</div>
           {!!ultimaPropuesta.descartadosPorTope.length && <p className="ia-limite">El límite seguro dejó {ultimaPropuesta.descartadosPorTope.length} cambios fuera.</p>}
-          {!!ultimaPropuesta.advertencias?.length && <div className="ia-auditoria"><strong>Auditoría automática</strong><ul>{ultimaPropuesta.advertencias.map((a) => <li key={a}>{a}</li>)}</ul></div>}
+          {!!ultimaPropuesta.advertencias?.length && <div className="ia-auditoria"><strong>Auditoría automática</strong><ul>{ultimaPropuesta.advertencias.map((a) => <li key={a}>{a}</li>)}</ul>
+            <button className="ia-corregir" onClick={corregirPendientes} disabled={!yaAplicada || !puedeEditar || consultando}>Corregir pendientes</button>
+            {!yaAplicada && <small>Aplicá primero la propuesta: los pendientes se corrigen sobre el diagrama.</small>}
+          </div>}
           <div className="ia-aplicar"><button onClick={aplicar} disabled={!puedeEditar || !conectado || yaAplicada || !ultimaPropuesta.aceptados.some((_, i) => seleccion[String(i)] !== false)}>{yaAplicada ? 'Propuesta aplicada' : 'Aplicar seleccionados'}</button><small>{puedeEditar ? 'Se enviarán como una sola operación colaborativa.' : 'Tu rol es de solo lectura.'}</small></div>
         </>}
       </aside>
