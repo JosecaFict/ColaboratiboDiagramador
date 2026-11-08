@@ -69,9 +69,14 @@ final class NormalizadorParentescoPlan {
             String nombre = clase.path("name").asText(), entidad = base.path("name").asText();
             String rol = nombre.toLowerCase(Locale.ROOT).startsWith("padre") ? "padre" : "madre";
             for (int r = relaciones.size() - 1; r >= 0; r--) {
-                JsonNode relacion = relaciones.get(r);
-                if (nombre.equals(relacion.path("source").asText()) || nombre.equals(relacion.path("target").asText()))
-                    relaciones.remove(r);
+                ObjectNode relacion = (ObjectNode) relaciones.get(r);
+                boolean sale = nombre.equals(relacion.path("source").asText()), llega = nombre.equals(relacion.path("target").asText());
+                if (!sale && !llega) continue;
+                String otro = relacion.path(sale ? "target" : "source").asText();
+                // La relacion con la base es la del rol (se recrea abajo como recursiva). Con otra clase,
+                // pasa a la base si la base todavia no la tiene; si ya la tiene, sobra.
+                if (otro.equals(entidad) || otro.equals(nombre) || relacionadas(relaciones, entidad, otro)) relaciones.remove(r);
+                else relacion.put(sale ? "source" : "target", entidad);
             }
             // El padre es un Animal: sus datos propios pasan a la entidad base en vez de perderse.
             ArrayNode atributosBase = (ArrayNode) base.path("attributes");
@@ -109,6 +114,14 @@ final class NormalizadorParentescoPlan {
         return libre;
     }
 
+    private static boolean relacionadas(ArrayNode relaciones, String a, String b) {
+        for (JsonNode r : relaciones) {
+            String s = r.path("source").asText(), t = r.path("target").asText();
+            if ((s.equals(a) && t.equals(b)) || (s.equals(b) && t.equals(a))) return true;
+        }
+        return false;
+    }
+
     private static JsonNode base(JsonNode plan, JsonNode clase) {
         String nombre = clase.path("name").asText(), n = nombre.toLowerCase(Locale.ROOT);
         if (!n.matches("(padre|madre)(animal|persona)?")) return null;
@@ -119,11 +132,18 @@ final class NormalizadorParentescoPlan {
             if (!r.path("kind").asText("ASSOCIATION").equals("ASSOCIATION")) return null;
             vecinas.add(s.equals(nombre) ? t : s);
         }
-        if (vecinas.size() != 1) return null;
-        String candidata = vecinas.iterator().next();
-        if (!Set.of("animal", "persona").contains(candidata.toLowerCase(Locale.ROOT))) return null;
         String sufijo = n.substring(5);
-        if (!sufijo.isEmpty() && !sufijo.equalsIgnoreCase(candidata)) return null;
+        String candidata;
+        if (!sufijo.isEmpty()) {
+            // Ganaderia 2026-11-08: PadreAnimal unida a Animal y tambien a Lote o Especie no se fusionaba.
+            // El nombre ya dice de que entidad es rol; sus otras relaciones pasan a la base en simplificar().
+            candidata = vecinas.stream().filter(v -> v.equalsIgnoreCase(sufijo)).findFirst().orElse(null);
+            if (candidata == null) return null;
+        } else {
+            if (vecinas.size() != 1) return null;
+            candidata = vecinas.iterator().next();
+        }
+        if (!Set.of("animal", "persona").contains(candidata.toLowerCase(Locale.ROOT))) return null;
         JsonNode base = null;
         for (JsonNode c : plan.path("classes")) if (c.path("name").asText().equals(candidata)) base = c;
         // Una clave propia del rol (registroGenealogico pk) es una identidad deliberada:

@@ -65,6 +65,33 @@ class NormalizadorParentescoPlanTest {
     }
 
     @Test
+    void padre_animal_con_otras_relaciones_tambien_se_fusiona_y_las_pasa_a_animal() throws Exception {
+        // Ganaderia, 2026-11-08: PadreAnimal y MadreAnimal unidas a Animal y a Raza quedaban como clases.
+        ObjectNode p = (ObjectNode) mapper.readTree("""
+                {"classes":[
+                  {"name":"Animal","attributes":[{"name":"idAnimal","dataType":"uuid","pk":true}]},
+                  {"name":"Raza","attributes":[{"name":"idRaza","dataType":"uuid","pk":true},{"name":"nombre","dataType":"string"}]},
+                  {"name":"Lote","attributes":[{"name":"idLote","dataType":"uuid","pk":true},{"name":"nombre","dataType":"string"}]},
+                  {"name":"PadreAnimal","attributes":[{"name":"idPadreAnimal","dataType":"uuid","pk":true}]},
+                  {"name":"MadreAnimal","attributes":[{"name":"idMadreAnimal","dataType":"uuid","pk":true}]}],
+                "relations":[
+                  {"source":"Raza","target":"Animal","kind":"ASSOCIATION","sourceMultiplicity":"1","targetMultiplicity":"0..*"},
+                  {"source":"PadreAnimal","target":"Animal","kind":"ASSOCIATION","sourceMultiplicity":"0..1","targetMultiplicity":"0..*"},
+                  {"source":"PadreAnimal","target":"Raza","kind":"ASSOCIATION","sourceMultiplicity":"0..*","targetMultiplicity":"1"},
+                  {"source":"MadreAnimal","target":"Animal","kind":"ASSOCIATION","sourceMultiplicity":"0..1","targetMultiplicity":"0..*"},
+                  {"source":"MadreAnimal","target":"Lote","kind":"ASSOCIATION","sourceMultiplicity":"0..*","targetMultiplicity":"1"}],
+                "audit":["parentesco","conservacion"]}
+                """);
+        NormalizadorParentescoPlan.simplificar(p);
+        assertThat(p.path("classes")).extracting(c -> c.path("name").asText()).containsExactly("Animal", "Raza", "Lote");
+        List<String> relaciones = new java.util.ArrayList<>();
+        for (var r : p.path("relations")) relaciones.add(r.path("source").asText() + "-" + r.path("target").asText()
+                + ":" + r.path("targetRole").asText());
+        // Raza-Animal ya existia (no se duplica); Lote pasa a Animal; padre y madre quedan como recursivas.
+        assertThat(relaciones).containsExactlyInAnyOrder("Raza-Animal:", "Animal-Lote:", "Animal-Animal:padre", "Animal-Animal:madre");
+    }
+
+    @Test
     void no_convierte_subclases_en_roles_familiares() throws Exception {
         ObjectNode p = plan();
         ((ObjectNode) p.path("relations").get(0)).put("kind", "GENERALIZATION");
