@@ -28,13 +28,18 @@ class BackendFalso {
   /// Si se setea, el proximo POST responde esto.
   ({int estado, String cuerpo})? errorEnPost;
 
+  /// Si se setea, el proximo PATCH o DELETE responde esto (409, 404...).
+  ({int estado, String cuerpo})? errorEnCambio;
+
+  /// Cuerpo de cada PATCH, en orden: para mirar que viaja la version.
+  final List<Map<String, dynamic>> parches = [];
+
   BackendFalso(String nombreManifiesto)
       : manifiestoJson = File('test/manifests/$nombreManifiesto.json').readAsStringSync();
 
   AppManifest get manifiesto => AppManifest.fromJson(jsonDecode(manifiestoJson) as Map<String, dynamic>);
 
-  void sembrar(String ruta, Map<String, dynamic> fila) =>
-      (tablas[ruta] ??= []).add({'id': 'id-${++_ids}', ...fila});
+  void sembrar(String ruta, Map<String, dynamic> fila) => (tablas[ruta] ??= []).add({'id': 'id-${++_ids}', ...fila});
 
   http.Client cliente() => MockClient((req) async {
         pedidos.add('${req.method} ${req.url.path}');
@@ -54,6 +59,27 @@ class BackendFalso {
           final fila = {'id': 'id-${++_ids}', ...cuerpo};
           (tablas[req.url.path] ??= []).add(fila);
           return http.Response.bytes(utf8.encode(jsonEncode(fila)), 201);
+        }
+        if (req.method == 'PATCH' || req.method == 'DELETE') {
+          final e = errorEnCambio;
+          if (e != null) {
+            errorEnCambio = null;
+            return http.Response(e.cuerpo, e.estado);
+          }
+          final barra = req.url.path.lastIndexOf('/');
+          final ruta = req.url.path.substring(0, barra);
+          final id = req.url.path.substring(barra + 1);
+          final tabla = tablas[ruta] ?? [];
+          final i = tabla.indexWhere((f) => f['id'] == id);
+          if (i < 0) return http.Response('{"message":"no existe"}', 404);
+          if (req.method == 'DELETE') {
+            tabla.removeAt(i);
+            return http.Response('', 204);
+          }
+          final cambios = jsonDecode(utf8.decode(req.bodyBytes)) as Map<String, dynamic>;
+          parches.add(cambios);
+          tabla[i] = {...tabla[i], ...cambios, 'version': ((tabla[i]['version'] as int?) ?? 0) + 1};
+          return http.Response.bytes(utf8.encode(jsonEncode(tabla[i])), 200);
         }
         return http.Response('no', 404);
       });
@@ -91,8 +117,7 @@ void main() {
     test('crear con lo obligatorio hace el POST y confirma', () async {
       await c.enviar('crear libro con título Rayuela, isbn 978-84-376-0494-7 y estado disponible');
       expect(b.pedidos.last, 'POST /api/libro');
-      expect(b.tablas['/api/libro']!.single,
-          containsPair('titulo', 'Rayuela'));
+      expect(b.tablas['/api/libro']!.single, containsPair('titulo', 'Rayuela'));
       expect(_ultimo(c), startsWith('Listo, creé libro'));
       expect(_ultimo(c), contains('Rayuela'));
     });
@@ -269,10 +294,99 @@ void main() {
       expect(_ultimo(c), contains('isbn duplicado'));
     });
 
-    test('actualizar y borrar se dicen fuera de alcance', () async {
-      await c.enviar('borrar el libro Rayuela');
-      expect(c.mensajes.last.deAsistente, isTrue);
-      expect(b.pedidos.where((p) => p != 'GET /app-manifest.json'), isEmpty);
+    // ------------------------------------------------ T-19: ver, cambiar, borrar
+
+    void sembrarLibros() {
+      b.sembrar(
+          '/api/libro', {'titulo': 'Rayuela', 'isbn': '978-1', 'estado': 'DISPONIBLE', 'precio': '20', 'version': 3});
+      b.sembrar('/api/libro', {'titulo': 'Ficciones', 'isbn': '978-2', 'estado': 'DISPONIBLE', 'version': 0});
+    }
+
+    test('ver: muestra el registro nombrado con todos sus datos', () async {
+      sembrarLibros();
+      await c.enviar('mostrame el libro Rayuela');
+      expect(_ultimo(c), contains('Rayuela'));
+      expect(_ultimo(c), contains('978-1'));
+      expect(_ultimo(c), isNot(contains('Ficciones')));
+    });
+
+    test('ver: si no hay ninguno lo dice', () async {
+      sembrarLibros();
+      await c.enviar('mostrame el libro Inexistente');
+      expect(_ultimo(c), contains('No encontré libro «Inexistente»'));
+    });
+
+    test('borrar: siempre confirma y recien con «sí» hace el DELETE', () async {
+      sembrarLibros();
+      await c.enviar('borrá el libro Rayuela');
+      expect(_ultimo(c), contains('¿Borro libro'));
+      expect(_ultimo(c), contains('Rayuela'));
+      expect(c.mensajes.last.opciones.map((o) => o.valor), ['si', 'no']);
+      expect(b.pedidos.where((p) => p.startsWith('DELETE')), isEmpty, reason: 'nada antes de confirmar');
+
+      await c.enviar('sí');
+      expect(b.pedidos.last, 'DELETE /api/libro/id-1');
+      expect(b.tablas['/api/libro']!.map((f) => f['titulo']), ['Ficciones']);
+      expect(_ultimo(c), startsWith('Listo, borré libro'));
+    });
+
+    test('borrar: con «no» no borra nada', () async {
+      sembrarLibros();
+      await c.enviar('eliminar libro Rayuela');
+      await c.enviar('no');
+      expect(b.pedidos.where((p) => p.startsWith('DELETE')), isEmpty);
+      expect(b.tablas['/api/libro'], hasLength(2));
+      expect(_ultimo(c), 'No borré nada.');
+    });
+
+    test('borrar: si coinciden varios pregunta cual, y despues confirma', () async {
+      b.sembrar('/api/socio', {'nombre': 'Ana Pérez'});
+      b.sembrar('/api/socio', {'nombre': 'Ana Gómez'});
+      await c.enviar('dar de baja al socio Ana');
+      expect(_ultimo(c), contains('Hay 2 socio'));
+      await c.elegir(c.mensajes.last.opciones.firstWhere((o) => o.etiqueta.contains('Gómez')));
+      expect(_ultimo(c), contains('¿Borro socio'));
+      await c.enviar('dale');
+      expect(b.tablas['/api/socio']!.single['nombre'], 'Ana Pérez');
+    });
+
+    test('cambiar: PATCH con solo lo que cambia y la version leida', () async {
+      sembrarLibros();
+      await c.enviar('cambiá el precio del libro Rayuela a 50');
+      expect(b.pedidos.last, 'PATCH /api/libro/id-1');
+      expect(b.parches.single, {'precio': '50', 'version': 3});
+      expect(b.tablas['/api/libro']!.first['precio'], '50');
+      expect(_ultimo(c), startsWith('Listo, actualicé libro'));
+    });
+
+    test('cambiar: otro lo cambio en el medio (409) y se dice sin pisarlo', () async {
+      sembrarLibros();
+      b.errorEnCambio = (estado: 409, cuerpo: '{"message":"version vieja"}');
+      await c.enviar('modificar libro Rayuela, precio 30');
+      expect(_ultimo(c), contains('Alguien cambió ese libro mientras tanto'));
+    });
+
+    test('cambiar: si ya no existe (404) se dice', () async {
+      sembrarLibros();
+      b.errorEnCambio = (estado: 404, cuerpo: '{}');
+      await c.enviar('modificar libro Rayuela, precio 30');
+      expect(_ultimo(c), contains('ya no existe'));
+    });
+
+    test('borrar algo que otra tabla usa: el 409 se explica con el motivo del backend', () async {
+      sembrarLibros();
+      await c.enviar('borrá el libro Rayuela');
+      b.errorEnCambio = (estado: 409, cuerpo: '{"error":"Prestamo.libro todavia lo referencia","errores":{}}');
+      await c.enviar('sí');
+      expect(_ultimo(c), 'No se pudo borrar (HTTP 409). Prestamo.libro todavia lo referencia');
+    });
+
+    test('cancelar con un pedido a medias lo corta y lo dice', () async {
+      await c.enviar('crear libro con título Rayuela');
+      await c.enviar('cancelar');
+      expect(_ultimo(c), 'Cancelado: no hice nada.');
+      await c.enviar('isbn 1 y estado disponible');
+      expect(b.pedidos.where((p) => p.startsWith('POST')), isEmpty, reason: 'el pedido cancelado no se completa');
     });
 
     test('sin red: lo cuenta en vez de romper', () async {
@@ -356,8 +470,8 @@ void main() {
       b.sembrar('/api/libro', {'titulo': 'Rayuela'});
       b.sembrar('/api/socio', {'nombre': 'Ana Pérez'});
       b.sembrar('/api/socio', {'nombre': 'Ana Gómez'});
-      await tester.enterText(find.byType(TextField),
-          'crear préstamo del libro Rayuela al socio Ana con fecha de préstamo hoy');
+      await tester.enterText(
+          find.byType(TextField), 'crear préstamo del libro Rayuela al socio Ana con fecha de préstamo hoy');
       await tester.tap(find.byIcon(Icons.send));
       await tester.pumpAndSettle();
       // Primero repite el pedido y espera el «sí»; recien despues resuelve las referencias.
@@ -384,6 +498,17 @@ void main() {
     });
 
     bool huboPost() => b.pedidos.any((p) => p.startsWith('POST'));
+
+    test('cambiar tambien repite lo que va a cambiar y espera el si (T-19)', () async {
+      b.sembrar('/api/socio', {'nombre': 'Ana Pérez', 'version': 1});
+      await c.enviar('modificar socio Ana, email ana@correo.com');
+      expect(_ultimo(c), contains('Voy a cambiar en socio'));
+      expect(_ultimo(c), contains('ana@correo.com'));
+      expect(b.pedidos.any((p) => p.startsWith('PATCH')), isFalse);
+      await c.enviar('confirmo');
+      expect(b.parches.single, {'email': 'ana@correo.com', 'version': 1});
+      expect(_ultimo(c), startsWith('Listo, actualicé socio'));
+    });
 
     test('repite lo que va a crear y no postea hasta el si', () async {
       await c.enviar('crear socio con nombre Carla Rojas');
@@ -466,8 +591,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    IconButton microfono(WidgetTester tester) => tester.widget<IconButton>(find.byWidgetPredicate(
-        (w) => w is IconButton && w.icon is Icon && (w.icon as Icon).icon == Icons.mic_none));
+    IconButton microfono(WidgetTester tester) => tester.widget<IconButton>(
+        find.byWidgetPredicate((w) => w is IconButton && w.icon is Icon && (w.icon as Icon).icon == Icons.mic_none));
 
     String campo(WidgetTester tester) => tester.widget<TextField>(find.byType(TextField)).controller!.text;
 
@@ -622,7 +747,8 @@ void main() {
       final rapido = b.cliente();
       final lento = MockClient((req) async {
         if (req.method == 'POST') await puerta.future;
-        return rapido.send(http.Request(req.method, req.url)
+        return rapido
+            .send(http.Request(req.method, req.url)
               ..headers.addAll(req.headers)
               ..bodyBytes = req.bodyBytes)
             .then(http.Response.fromStream);

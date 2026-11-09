@@ -12,17 +12,18 @@
 //   1. Un empate se PREGUNTA, nunca se elige (entidad, campo o literal).
 //   2. Un valor que no encaja con su tipo, rango o enumeracion se RECHAZA con
 //      motivo antes de pegarle a P2.
-//   3. Lo que no esta en alcance se dice: actualizar y borrar no se ejecutan.
+//   3. Un registro se nombra por lo que se ve de el ("el libro Rayuela"): el
+//      motor no lo busca, devuelve el texto; la app lo busca en P2 y, si hay
+//      varios, pregunta cual.
 //
-// Alcance de esta version: CREAR y LISTAR. Sin actualizar, sin borrar, sin
-// cola offline (README, recorte declarado).
+// Alcance (T-19): CREAR, LISTAR, VER, ACTUALIZAR y BORRAR. Sin cola offline.
 // ============================================================================
 
 import 'app_manifest.dart';
 import 'lexico.dart';
 import 'valores.dart';
 
-enum Accion { crear, listar }
+enum Accion { crear, listar, ver, actualizar, borrar }
 
 // ---------------------------------------------------------------- RESULTADOS
 
@@ -47,10 +48,19 @@ class Resuelta extends Interpretacion {
   /// la app puede verificarlo antes para explicarlo mejor.
   final List<FieldDescriptor> unicos;
 
-  Resuelta(super.texto, this.accion, this.entidad,
-      {this.cuerpo = const {}, this.referencias = const [], this.unicos = const []});
+  /// VER, ACTUALIZAR y BORRAR: como se nombro el registro ("Rayuela"). La app
+  /// lo busca en P2. Al actualizar, `cuerpo` y `referencias` son los cambios.
+  final String? busqueda;
 
-  String get metodo => accion == Accion.crear ? 'POST' : 'GET';
+  Resuelta(super.texto, this.accion, this.entidad,
+      {this.cuerpo = const {}, this.referencias = const [], this.unicos = const [], this.busqueda});
+
+  String get metodo => switch (accion) {
+        Accion.crear => 'POST',
+        Accion.listar || Accion.ver => 'GET',
+        Accion.actualizar => 'PATCH',
+        Accion.borrar => 'DELETE',
+      };
   String get ruta => entidad.path;
 }
 
@@ -107,7 +117,7 @@ class Rechazada extends Interpretacion {
   String get mensaje => motivos.map((m) => m.motivo).join('. ');
 }
 
-/// Actualizar y borrar: se reconocen para decir que no estan, no para adivinar.
+/// Se entendio el pedido, pero esta version no lo hace (o la API no lo permite).
 class FueraDeAlcance extends Interpretacion {
   final String motivo;
   FueraDeAlcance(super.texto, this.motivo);
@@ -149,13 +159,14 @@ const Set<String> _verbosListar = {
 const Set<String> _listarDebil = {'que', 'cuales', 'todos', 'todas'};
 
 const Set<String> _verbosActualizar = {
-  'actualizar', 'actualiza', 'modificar', 'modifica', 'cambiar', 'cambia', 'editar', 'edita', 'corregir',
-  'corregi', 'corrige', 'renombrar', 'renombra', 'reprogramar', 'reprograma', 'mover', 'mueve',
+  'actualizar', 'actualiza', 'actualice', 'modificar', 'modifica', 'modifique', 'cambiar', 'cambia', 'cambie',
+  'editar', 'edita', 'corregir', 'corregi', 'corrige', 'renombrar', 'renombra', 'reprogramar', 'reprograma',
+  'poner', 'pone', 'pon', 'ponele', 'ponle', 'fijar', 'fija',
 };
 
 const Set<String> _verbosBorrar = {
-  'borrar', 'borra', 'eliminar', 'elimina', 'quitar', 'quita', 'sacar', 'saca', 'cancelar', 'cancela',
-  'anular', 'anula', 'baja', 'remover', 'remove',
+  'borrar', 'borra', 'eliminar', 'elimina', 'quitar', 'quita', 'sacar', 'saca',
+  'anular', 'anula', 'remover', 'remove', 'suprimir', 'suprime',
 };
 
 const List<String> _cliticos = ['melo', 'mela', 'nos', 'les', 'los', 'las', 'me', 'le', 'lo', 'la'];
@@ -215,15 +226,22 @@ class MotorDeIntenciones {
     }
     if (verbo.fuera != null) return FueraDeAlcance(texto, verbo.fuera!);
     final accion = verbo.accion!;
-    final verboAccion = accion == Accion.crear ? 'create' : 'list';
+    final verboAccion = _permiso[accion]!;
 
     // ---- entidad
     var p = verbo.siguiente;
     while (p < tokens.length && !tokens[p].signo && _determinantes.contains(tokens[p].norma)) {
       p++;
     }
-    final encontradas = _mejores<EntityDescriptor>(
-        tokens, p, manifiesto.entities.where((e) => e.permite(verboAccion) || e.isAbstract), (e) => e.synonyms);
+    final sobreRegistro = accion == Accion.actualizar || accion == Accion.borrar;
+    var encontradas = _mejores<EntityDescriptor>(tokens, p,
+        manifiesto.entities.where((e) => sobreRegistro || e.permite(verboAccion) || e.isAbstract), (e) => e.synonyms);
+
+    // "cambiá EL PRECIO DEL libro Rayuela a 50": el campo va antes de la entidad.
+    if (accion == Accion.actualizar && encontradas.candidatos.isEmpty) {
+      final r = _campoAntesDeEntidad(texto, tokens, p, aclaraciones);
+      if (r != null) return r;
+    }
 
     EntityDescriptor? entidad;
     var inicioResto = p;
@@ -232,7 +250,7 @@ class MotorDeIntenciones {
     final elegida = aclaraciones['entidad'];
     final elegibles = encontradas.candidatos.isNotEmpty
         ? encontradas.candidatos
-        : manifiesto.entities.where((e) => e.permite(verboAccion)).toList();
+        : manifiesto.entities.where((e) => e.permite(verboAccion) && !e.isAbstract).toList();
     if (elegida != null) {
       entidad = manifiesto.entidad(elegida);
       if (entidad == null) return NoEntendida(texto, 'No existe la entidad $elegida');
@@ -247,15 +265,34 @@ class MotorDeIntenciones {
       return NoEntendida(texto, 'No entendí qué querés hacer. Puedo crear o listar, por ejemplo '
           '«listar ${_ejemplo()}».');
     } else {
-      final verboDicho = accion == Accion.crear ? 'crear' : 'listar';
+      final verboDicho = _verboDicho[accion]!;
       return Ambigua(texto, 'entidad',
           '¿Qué querés $verboDicho? Puedo: ${enumerar(elegibles.map((e) => e.nombreHablado).toList())}.',
           elegibles.map((e) => Opcion(e.name, e.nombreHablado)).toList());
     }
 
     if (accion == Accion.listar) {
-      // Filtros ("libros de García") fuera de alcance: se lista todo.
-      return Resuelta(texto, Accion.listar, entidad);
+      // "mostrame los libros" lista; "mostrame el libro Rayuela" muestra ese.
+      final busqueda = _nombreDelRegistro(texto, tokens, inicioResto, tokens.length);
+      return busqueda == null
+          ? Resuelta(texto, Accion.listar, entidad)
+          : Resuelta(texto, Accion.ver, entidad, busqueda: busqueda);
+    }
+
+    if (sobreRegistro) {
+      if (!entidad.permite(verboAccion)) {
+        return Rechazada(texto, entidad,
+            [Rechazo('La API no permite ${_verboDicho[accion]} ${entidad.nombreHablado}')]);
+      }
+      if (accion == Accion.borrar) {
+        final busqueda = _nombreDelRegistro(texto, tokens, inicioResto, tokens.length);
+        if (busqueda == null) {
+          return NoEntendida(texto, '¿Qué ${entidad.nombreHablado} querés borrar? Decime cuál, por ejemplo '
+              '«borrar ${entidad.nombreHablado} …».');
+        }
+        return Resuelta(texto, Accion.borrar, entidad, busqueda: busqueda);
+      }
+      return _actualizar(texto, tokens, inicioResto, entidad, aclaraciones);
     }
 
     // ---- una entidad abstracta no se crea: se pregunta cual de sus hijas
@@ -275,8 +312,10 @@ class MotorDeIntenciones {
 
   // ------------------------------------------------------------------ CREAR
 
+  /// `parcial`: al actualizar se manda solo lo que cambia, asi que no faltan
+  /// obligatorios.
   Interpretacion _crear(String texto, List<Token> tokens, int inicio, EntityDescriptor entidad,
-      Map<String, String> aclaraciones) {
+      Map<String, String> aclaraciones, {bool parcial = false}) {
     final menciones = _menciones(tokens, inicio, entidad);
 
     // Empate entre campos: se pregunta, salvo que ya se haya contestado.
@@ -376,6 +415,16 @@ class MotorDeIntenciones {
       }
     }
     if (rechazos.isNotEmpty) return Rechazada(texto, entidad, rechazos);
+    // Un cambio pedido sin valor no se descarta: mandar el resto seria hacer
+    // menos de lo que se pidio sin avisar.
+    if (parcial && sinValor.isNotEmpty) {
+      final cuales = enumerar(sinValor.map((f) => f.nombreHablado).toList(), conjuncion: 'y');
+      return NoEntendida(texto, '¿A qué valor cambio $cuales? No cambié nada: decilo de nuevo con el valor.');
+    }
+    if (parcial) {
+      return Resuelta(texto, Accion.actualizar, entidad,
+          cuerpo: cuerpo, referencias: referencias, unicos: valores.keys.where((f) => f.unique).toList());
+    }
 
     final faltantes = [
       ...sinValor,
@@ -418,14 +467,14 @@ class MotorDeIntenciones {
         return _Verbo(Accion.crear, null, i + 3);
       }
       if ((w == 'dar' || w == 'da' || w == 'de') && siguiente == 'de' && despues == 'baja') {
-        return _Verbo(null, _fuera('borrar'), i + 3);
+        return _Verbo(Accion.borrar, null, i + 3);
       }
       var forma = _sinClitico(w);
       // "quiero QUE crees un libro": ese "que" no pregunta nada.
       if (forma == 'que' && _sinClitico(siguiente) != null) forma = null;
       if (forma != null) {
-        if (_verbosBorrar.contains(forma)) return _Verbo(null, _fuera('borrar'), i + 1);
-        if (_verbosActualizar.contains(forma)) return _Verbo(null, _fuera('modificar'), i + 1);
+        if (_verbosBorrar.contains(forma)) return _Verbo(Accion.borrar, null, i + 1);
+        if (_verbosActualizar.contains(forma)) return _Verbo(Accion.actualizar, null, i + 1);
         if (_verbosCrear.contains(forma)) return _Verbo(Accion.crear, null, i + 1);
         if (_verbosListar.contains(forma)) {
           return _Verbo(Accion.listar, null, i + 1, debil: _listarDebil.contains(forma));
@@ -451,8 +500,161 @@ class MotorDeIntenciones {
     return null;
   }
 
-  String _fuera(String que) =>
-      'Todavía no puedo $que desde el asistente: en esta versión solo creo y listo.';
+  static const Map<Accion, String> _permiso = {
+    Accion.crear: 'create',
+    Accion.listar: 'list',
+    Accion.ver: 'list',
+    Accion.actualizar: 'update',
+    Accion.borrar: 'delete',
+  };
+
+  static const Map<Accion, String> _verboDicho = {
+    Accion.crear: 'crear',
+    Accion.listar: 'listar',
+    Accion.ver: 'ver',
+    Accion.actualizar: 'cambiar',
+    Accion.borrar: 'borrar',
+  };
+
+  /// Lo que puede ir entre la entidad y el nombre del registro: "el socio
+  /// LLAMADO Ana", "el libro QUE SE LLAMA Rayuela", "los libros DE García".
+  static const Set<String> _antesDelNombre = {
+    'llamado', 'llamada', 'llamados', 'llamadas', 'se', 'llama', 'nombre', 'nombrado', 'nombrada',
+  };
+
+  /// El texto con el que se nombra un registro, con su ortografia original.
+  /// Null si no se nombro ninguno ("mostrame los libros").
+  String? _nombreDelRegistro(String texto, List<Token> tokens, int desde, int hasta) {
+    var a = desde, b = hasta;
+    // "llamado", "nombre"... solo son relleno si despues viene el nombre: en
+    // "borrá el producto Nombre" el registro SE LLAMA "Nombre".
+    while (a < b &&
+        (tokens[a].signo ||
+            (!tokens[a].citado &&
+                (_determinantes.contains(tokens[a].norma) ||
+                    _delimitadoresDebiles.contains(tokens[a].norma) ||
+                    (_antesDelNombre.contains(tokens[a].norma) && a < b - 1))))) {
+      a++;
+    }
+    while (b > a && (tokens[b - 1].signo || (!tokens[b - 1].citado && _esDelimitador(tokens[b - 1])))) {
+      b--;
+    }
+    return a < b ? _valorDe(texto, tokens, a, b) : null;
+  }
+
+  // -------------------------------------------------------------- ACTUALIZAR
+
+  /// "modificar socio Ana, email ana@x.com" / "actualizar el libro Rayuela con
+  /// precio 50": el registro es lo que va entre la entidad y el primer campo;
+  /// los cambios se leen igual que al crear, sin exigir obligatorios.
+  Interpretacion _actualizar(String texto, List<Token> tokens, int inicio, EntityDescriptor entidad,
+      Map<String, String> aclaraciones) {
+    final menciones = _menciones(tokens, inicio, entidad);
+    final primera = menciones.where((m) => m.desde > inicio).firstOrNull;
+    final finNombre = primera == null ? tokens.length : _inicioConDelimitador(tokens, primera.desde);
+    final busqueda = _nombreDelRegistro(texto, tokens, inicio, finNombre);
+    if (busqueda == null) {
+      return NoEntendida(texto, '¿Qué ${entidad.nombreHablado} querés cambiar? Decime cuál y qué, por ejemplo '
+          '«cambiar ${entidad.nombreHablado} …, ${entidad.fields.first.nombreHablado} …».');
+    }
+    if (primera == null) {
+      return NoEntendida(texto, '¿Qué querés cambiar de ${entidad.nombreHablado} «$busqueda»? Decime el dato y '
+          'el valor nuevo, por ejemplo «…, ${entidad.fields.first.nombreHablado} …».');
+    }
+    final cambios = _crear(texto, tokens, finNombre, entidad, aclaraciones, parcial: true);
+    if (cambios is! Resuelta) return cambios;
+    if (cambios.cuerpo.isEmpty && cambios.referencias.isEmpty) {
+      return NoEntendida(texto, 'No entendí qué cambiar de ${entidad.nombreHablado} «$busqueda».');
+    }
+    return Resuelta(texto, Accion.actualizar, entidad,
+        cuerpo: cambios.cuerpo, referencias: cambios.referencias, unicos: cambios.unicos, busqueda: busqueda);
+  }
+
+  /// "cambiá el precio del libro Rayuela a 50": CAMPO de ENTIDAD REGISTRO a VALOR.
+  /// Null si no tiene esa forma (y entonces se sigue como siempre).
+  Interpretacion? _campoAntesDeEntidad(
+      String texto, List<Token> tokens, int p, Map<String, String> aclaraciones) {
+    for (var j = p + 1; j < tokens.length; j++) {
+      if (_delimitadorAntes(tokens, j) != _Delim.debil) continue;
+      final ents = _mejores<EntityDescriptor>(tokens, j, manifiesto.entities, (e) => e.synonyms);
+      if (ents.candidatos.length != 1) continue;
+      final entidad = ents.candidatos.single;
+      final campos = _mejores<FieldDescriptor>(tokens, p, entidad.fields, (f) => f.synonyms);
+      if (campos.candidatos.isEmpty || campos.hasta > _inicioConDelimitador(tokens, j)) continue;
+      if (!entidad.permite('update')) {
+        return Rechazada(texto, entidad, [Rechazo('La API no permite cambiar ${entidad.nombreHablado}')]);
+      }
+      FieldDescriptor campo;
+      final clave = 'campo:${normalizar(_dicho(tokens, p, campos.hasta))}';
+      if (campos.candidatos.length > 1 && aclaraciones[clave] == null) {
+        return Ambigua(texto, clave,
+            '«${_dicho(tokens, p, campos.hasta)}» puede ser '
+                '${enumerar(campos.candidatos.map((c) => c.nombreHablado).toList())}: ¿cuál?',
+            campos.candidatos.map((c) => Opcion(c.name, c.nombreHablado)).toList());
+      }
+      campo = campos.candidatos.firstWhere((c) => c.name == aclaraciones[clave],
+          orElse: () => campos.candidatos.first);
+
+      // "a" o "por" separan el registro del valor nuevo ("cambiar X a Y", "X por
+      // Y"); "en" solo si ninguno de esos dos sirve, porque suele ser parte de
+      // un titulo. Vale un corte que deja nombre y un valor valido. Si quedan
+      // varios ("Viaje a la luna por Regreso"), se pregunta: no se adivina.
+      bool sirve(int k) {
+        if (_nombreDelRegistro(texto, tokens, ents.hasta, k) == null) return false;
+        final r = _recortar(tokens, k + 1, tokens.length, campo);
+        return r != null && convertir(campo, _valorDe(texto, tokens, r.$1, r.$2), reloj()) is! Invalido;
+      }
+
+      final separadores = [
+        for (var k = ents.hasta + 1; k < tokens.length; k++)
+          if (!tokens[k].citado && const {'a', 'por', 'en'}.contains(tokens[k].norma)) k,
+      ];
+      var validos = separadores.where(sirve).toList();
+      if (validos.any((k) => tokens[k].norma != 'en')) {
+        validos = validos.where((k) => tokens[k].norma != 'en').toList();
+      }
+      var corte = validos.isNotEmpty ? validos.last : (separadores.isEmpty ? -1 : separadores.last);
+      if (validos.length > 1) {
+        final elegido = int.tryParse(aclaraciones['corte'] ?? '');
+        if (elegido == null || !validos.contains(elegido)) {
+          return Ambigua(texto, 'corte',
+              'No me queda claro dónde termina el nombre de ${entidad.nombreHablado}: ¿cuál es?',
+              [for (final k in validos) Opcion('$k', '«${_nombreDelRegistro(texto, tokens, ents.hasta, k)}»')]);
+        }
+        corte = elegido;
+      }
+      final busqueda = _nombreDelRegistro(texto, tokens, ents.hasta, corte < 0 ? tokens.length : corte);
+      if (busqueda == null) {
+        return NoEntendida(texto, '¿De qué ${entidad.nombreHablado} querés cambiar ${campo.nombreHablado}?');
+      }
+      final rango = corte < 0 ? null : _recortar(tokens, corte + 1, tokens.length, campo);
+      if (rango == null) {
+        return NoEntendida(texto, '¿A qué valor cambio ${campo.nombreHablado} de ${entidad.nombreHablado} '
+            '«$busqueda»? Por ejemplo «cambiá ${campo.nombreHablado} de ${entidad.nombreHablado} $busqueda a …».');
+      }
+      final valor = _valorDe(texto, tokens, rango.$1, rango.$2);
+      switch (convertir(campo, valor, reloj())) {
+        case Convertido(:final json):
+          return Resuelta(texto, Accion.actualizar, entidad,
+              cuerpo: {campo.name: json}, unicos: [if (campo.unique) campo], busqueda: busqueda);
+        case PorResolver(texto: final dicho):
+          return Resuelta(texto, Accion.actualizar, entidad,
+              referencias: [ReferenciaPendiente(campo, campo.target!, dicho)], busqueda: busqueda);
+        case Invalido(:final motivo):
+          return Rechazada(texto, entidad, [Rechazo(motivo, campo: campo, valor: valor)]);
+        case LiteralAmbiguo(:final literales):
+          final claveValor = 'valor:${campo.name}';
+          final elegido = aclaraciones[claveValor];
+          if (elegido != null && literales.contains(elegido)) {
+            return Resuelta(texto, Accion.actualizar, entidad, cuerpo: {campo.name: elegido}, busqueda: busqueda);
+          }
+          return Ambigua(texto, claveValor,
+              '«$valor» puede ser ${enumerar(literales.map(literalHablado).toList())}: ¿cuál?',
+              literales.map((l) => Opcion(l, literalHablado(l))).toList());
+      }
+    }
+    return null;
+  }
 
   String _ejemplo() {
     final e = manifiesto.entities.where((e) => e.permite('create')).firstOrNull ?? manifiesto.entities.firstOrNull;
