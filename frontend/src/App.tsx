@@ -12,7 +12,7 @@ import { MenuEditor } from './apariencia/MenuEditor'
 import { Icono } from './apariencia/Icono'
 import { SeccionPlegable } from './apariencia/SeccionPlegable'
 import { useTema } from './apariencia/useTema'
-import { guardarSeccion, leerSeccion, menusPara } from './apariencia/estado'
+import { guardarSeccion, leerSeccion, menusPara, NOMBRE_TEMA } from './apariencia/estado'
 import { VistaLogica, type ModeloLogico } from './logical/VistaLogica'
 import { PanelGeneracion, type ResumenGeneracion } from './codegen/PanelGeneracion'
 import { VistaFisica, type EsquemaFisico, type VerificacionDelEsquema } from './physical/VistaFisica'
@@ -124,7 +124,7 @@ interface Props {
 }
 
 export default function App({ token, usuario, proyecto, diagrama, rol, alVolver, alCerrarSesion, alRevalidarAcceso }: Props) {
-  const { tema, alternar, sistema } = useTema()
+  const { tema, proximoTema, alternar, sistema, elegir } = useTema()
   const [verPanel, setVerPanel] = useState(() => leerSeccion(() => window.localStorage, 'panel'))
   const archivoImagen = useRef<HTMLInputElement>(null)
   const cambiarPanel = () => setVerPanel((v) => {
@@ -971,7 +971,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
   const ultimoCambio = entradasDeHistorial[0]
 
   const menus = menusPara(rol, { conectado, diagrama: !!diagramId, editable,
-    deshacer: !!historial.proximoDeshacer(), rehacer: !!historial.proximoRehacer() })
+    deshacer: !!historial.proximoDeshacer(), rehacer: !!historial.proximoRehacer() }, tema)
   const elegirMenu = (id: string) => {
     // El rol o la conexión pueden cambiar mientras el menú está abierto.
     if (!menus.flatMap((g) => g.acciones).some((a) => a.id === id && a.habilitada)) return
@@ -986,7 +986,9 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       case 'versiones': setVerVersiones(true); break
       case 'paleta': setVerExplorador((v) => !v); break
       case 'panel': cambiarPanel(); break
-      case 'tema': alternar(); break
+      case 'tema-claro': elegir('claro'); break
+      case 'tema-oscuro': elegir('oscuro'); break
+      case 'tema-grafito': elegir('grafito'); break
       case 'sistema': sistema(); break
     }
   }
@@ -1010,9 +1012,9 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         <button onClick={alVolver}>Volver al proyecto</button>
         <button onClick={alCerrarSesion}>Cerrar sesión</button>
         <button className="boton-tema" onClick={alternar}
-          aria-label={tema === 'oscuro' ? 'Usar tema claro' : 'Usar tema oscuro'}
-          title={tema === 'oscuro' ? 'Usar tema claro' : 'Usar tema oscuro'}>
-          <Icono nombre={tema === 'oscuro' ? 'sol' : 'luna'} />
+          aria-label={`Cambiar a tema ${NOMBRE_TEMA[proximoTema]}`}
+          title={`Cambiar a tema ${NOMBRE_TEMA[proximoTema]}`}>
+          <Icono nombre={proximoTema === 'claro' ? 'sol' : proximoTema === 'oscuro' ? 'luna' : 'grafito'} />
         </button>
       </header>
 
@@ -1034,6 +1036,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       <Toolbar
         disabled={!conectado || !diagramId || !puedeEditar}
         puedeGenerar={conectado && !!diagramId}
+        onGenerar={() => void abrirGeneracion()}
         ambiguedadesPendientes={ambiguedades?.filter((a) => !a.decidida).length ?? 0}
         onAmbiguedades={() => setVerAmbiguedades(true)}
         panelIzquierdo={vista === 'CLASS' ? verExplorador : null}

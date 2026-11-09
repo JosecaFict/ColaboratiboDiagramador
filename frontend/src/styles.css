@@ -497,9 +497,9 @@ input.vision-mult.sin-leer::placeholder { color: var(--rojo); }
                         mask-image: linear-gradient(180deg, transparent, var(--texto) 30%, var(--texto) 70%, transparent); }
 .acceso-marca > * { position: relative; }
 .acceso-logo { display: flex; align-items: center; gap: 10px; }
-.acceso-logo strong { font-size: 19px; letter-spacing: -0.02em; color: var(--sobre-acento); }
+.acceso-logo strong { font-size: 19px; letter-spacing: -0.02em; color: var(--marca-texto); }
 .acceso-lema { margin: 0; max-width: 440px; font-size: clamp(22px, 2.6vw, 30px); line-height: 1.22;
-               font-weight: 700; letter-spacing: -0.02em; color: var(--sobre-acento); }
+               font-weight: 700; letter-spacing: -0.02em; color: var(--marca-texto); }
 .acceso-ilustracion { width: min(100%, 470px); height: auto; filter: drop-shadow(0 18px 30px var(--velo)); }
 .acceso-puntos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px;
                  max-width: 460px; font-size: 14px; line-height: 1.45; color: var(--linea); }
@@ -1167,7 +1167,7 @@ input.fis-col { font-family: ui-monospace, monospace; }
 
 /* Apariencia y navegación del editor. Los controles conservan sus nombres y foco. */
 :root { color-scheme: light; }
-:root[data-tema="oscuro"] { color-scheme: dark; }
+:root[data-tema="oscuro"], :root[data-tema="grafito"] { color-scheme: dark; }
 button, input, textarea, select { font-family: inherit; color: inherit; }
 input, textarea, select { background-color: var(--panel); }
 a { color: var(--acento); }
@@ -1240,7 +1240,7 @@ button:hover:not(:disabled) { border-color: var(--acento); }
 
 .chat-flotante { bottom: 48px; }
 .toast-aviso { background: var(--inverso); color: var(--sobre-acento); }
-.toast-aviso button { color: var(--marca-texto); }
+.toast-aviso button { color: inherit; }
 .acceso-marca { background: linear-gradient(155deg, var(--marca-inicio), var(--marca-fin)); color: var(--marca-texto); }
 .acceso-puntos { color: var(--marca-texto); }
 .acceso-puntos li::before { background: var(--marca-azul); }
@@ -1250,3 +1250,12 @@ button:hover:not(:disabled) { border-color: var(--acento); }
 .menu-editor { z-index: 40; }
 .chat-boton { bottom: 48px; }
 :focus-visible { outline: 2px solid var(--acento) !important; outline-offset: 3px; }
+
+/* La forma de la acción principal acompaña al tema, también en los formularios. */
+.tb-primario, .tb-primario-chico, .acceso-enviar, .fis-acciones .fis-confirmar,
+.ia-config-acciones button, .ia-config-error button, .ia-compositor button, .ia-aplicar button,
+.chat-acciones button.principal, .chat-entrada > button, .chat-botones > button:not(.chat-microfono) {
+  border-radius: var(--radio-accion);
+}
+.menu-desplegable button[aria-checked="true"] { background: var(--acento-fondo); color: var(--acento); }
+.menu-desplegable button[aria-checked="true"] > span::before { content: '\2713 '; }

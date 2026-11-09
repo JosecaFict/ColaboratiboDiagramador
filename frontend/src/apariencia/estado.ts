@@ -1,11 +1,15 @@
-﻿import { permisosDe, type Rol } from '../auth/permisos'
-export type Tema = 'claro' | 'oscuro'
+import { permisosDe, type Rol } from '../auth/permisos'
+export type Tema = 'claro' | 'oscuro' | 'grafito'
+export const NOMBRE_TEMA: Record<Tema, string> = { claro: 'claro', oscuro: 'azul noche', grafito: 'grafito' }
+export function siguienteTema(tema: Tema): Tema {
+  return tema === 'claro' ? 'oscuro' : tema === 'oscuro' ? 'grafito' : 'claro'
+}
 export type PreferenciaTema = Tema | 'sistema'
 export const CLAVE_TEMA = 'colabmodel.tema'
 export interface AlmacenVisual { getItem(clave: string): string | null; setItem(clave: string, valor: string): void }
 export type AccesoAlmacen = () => AlmacenVisual
 export function preferenciaValida(valor: unknown): PreferenciaTema {
-  return valor === 'claro' || valor === 'oscuro' ? valor : 'sistema'
+  return valor === 'claro' || valor === 'oscuro' || valor === 'grafito' ? valor : 'sistema'
 }
 export function resolverTema(preferencia: PreferenciaTema, oscuroDelSistema: boolean): Tema {
   return preferencia === 'sistema' ? oscuroDelSistema ? 'oscuro' : 'claro' : preferencia
@@ -27,13 +31,16 @@ export function leerSeccion(acceso: AccesoAlmacen, id: Seccion): boolean {
 export function guardarSeccion(acceso: AccesoAlmacen, id: Seccion, abierta: boolean) {
   try { acceso().setItem(`colabmodel.seccion.${id}`, String(abierta)) } catch { /* Preferencia opcional. */ }
 }
-export interface AccionMenu { id: string; texto: string; habilitada: boolean; atajo?: string }
+export interface AccionMenu { id: string; texto: string; habilitada: boolean; atajo?: string; tipo?: 'radio'; marcada?: boolean }
 export interface GrupoMenu { titulo: string; acciones: AccionMenu[] }
 export interface ContextoMenu {
   conectado: boolean; diagrama: boolean; editable: boolean; deshacer: boolean; rehacer: boolean
 }
-export function menusPara(rol: Rol | null | undefined, c: ContextoMenu): GrupoMenu[] {
+export function menusPara(rol: Rol | null | undefined, c: ContextoMenu, tema: Tema = 'claro'): GrupoMenu[] {
   const p = permisosDe(rol)
+  // Generar el zip y exportar XMI son lecturas del modelo (ADR-022): también para Observador.
+  // Leer el archivo de importación solo propone; aplicarlo escribe por el bus (ADR-016).
+  // Por eso Importar/Desde imagen piden edición. Deshacer/rehacer también escriben (ADR-027).
   const leer = p.leer && c.conectado && c.diagrama
   const escribir = p.editarModelo && leer && c.editable
   return [
@@ -49,7 +56,9 @@ export function menusPara(rol: Rol | null | undefined, c: ContextoMenu): GrupoMe
     { titulo: 'Ver', acciones: [
       { id: 'paleta', texto: 'Proyecto y paleta', habilitada: c.editable },
       { id: 'panel', texto: 'Panel de detalles', habilitada: true },
-      { id: 'tema', texto: 'Cambiar tema', habilitada: true },
+      { id: 'tema-claro', texto: 'Tema claro', habilitada: true, tipo: 'radio', marcada: tema === 'claro' },
+      { id: 'tema-oscuro', texto: 'Tema azul noche', habilitada: true, tipo: 'radio', marcada: tema === 'oscuro' },
+      { id: 'tema-grafito', texto: 'Tema grafito', habilitada: true, tipo: 'radio', marcada: tema === 'grafito' },
       { id: 'sistema', texto: 'Usar tema del sistema', habilitada: true },
     ] },
     { titulo: 'Modelo', acciones: [

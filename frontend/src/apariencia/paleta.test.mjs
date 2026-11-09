@@ -12,8 +12,8 @@ const contraste = (a,b) => {
   return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)
 }
 describe('contraste de los tokens de texto y acciones', () => {
-  for (const i of [0,1]) it(`tema ${i === 0 ? 'claro' : 'oscuro'} cumple AA en superficies, estados y botones`, () => {
-    expect(bloques).toHaveLength(2)
+  for (const [i, tema] of ['claro', 'oscuro', 'grafito'].entries()) it(`tema ${tema} cumple AA en superficies, estados y botones`, () => {
+    expect(bloques).toHaveLength(3)
     const p = bloques[i]
     for (const fondo of ['panel','fondo','suave','elevado']) for (const texto of ['texto','secundario','tenue','acento','lila']) {
       expect(contraste(p[texto],p[fondo]),`${texto} sobre ${fondo}`).toBeGreaterThanOrEqual(4.5)
@@ -25,4 +25,16 @@ describe('contraste de los tokens de texto y acciones', () => {
       expect(contraste(p['sobre-acento'],p[accion]),accion).toBeGreaterThanOrEqual(4.5)
     }
   })
+})
+
+
+it('todos los temas declaran los mismos tokens y Grafito usa acciones en píldora', () => {
+  const declaraciones = [...css.matchAll(/(?:^|\n)(:root[^\{]*)\{([^}]+)\}/g)].map((m) =>
+    Object.fromEntries([...m[2].matchAll(/--([\w-]+):\s*([^;]+);/g)].map((c) => [c[1], c[2]])))
+  expect(declaraciones).toHaveLength(3)
+  for (const p of declaraciones) expect(Object.keys(p).sort()).toEqual(Object.keys(declaraciones[0]).sort())
+  expect(declaraciones.map((p) => p['radio-accion'])).toEqual(['6px', '6px', '999px'])
+  for (const fondo of ['marca-inicio', 'marca-fin']) {
+    expect(contraste(declaraciones[2]['marca-texto'], declaraciones[2][fondo])).toBeGreaterThanOrEqual(4.5)
+  }
 })
