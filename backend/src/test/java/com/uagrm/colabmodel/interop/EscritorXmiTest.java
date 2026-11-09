@@ -155,4 +155,72 @@ class EscritorXmiTest {
         assertThat(ex.perdidas()).hasSize(1);
         assertThat(ex.perdidas().get(0)).contains("A-1..A-4");
     }
+
+    // ============================== T-05: enumeraciones y valores como UML estandar
+
+    private static UmlClass claseDe(UUID diagrama, String nombre, String estereotipo) {
+        UmlClass c = new UmlClass();
+        c.setId(UUID.randomUUID());
+        c.setDiagramId(diagrama);
+        c.setName(nombre);
+        c.setStereotype(estereotipo);
+        return c;
+    }
+
+    private static UmlAttribute atributoDe(UmlClass c, String nombre, String tipo, int ordinal) {
+        UmlAttribute a = new UmlAttribute();
+        a.setId(UUID.randomUUID());
+        a.setClassId(c.getId());
+        a.setName(nombre);
+        a.setDataType(tipo);
+        a.setOrdinal(ordinal);
+        a.setVisibility(Visibility.PROTECTED);
+        return a;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ESTANDAR", "ENTERPRISE_ARCHITECT"})
+    void la_enumeracion_y_el_valor_salen_como_uml_estandar_y_vuelven_iguales(String perfil) {
+        UmlClass pedido = claseDe(diagramId, "Pedido", null);
+        UmlClass estado = claseDe(diagramId, "EstadoPedido", "enumeration");
+        UmlClass direccion = claseDe(diagramId, "Direccion", "embeddable");
+        UmlAttribute enEstado = atributoDe(pedido, "estado", "EstadoPedido", 0);
+        enEstado.setDefaultValue("PENDIENTE");
+        List<UmlAttribute> atributos = List.of(enEstado,
+                atributoDe(estado, "PENDIENTE", "string", 0), atributoDe(estado, "PAGADO", "string", 1),
+                atributoDe(direccion, "calle", "string", 0));
+
+        EscritorXmi.Exportado ex = EscritorXmi.exportar(List.of(pedido, estado, direccion), atributos, List.of(),
+                List.of(), List.of(), EscritorXmi.Perfil.valueOf(perfil));
+        String xmi = new String(ex.xmi(), java.nio.charset.StandardCharsets.UTF_8);
+
+        assertThat(xmi).contains("xmi:type=\"uml:Enumeration\"").contains("xmi:type=\"uml:DataType\"")
+                .contains("<ownedLiteral xmi:type=\"uml:EnumerationLiteral\"");
+        assertThat(ex.perdidas()).as("enumeration y embeddable ya no son perdidas")
+                .noneMatch(p -> p.contains("enumeration") || p.contains("embeddable"));
+
+        ModeloLeido leido = new LectorXmi().leer(ex.xmi());
+        ModeloLeido.ClaseLeida e = leido.clases().stream().filter(c -> c.nombre().equals("EstadoPedido")).findFirst()
+                .orElseThrow();
+        assertThat(e.estereotipo()).isEqualTo("enumeration");
+        assertThat(e.atributos()).extracting(ModeloLeido.AtributoLeido::nombre).containsExactly("PENDIENTE", "PAGADO");
+        assertThat(leido.clases()).filteredOn(c -> c.nombre().equals("Direccion"))
+                .singleElement().extracting(ModeloLeido.ClaseLeida::estereotipo).isEqualTo("embeddable");
+        ModeloLeido.AtributoLeido vuelto = leido.clases().stream().filter(c -> c.nombre().equals("Pedido"))
+                .findFirst().orElseThrow().atributos().get(0);
+        assertThat(vuelto.tipoLeido()).isEqualTo("EstadoPedido");
+        assertThat(vuelto.visibilidad()).isEqualTo("PROTECTED");
+        assertThat(vuelto.valorPorDefecto()).isEqualTo("PENDIENTE");
+    }
+
+    @Test
+    void un_valor_sin_atributos_sigue_saliendo_como_clase_para_no_perderse_al_volver() {
+        UmlClass vacio = claseDe(diagramId, "Marca", "embeddable");
+        EscritorXmi.Exportado ex = EscritorXmi.exportar(List.of(vacio), List.of(), List.of(), List.of());
+        assertThat(new String(ex.xmi(), java.nio.charset.StandardCharsets.UTF_8))
+                .contains("xmi:type=\"uml:Class\"").doesNotContain("uml:DataType");
+        assertThat(new LectorXmi().leer(ex.xmi()).clases()).extracting(ModeloLeido.ClaseLeida::nombre)
+                .containsExactly("Marca");
+    }
 }
+
