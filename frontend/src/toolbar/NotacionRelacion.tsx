@@ -6,11 +6,11 @@ import type { RelationKind } from '../contracts/command'
  * con los marcadores del canvas: a este tamano conviene controlar cada punto.
  */
 export function NotacionRelacion({ kind }: { kind: RelationKind }) {
-  const trazo = '#475569'
+  const trazo = 'var(--secundario)'
   return (
     <svg width="54" height="16" viewBox="0 0 54 16" aria-hidden="true">
       {kind === 'AGGREGATION' && (
-        <polygon points="2,8 10,3 18,8 10,13" fill="#fff" stroke={trazo} strokeWidth={1.2} />
+        <polygon points="2,8 10,3 18,8 10,13" fill="var(--panel)" stroke={trazo} strokeWidth={1.2} />
       )}
       {kind === 'COMPOSITION' && (
         <polygon points="2,8 10,3 18,8 10,13" fill={trazo} stroke={trazo} strokeWidth={1.2} />
@@ -27,7 +27,7 @@ export function NotacionRelacion({ kind }: { kind: RelationKind }) {
       />
 
       {kind === 'GENERALIZATION' && (
-        <polygon points="40,3 52,8 40,13" fill="#fff" stroke={trazo} strokeWidth={1.2} />
+        <polygon points="40,3 52,8 40,13" fill="var(--panel)" stroke={trazo} strokeWidth={1.2} />
       )}
       {kind === 'DEPENDENCY' && (
         <path d="M40,3 L52,8 L40,13" fill="none" stroke={trazo} strokeWidth={1.2} />

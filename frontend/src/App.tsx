@@ -8,6 +8,11 @@ import {
   type EstadoModelo, type SnapshotDiagrama,
 } from './canvas/applyOperation'
 import { Toolbar } from './toolbar/Toolbar'
+import { MenuEditor } from './apariencia/MenuEditor'
+import { Icono } from './apariencia/Icono'
+import { SeccionPlegable } from './apariencia/SeccionPlegable'
+import { useTema } from './apariencia/useTema'
+import { guardarSeccion, leerSeccion, menusPara } from './apariencia/estado'
 import { VistaLogica, type ModeloLogico } from './logical/VistaLogica'
 import { PanelGeneracion, type ResumenGeneracion } from './codegen/PanelGeneracion'
 import { VistaFisica, type EsquemaFisico, type VerificacionDelEsquema } from './physical/VistaFisica'
@@ -119,6 +124,13 @@ interface Props {
 }
 
 export default function App({ token, usuario, proyecto, diagrama, rol, alVolver, alCerrarSesion, alRevalidarAcceso }: Props) {
+  const { tema, alternar, sistema } = useTema()
+  const [verPanel, setVerPanel] = useState(() => leerSeccion(() => window.localStorage, 'panel'))
+  const archivoImagen = useRef<HTMLInputElement>(null)
+  const cambiarPanel = () => setVerPanel((v) => {
+    guardarSeccion(() => window.localStorage, 'panel', !v)
+    return !v
+  })
   const diagramId = diagrama.id
   /** El modo Observador: se ve todo, no se edita nada. */
   const soloLectura = esSoloLectura(rol)
@@ -958,6 +970,26 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     .map((n) => n.replace(/ #\d+$/, '')))]
   const ultimoCambio = entradasDeHistorial[0]
 
+  const menus = menusPara(rol, { conectado, diagrama: !!diagramId, editable,
+    deshacer: !!historial.proximoDeshacer(), rehacer: !!historial.proximoRehacer() })
+  const elegirMenu = (id: string) => {
+    // El rol o la conexión pueden cambiar mientras el menú está abierto.
+    if (!menus.flatMap((g) => g.acciones).some((a) => a.id === id && a.habilitada)) return
+    switch (id) {
+      case 'importar': setImportando(true); break
+      case 'exportar': void abrirExportacion(); break
+      case 'imagen': archivoImagen.current?.click(); break
+      case 'deshacer': deshacerOrehacer('deshacer'); break
+      case 'rehacer': deshacerOrehacer('rehacer'); break
+      case 'ambiguedades': setVerAmbiguedades(true); break
+      case 'generar': void abrirGeneracion(); break
+      case 'versiones': setVerVersiones(true); break
+      case 'paleta': setVerExplorador((v) => !v); break
+      case 'panel': cambiarPanel(); break
+      case 'tema': alternar(); break
+      case 'sistema': sistema(); break
+    }
+  }
   return (
     <div className="app">
       <header className="barra">
@@ -977,6 +1009,11 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         <span className="usuario">{usuario.fullName}</span>
         <button onClick={alVolver}>Volver al proyecto</button>
         <button onClick={alCerrarSesion}>Cerrar sesión</button>
+        <button className="boton-tema" onClick={alternar}
+          aria-label={tema === 'oscuro' ? 'Usar tema claro' : 'Usar tema oscuro'}
+          title={tema === 'oscuro' ? 'Usar tema claro' : 'Usar tema oscuro'}>
+          <Icono nombre={tema === 'oscuro' ? 'sol' : 'luna'} />
+        </button>
       </header>
 
       {soloLectura && (
@@ -986,15 +1023,19 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         </div>
       )}
 
+      <MenuEditor grupos={menus} alElegir={elegirMenu} />
+      <input ref={archivoImagen} type="file" accept="image/png,image/jpeg" hidden
+        disabled={!conectado || !diagramId || !puedeEditar} aria-label="Imagen del diagrama"
+        onChange={(e) => {
+          const archivo = e.target.files?.[0]
+          e.target.value = ''
+          if (archivo && conectado && puedeEditar) leerImagen(archivo)
+        }} />
       <Toolbar
         disabled={!conectado || !diagramId || !puedeEditar}
         puedeGenerar={conectado && !!diagramId}
-        onGenerar={() => { void abrirGeneracion() }}
         ambiguedadesPendientes={ambiguedades?.filter((a) => !a.decidida).length ?? 0}
         onAmbiguedades={() => setVerAmbiguedades(true)}
-        onImportar={() => setImportando(true)}
-        onExportar={() => { void abrirExportacion() }}
-        onImagen={leerImagen}
         panelIzquierdo={vista === 'CLASS' ? verExplorador : null}
         onPanelIzquierdo={() => setVerExplorador((v) => !v)}
         proximoDeshacer={historial.proximoDeshacer()}
@@ -1013,10 +1054,6 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
           </button>
         ))}
         <span className="nota">{VISTAS.find((v) => v.id === vista)?.nota}</span>
-        <button className="tb-btn pestanas-versiones" onClick={() => setVerVersiones(true)}
-                title="Guardar versiones, compararlas, crear ramas y hacer merge">
-          Versiones
-        </button>
         {resaltados && (
           <button className="tb-btn" onClick={() => setResaltados(null)} title="Quitar el resalte del diff en el lienzo">
             Quitar resalte
@@ -1167,7 +1204,8 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
           )}
         </div>
 
-        <aside className="panel">
+        <aside className="panel" hidden={!verPanel} aria-label="Detalles del diagrama">
+          <SeccionPlegable id="propiedades" titulo={relacionElegida ? 'Relación' : 'Propiedades'}>
           {editable && relacionElegida && (
             <PanelRelacion
               relacion={relacionElegida}
@@ -1242,10 +1280,17 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
             />
           )}
 
+          {!claseSeleccionada && !relacionElegida && <p className="tenue">Seleccioná una clase o relación para ver sus propiedades.</p>}
+          </SeccionPlegable>
+          <SeccionPlegable id="historial" titulo="Historial del diagrama">
           {/* El log técnico (#seq y tipo de comando) sigue en el title de cada línea. */}
-          <h3>Historial del diagrama</h3>
           <ListaHistorial entradas={entradasDeHistorial} ahora={ahora}
                           vacio="Todavía no hay cambios. Mover cajas no cuenta como cambio." />
+          </SeccionPlegable>
+          <SeccionPlegable id="versiones" titulo="Versiones">
+            <p className="tenue">Guardá versiones del modelo y compará sus cambios.</p>
+            <button className="tb-btn" onClick={() => setVerVersiones(true)} disabled={!permisosDe(rol).leer}>Abrir versiones</button>
+          </SeccionPlegable>
         </aside>
       </main>
       {/* El asistente flotante acompaña al diagrama; en la vista completa de IA ya está todo a la vista. */}

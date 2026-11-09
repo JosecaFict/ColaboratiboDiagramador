@@ -147,8 +147,8 @@ function ContenidoVistaIA({ asistente, modelo, conectado, puedeEditar, proyectoI
             </span>
             <button type="button" className={dictando ? 'ia-microfono activo' : 'ia-microfono'}
               onClick={dictar} disabled={!vozDisponible || consultando}
-              style={{ marginLeft: 'auto', marginRight: 6, background: dictando ? '#c2410c' : 'transparent',
-                color: dictando ? '#fff' : 'var(--ia-lila)', boxShadow: 'inset 0 0 0 1px currentColor' }}
+              style={{ marginLeft: 'auto', marginRight: 6, background: dictando ? 'var(--peligro)' : 'transparent',
+                color: dictando ? 'var(--sobre-acento)' : 'var(--ia-lila)', boxShadow: 'inset 0 0 0 1px currentColor' }}
               aria-pressed={dictando} aria-label={dictando ? 'Terminar el dictado' : 'Dictar el pedido'}
               title={vozDisponible ? (dictando ? 'Terminar el dictado' : 'Dictar el pedido') : AVISO_SIN_VOZ}>
               {dictando ? 'Detener' : 'Dictar'}
