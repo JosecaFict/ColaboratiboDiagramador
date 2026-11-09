@@ -2,6 +2,7 @@
 interface Props {
   disabled: boolean
   puedeGenerar: boolean
+  onGenerar: () => void
   ambiguedadesPendientes: number
   onAmbiguedades: () => void
   panelIzquierdo: boolean | null
@@ -11,8 +12,8 @@ interface Props {
   onDeshacer: () => void
   onRehacer: () => void
 }
-/** Acciones frecuentes. Importación, exportación y generación viven en los menús. */
-export function Toolbar({ disabled, puedeGenerar, ambiguedadesPendientes, onAmbiguedades,
+/** Acciones frecuentes y generación. Importar y exportar siguen en los menús. */
+export function Toolbar({ disabled, puedeGenerar, onGenerar, ambiguedadesPendientes, onAmbiguedades,
   panelIzquierdo, onPanelIzquierdo, proximoDeshacer, proximoRehacer, onDeshacer, onRehacer }: Props) {
   return <div className="toolbar" role="group" aria-label="Herramientas del diagrama">
     {panelIzquierdo !== null && <>
@@ -35,6 +36,10 @@ export function Toolbar({ disabled, puedeGenerar, ambiguedadesPendientes, onAmbi
       <Icono nombre="decision" /> Ambigüedades
       {ambiguedadesPendientes > 0 && <span className="tb-badge">{ambiguedadesPendientes}</span>}
     </button>
-    <span className="toolbar-ayuda">Importá, exportá y generá desde los menús</span>
+    <span className="toolbar-ayuda">Importá y exportá desde el menú Archivo</span>
+    <button className="tb-btn tb-primario" disabled={!puedeGenerar} onClick={onGenerar}
+      title="Deriva el proyecto Spring Boot de este modelo y lo descarga">
+      Generar Spring Boot
+    </button>
   </div>
 }

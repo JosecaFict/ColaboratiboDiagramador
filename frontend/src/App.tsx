@@ -1034,6 +1034,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       <Toolbar
         disabled={!conectado || !diagramId || !puedeEditar}
         puedeGenerar={conectado && !!diagramId}
+        onGenerar={() => void abrirGeneracion()}
         ambiguedadesPendientes={ambiguedades?.filter((a) => !a.decidida).length ?? 0}
         onAmbiguedades={() => setVerAmbiguedades(true)}
         panelIzquierdo={vista === 'CLASS' ? verExplorador : null}
