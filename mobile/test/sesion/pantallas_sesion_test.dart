@@ -278,7 +278,7 @@ void main() {
       await t.tap(find.text('Biblioteca'));
       await t.pumpAndSettle();
       await t.tap(
-          editor ? find.byTooltip('Editar diagrama') : find.text('Principal'));
+          editor ? find.text('Principal') : find.byTooltip('Ver sin editar'));
       await t.pumpAndSettle();
       expect(find.text('Iniciar sesión'), findsOneWidget);
       expect(find.text(ServicioSesion.avisoVencida), findsOneWidget);
@@ -319,6 +319,62 @@ void main() {
     expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(e.cerrado, isTrue);
     expect(m.contenido, isNull);
+    await b.cerrar(t);
+  });
+  testWidgets('quien puede editar entra al editor con el toque normal',
+      (t) async {
+    var abiertos = 0;
+    fabricaDeEditor = (
+        {required cliente,
+        required diagramId,
+        required rol,
+        required nombreUsuario}) {
+      abiertos++;
+      return EditorFalso(modelo: modeloDePrueba());
+    };
+    final m = MemoriaSesion()..contenido = datos.serializar();
+    final b = await abrir(t, m, (r) async {
+      if (r.url.path.endsWith('/projects')) return proyectos();
+      return diagramas();
+    });
+    await t.tap(find.text('Biblioteca'));
+    await t.pumpAndSettle();
+    expect(find.byTooltip('Ver sin editar'), findsOneWidget);
+    await t.tap(find.text('Principal'));
+    await t.pumpAndSettle();
+    expect(abiertos, 1);
+    expect(find.text('Paleta'), findsOneWidget);
+    await b.cerrar(t);
+  });
+  testWidgets('el Observador no ve lapiz ni ojo y el toque no abre el editor',
+      (t) async {
+    var abiertos = 0;
+    fabricaDeEditor = (
+        {required cliente,
+        required diagramId,
+        required rol,
+        required nombreUsuario}) {
+      abiertos++;
+      return EditorFalso(modelo: modeloDePrueba());
+    };
+    final m = MemoriaSesion()..contenido = datos.serializar();
+    final b = await abrir(t, m, (r) async {
+      if (r.url.path.endsWith('/projects')) {
+        return respuesta([
+          {'id': 'p', 'name': 'Biblioteca', 'myRole': 'VIEWER', 'diagramCount': 1}
+        ]);
+      }
+      if (r.url.path.endsWith('/projects/p')) return diagramas();
+      return respuesta({}, 401);
+    });
+    await t.tap(find.text('Biblioteca'));
+    await t.pumpAndSettle();
+    expect(find.byTooltip('Editar diagrama'), findsNothing);
+    expect(find.byTooltip('Ver sin editar'), findsNothing);
+    expect(find.textContaining('solo lectura'), findsOneWidget);
+    await t.tap(find.text('Principal'));
+    await t.pumpAndSettle();
+    expect(abiertos, 0);
     await b.cerrar(t);
   });
 }
