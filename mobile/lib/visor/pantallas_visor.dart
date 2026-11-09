@@ -76,7 +76,7 @@ class _PantallaLoginVisorState extends State<PantallaLoginVisor> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ver diagrama en vivo')),
+      appBar: AppBar(title: const Text('Diagramas en vivo')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
