@@ -86,6 +86,11 @@ public class LectorXmi implements LectorDeModelo {
         private static final Set<String> VINCULOS_SIN_ESQUEMA = Set.of("Dependency", "Realization",
                 "InterfaceRealization", "Usage", "Abstraction", "InformationFlow", "Substitution", "Include",
                 "Extend", "Trace", "NoteLink");
+        // Los mismos conjuntos como arreglo, armados una vez: `Nodo.es` los recibe
+        // asi, y convertirlos en cada nodo recorrido era la mitad de la basura.
+        private static final String[] CLASIFICADORES_ARR = CLASIFICADORES.toArray(String[]::new);
+        private static final String[] FRONTERAS_ARR = FRONTERAS.toArray(String[]::new);
+        private static final String[] VINCULOS_SIN_ESQUEMA_ARR = VINCULOS_SIN_ESQUEMA.toArray(String[]::new);
         /** Estructura que se usa o que no es modelo: nunca se reporta como desconocida. */
         private static final Set<String> CONOCIDOS = Set.of("Model", "Package", "Profile", "Stereotype", "Property",
                 "Operation", "Parameter", "EnumerationLiteral", "AssociationEnd", "Attribute", "Generalization",
@@ -122,6 +127,8 @@ public class LectorXmi implements LectorDeModelo {
          * diagramas encima una clase sobre otra.
          */
         private final Map<Nodo, Map<String, ModeloLeido.Posicion>> dibujos = new LinkedHashMap<>();
+        /** Las interfaces que realiza cada clase (por id de clase), para copiarle sus operaciones. */
+        private final Map<String, List<Nodo>> interfacesDe = new HashMap<>();
 
         Lectura(Nodo raiz, List<String> advertencias) {
             this.raiz = raiz;
@@ -288,7 +295,9 @@ public class LectorXmi implements LectorDeModelo {
         /** EA: <element xmi:idref> con <properties stereotype>, <stereotype>, <tags>, <xrefs>, <bounds>. */
         private void indexarExtensionEa(Nodo n) {
             String id = n.idref();
+            if (n.atr("scope") != null) etiqueta(id, "eascope", n.atr("scope"));
             for (Nodo h : n.hijos) {
+                if (h.esLocal("initial") && h.atr("body") != null) etiqueta(id, "eainitial", h.atr("body"));
                 if (h.esLocal("properties")) {
                     h.atributos.forEach((k, v) -> etiqueta(id, "ea" + k, v));
                     if (h.atr("stereotype") != null) separarComas(h.atr("stereotype")).forEach(s -> agregarEstereotipo(id, s));
@@ -368,12 +377,23 @@ public class LectorXmi implements LectorDeModelo {
                     || v.equalsIgnoreCase("si"));
         }
 
-        /** "EAUML::table", "Weak Entity", "PK" -> "table", "weakentity", "pk". */
+        /**
+         * "EAUML::table", "Weak Entity", "PK" -> "table", "weakentity", "pk".
+         *
+         * Sin expresion regular a proposito: se llama por cada etiqueta que se
+         * guarda o se busca (decenas de miles en un export grande de EA), y un
+         * `replaceAll` compila su patron en cada llamada (T-05).
+         */
         static String normal(String s) {
             String t = s.trim();
             int c = Math.max(t.lastIndexOf("::"), t.lastIndexOf(':'));
             if (c >= 0) t = t.substring(c + 1);
-            return t.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+            StringBuilder r = new StringBuilder(t.length());
+            for (int i = 0; i < t.length(); i++) {
+                char ch = Character.toLowerCase(t.charAt(i));
+                if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) r.append(ch);
+            }
+            return r.toString();
         }
 
         // ================================================================ LECTURA
@@ -381,6 +401,7 @@ public class LectorXmi implements LectorDeModelo {
         /** Elementos del modelo que suelen venir sin id y que igual hay que poder etiquetar. */
         private static final Set<String> NECESITAN_ID = Set.of("Attribute", "Operation", "Parameter", "AssociationEnd",
                 "Class", "Association", "Generalization", "Enumeration", "EnumerationLiteral");
+        private static final String[] NECESITAN_ID_ARR = NECESITAN_ID.toArray(String[]::new);
 
         /**
          * EA en XMI 1.1 no le pone `xmi.id` a los atributos ni a las
@@ -391,7 +412,7 @@ public class LectorXmi implements LectorDeModelo {
         private void completarIds(Nodo n, boolean enExtension) {
             boolean ext = enExtension || n.esLocal("Extension", "XMI.extensions", "XMI.extension", "XMI.header");
             if (!ext && n.id() == null && n.idref() == null && n.atr("href") == null && n.padre != null
-                    && n.es(NECESITAN_ID.toArray(String[]::new))
+                    && n.es(NECESITAN_ID_ARR)
                     && (n.atr("name") != null || n.hijo("ModelElement.name").isPresent())
                     && !n.padre.local.toLowerCase(Locale.ROOT).endsWith(".type")
                     && !n.padre.local.toLowerCase(Locale.ROOT).endsWith(".participant")) {
@@ -428,7 +449,7 @@ public class LectorXmi implements LectorDeModelo {
                 else if (tieneEst(d, "relationship")) relacionesErd.add(d);
                 else if (!tieneEst(d, "entity") && tieneEst(d, "attribute", "primarykey")
                         && !d.es("Property", "Attribute")) atributosErd.add(d);
-                else if (d.es(CLASIFICADORES.toArray(String[]::new)) || tieneEst(d, "entity")) {
+                else if (d.es(CLASIFICADORES_ARR) || tieneEst(d, "entity")) {
                     if (d.es("PrimitiveType") || "EARootClass".equals(d.atr("name"))) continue;
                     if (d.es("DataType") && propiedades(d).isEmpty()) continue;   // un tipo, no una clase
                     clasificadores.add(d);
@@ -440,6 +461,14 @@ public class LectorXmi implements LectorDeModelo {
 
             List<Enlace> enlaces = enlaces();
             Set<String> idsDeClase = clasificadores.stream().map(Nodo::id).collect(Collectors.toSet());
+            for (Enlace e : enlaces) {
+                if (!e.tipo.equals("Dependency") || !esRealizacion(e)) continue;
+                Nodo destino = porId.get(e.b);
+                if (destino != null && destino.es("Interface") && idsDeClase.contains(e.a)) {
+                    interfacesDe.computeIfAbsent(e.a, k -> new ArrayList<>()).add(destino);
+                    e.consumido = true;
+                }
+            }
 
             // --- UML y entidades ERD
             Map<String, List<ModeloLeido.AtributoLeido>> extrasErd = atributosDeErd(atributosErd, enlaces);
@@ -552,10 +581,45 @@ public class LectorXmi implements LectorDeModelo {
                 boolean multivaluado = m != null && m.muchos();
                 boolean derivado = "true".equalsIgnoreCase(p.atr("isDerived")) || tagVerdadero(p, "eaderived", "derived");
                 atributos.add(new ModeloLeido.AtributoLeido(nombreAtr.trim(), tipo.nombre(), pk, requerido, unico,
-                        multivaluado, derivado, tieneEst(p, "partialkey", "discriminator")));
+                        multivaluado, derivado, tieneEst(p, "partialkey", "discriminator"), visibilidadDe(p),
+                        valorPorDefectoDe(p)));
             }
             return new ModeloLeido.ClaseLeida(c.id(), nombre, estereotipo, abstracta, List.copyOf(atributos),
-                    metodosDe(c));
+                    conOperacionesDeSusInterfaces(c, nombre, metodosDe(c)));
+        }
+
+        private static final Map<String, String> VISIBILIDADES = Map.of("public", "PUBLIC", "private", "PRIVATE",
+                "protected", "PROTECTED", "package", "PACKAGE", "implementation", "PACKAGE");
+
+        /** `visibility="private"` en UML 1.x y 2.x; EA la repite como `scope` en su Extension. */
+        private String visibilidadDe(Nodo p) {
+            String v = p.atr("visibility");
+            if (v == null) v = tag(p, "eascope");
+            return v == null ? null : VISIBILIDADES.get(v.trim().toLowerCase(Locale.ROOT));
+        }
+
+        /**
+         * El valor inicial, de las formas conocidas: UML 2 (`<defaultValue value>`,
+         * con `<body>` si es una expresion, o `instance` si es un literal de
+         * enumeracion), UML 1.x (`Attribute.initialValue` con una `Expression`)
+         * y la Extension de EA (`<initial body>`). Se guarda tal cual venia.
+         */
+        private String valorPorDefectoDe(Nodo p) {
+            String v = null;
+            Optional<Nodo> uml2 = p.hijo("defaultValue");
+            if (uml2.isPresent()) {
+                Nodo d = uml2.get();
+                v = d.atr("value");
+                if (v == null) v = d.hijo("body").map(Nodo::texto).orElse(null);
+                if (v == null && d.atr("instance") != null) v = nombreDe(porId.get(d.atr("instance")));
+            }
+            if (v == null) {
+                v = p.hijo("Attribute.initialValue")
+                        .flatMap(i -> descendientesSinFrontera(i, "Expression").stream().findFirst())
+                        .map(e -> e.atr("body") != null ? e.atr("body") : e.texto()).orElse(null);
+            }
+            if (v == null) v = tag(p, "eainitial");
+            return v == null || v.isBlank() ? null : v.trim();
         }
 
         /**
@@ -572,7 +636,9 @@ public class LectorXmi implements LectorDeModelo {
                 List<ModeloLeido.ParametroLeido> parametros = new ArrayList<>();
                 Nodo retorno = null;
                 for (Nodo pn : descendientes(op, "ownedParameter", "Parameter")) {
-                    if ("return".equalsIgnoreCase(pn.atr("direction")) || pn.esLocal("return")) {
+                    // UML 2 dice `direction="return"`; UML 1.x, `kind="return"`.
+                    if ("return".equalsIgnoreCase(pn.atr("direction")) || "return".equalsIgnoreCase(pn.atr("kind"))
+                            || pn.esLocal("return")) {
                         if (retorno == null) retorno = pn;
                         continue;
                     }
@@ -580,11 +646,59 @@ public class LectorXmi implements LectorDeModelo {
                     if (nombreParam == null || nombreParam.isBlank()) continue;
                     parametros.add(new ModeloLeido.ParametroLeido(nombreParam.trim(), tipoDe(pn).nombre()));
                 }
-                String tipoRetorno = retorno != null ? tipoDe(retorno).nombre() : tipoDe(op).nombre();
+                String tipoRetorno = retorno != null ? tipoDe(retorno).nombre() : null;
+                if (tipoRetorno == null) tipoRetorno = tipoDe(op).nombre();
                 metodos.add(new ModeloLeido.MetodoLeido(nombreOp.trim(), tipoRetorno == null ? "void" : tipoRetorno,
                         List.copyOf(parametros)));
             }
             return metodos;
+        }
+
+        /**
+         * uml:Realization / InterfaceRealization (UML 2), una Abstraction «realize»
+         * (UML 1.x), o lo que EA dice de su conector: `ea_type="Realisation"` en
+         * la Extension (XMI 2.x) o como valor etiquetado (XMI 1.1).
+         */
+        private boolean esRealizacion(Enlace e) {
+            if (e.nodo.es("Realization", "InterfaceRealization")) return true;
+            if (tieneEst(e.nodo, "realize", "realization", "realisation")) return true;
+            for (String nombre : new String[]{"eaeatype", "eatype"}) {
+                String tipoEa = tag(e.nodo, nombre);
+                if (tipoEa != null && (tipoEa.equalsIgnoreCase("realisation") || tipoEa.equalsIgnoreCase("realization"))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * ColabModel no modela interfaces, pero lo que una interfaz promete lo
+         * tiene que cumplir la clase que la realiza: sus operaciones pasan a ser
+         * metodos de esa clase (REGLA 6: el Service generado las emite como stub).
+         */
+        private List<ModeloLeido.MetodoLeido> conOperacionesDeSusInterfaces(Nodo c, String nombre,
+                                                                         List<ModeloLeido.MetodoLeido> metodos) {
+            List<Nodo> interfaces = interfacesDe.getOrDefault(c.id(), List.of());
+            if (interfaces.isEmpty()) return metodos;
+            List<ModeloLeido.MetodoLeido> r = new ArrayList<>(metodos);
+            Set<String> tiene = new HashSet<>();
+            metodos.forEach(m -> tiene.add(m.nombre().toLowerCase(Locale.ROOT)));
+            for (Nodo i : interfaces) {
+                List<ModeloLeido.MetodoLeido> prometidas = metodosDe(i);
+                if (prometidas.isEmpty()) continue;   // nada que copiar: el aviso de la interfaz alcanza
+                List<String> agregadas = new ArrayList<>();
+                for (ModeloLeido.MetodoLeido m : prometidas) {
+                    if (tiene.add(m.nombre().toLowerCase(Locale.ROOT))) {
+                        r.add(m);
+                        agregadas.add(m.nombre());
+                    }
+                }
+                advertencias.add(nombre + " realiza la interfaz " + nombreDe(i) + (agregadas.isEmpty()
+                        ? ": ya tenia sus operaciones."
+                        : ": se le agregaron sus operaciones (" + String.join(", ", agregadas) + ") como metodos,"
+                          + " porque ColabModel no modela interfaces."));
+            }
+            return r;
         }
 
         private static ModeloLeido.AtributoLeido atributoSimple(String nombre) {
@@ -607,7 +721,7 @@ public class LectorXmi implements LectorDeModelo {
                     if (n.atr("association") == null) r.add(n);
                     continue;
                 }
-                if (n.id() != null && n.es(FRONTERAS.toArray(String[]::new))) continue;
+                if (n.id() != null && n.es(FRONTERAS_ARR)) continue;
                 if (n.esLocal("ownedOperation", "Operation", "generalization", "Generalization")) continue;
                 n.hijos.forEach(pila::addLast);
             }
@@ -620,7 +734,7 @@ public class LectorXmi implements LectorDeModelo {
             while (!pila.isEmpty()) {
                 Nodo n = pila.pollFirst();
                 if (n.esLocal(locales) || n.es(locales)) r.add(n);
-                else if (!(n.id() != null && n.es(FRONTERAS.toArray(String[]::new)))) n.hijos.forEach(pila::addLast);
+                else if (!(n.id() != null && n.es(FRONTERAS_ARR))) n.hijos.forEach(pila::addLast);
             }
             return r;
         }
@@ -638,17 +752,34 @@ public class LectorXmi implements LectorDeModelo {
 
         private static final Pattern TIPO_EA = Pattern.compile("^EA[A-Za-z#+]*_(.+)$");
 
+        /**
+         * EA escribe el tipo dos veces: la referencia UML (`<type xmi:idref>`)
+         * y el texto de su Extension (`<properties type="Cliente">`). Si la
+         * referencia es una clase, enumeracion o DataType del archivo, manda
+         * ella: con el texto solo, `vendedor : Cliente` quedaba como un
+         * atributo de tipo "Cliente" en vez de una relacion. El texto de EA
+         * sigue mandando para los primitivos, porque trae largo y precision.
+         */
         private Tipo tipoDe(Nodo p) {
+            List<String> refs = referencias(p, "type");
+            refs.addAll(referencias(p, "StructuralFeature.type"));
+            refs.addAll(referencias(p, "Parameter.type"));   // UML 1.x
+            for (String ref : refs) {
+                Nodo destino = porId.get(ref);
+                if (destino != null && destino.id() != null && !destino.esLocal("EAStub")
+                        && destino.es(CLASIFICADORES_ARR) && nombreDe(destino) != null) {
+                    return new Tipo(limpiarTipo(nombreDe(destino)), destino);
+                }
+            }
+
             String ea = tag(p, "eatype");
             if (ea != null && !ea.isBlank()) return new Tipo(conTamanio(ea, p), null);
 
-            List<String> refs = referencias(p, "type");
-            refs.addAll(referencias(p, "StructuralFeature.type"));
             for (String ref : refs) {
                 Nodo destino = porId.get(ref);
                 if (destino != null) {
                     String nombre = nombreDe(destino);
-                    boolean esClase = destino.id() != null && destino.es(CLASIFICADORES.toArray(String[]::new))
+                    boolean esClase = destino.id() != null && destino.es(CLASIFICADORES_ARR)
                             && !destino.esLocal("EAStub");
                     return new Tipo(limpiarTipo(nombre), esClase ? destino : null);
                 }
@@ -815,6 +946,8 @@ public class LectorXmi implements LectorDeModelo {
             String estereotipo;
             String alBorrar;
             boolean consumido;
+            /** Vino de un conector de EA: source/target y el rombo son explicitos, no hay que adivinar. */
+            boolean deConectorEa;
 
             Enlace(Nodo nodo, String tipo) {
                 this.nodo = nodo;
@@ -853,10 +986,17 @@ public class LectorXmi implements LectorDeModelo {
                             r.add(e);
                             vistos.add(d.id());
                         }
-                    } else if (d.es(VINCULOS_SIN_ESQUEMA.toArray(String[]::new))) {
+                    } else if (d.es(VINCULOS_SIN_ESQUEMA_ARR)) {
                         Enlace e = new Enlace(d, "Dependency");
                         List<String> cliente = referencias(d, "client");
                         List<String> proveedor = referencias(d, "supplier");
+                        // uml:InterfaceRealization puede venir anidada en la clase y
+                        // decirlo con implementingClassifier y contract.
+                        if (cliente.isEmpty()) cliente = referencias(d, "implementingClassifier");
+                        if (cliente.isEmpty() && d.es("InterfaceRealization") && idDelDuenio(d) != null) {
+                            cliente = List.of(idDelDuenio(d));
+                        }
+                        if (proveedor.isEmpty()) proveedor = referencias(d, "contract");
                         if (!cliente.isEmpty() && !proveedor.isEmpty()) {
                             e.a = cliente.get(0);
                             e.b = proveedor.get(0);
@@ -871,6 +1011,11 @@ public class LectorXmi implements LectorDeModelo {
             // EA puede tener conectores que el XMI no emitio como uml:Association.
             for (Map.Entry<String, Nodo> c : conectoresEa.entrySet()) {
                 if (vistos.contains(c.getKey())) continue;
+                // El conector de una clase asociativa tiene su propio id, pero ya se
+                // leyo como la uml:AssociationClass: sin esto salia una asociacion de mas.
+                String asociativa = c.getValue().hijo("extendedProperties").map(x -> x.atr("associationclass"))
+                        .orElse(null);
+                if (asociativa != null && vistos.contains(asociativa)) continue;
                 Enlace e = desdeConector(c.getValue(), null);
                 if (e == null) continue;
                 if (e.tipo.equals("Generalization") && !generalizaciones.add(e.a + ">" + e.b)) continue;
@@ -987,6 +1132,8 @@ public class LectorXmi implements LectorDeModelo {
             Nodo destino = c.hijo("target").orElse(null);
             if (origen == null || destino == null || origen.idref() == null || destino.idref() == null) return null;
             String tipoEa = tag(c, "eaeatype");
+            // Una nota pegada a una clase no es parte del modelo.
+            if ("notelink".equalsIgnoreCase(tipoEa)) return null;
             String tipo = tipoEa == null ? "Association" : switch (tipoEa.toLowerCase(Locale.ROOT)) {
                 case "generalization" -> "Generalization";
                 case "association", "aggregation", "composition" -> "Association";
@@ -996,6 +1143,7 @@ public class LectorXmi implements LectorDeModelo {
             e.a = origen.idref();
             e.b = destino.idref();
             e.direccionConocida = true;
+            e.deConectorEa = true;
             e.multA = origen.hijo("type").map(t -> deTexto(t.atr("multiplicity"))).orElse(null);
             e.multB = destino.hijo("type").map(t -> deTexto(t.atr("multiplicity"))).orElse(null);
             e.rolA = origen.hijo("role").map(r -> r.atr("name")).filter(s -> !s.isBlank()).orElse(null);
@@ -1008,7 +1156,9 @@ public class LectorXmi implements LectorDeModelo {
                 e.aEsTodo = agA != null;
                 e.bEsTodo = agA == null;
             } else if ("composition".equalsIgnoreCase(tipoEa) || "aggregation".equalsIgnoreCase(tipoEa)) {
-                e.agregacion = tipoEa.equalsIgnoreCase("composition") ? "composite" : "shared";
+                // EA dibuja la composicion como una Aggregation de subtipo "Strong".
+                boolean fuerte = tipoEa.equalsIgnoreCase("composition") || "strong".equalsIgnoreCase(tag(c, "easubtype"));
+                e.agregacion = fuerte ? "composite" : "shared";
                 e.bEsTodo = true;
             }
             Set<String> st = new LinkedHashSet<>(estereotipos.getOrDefault(c.idref(), Set.of()));
@@ -1079,8 +1229,9 @@ public class LectorXmi implements LectorDeModelo {
             RelationKind tipo = RelationKind.ASSOCIATION;
             if (e.agregacion != null) {
                 tipo = e.agregacion.equals("composite") ? RelationKind.COMPOSITION : RelationKind.AGGREGATION;
-                // El todo va de origen: asi lo lee la Regla 5 / A-1.
-                advertencias.add("La " + (tipo == RelationKind.COMPOSITION ? "composicion" : "agregacion") + " entre "
+                // El todo va de origen: asi lo lee la Regla 5 / A-1. Un conector de EA
+                // dice en que extremo esta el rombo: ahi no hay nada que adivinar.
+                if (!e.deConectorEa) advertencias.add("La " + (tipo == RelationKind.COMPOSITION ? "composicion" : "agregacion") + " entre "
                         + nombreDe(porId.get(a)) + " (todo) y " + nombreDe(porId.get(b)) + " (parte) se leyo de "
                         + (e.nodo.esLocal("AssociationEnd") || e.nodo.es("Association") && e.direccionConocida
                            ? "los extremos" : "un conector") + ": UML 1, UML 2 y EA marcan el rombo en extremos"
@@ -1367,6 +1518,19 @@ public class LectorXmi implements LectorDeModelo {
         // ============================================================ INFORME
 
         private void reportarLoQueQuedoAfuera(List<Enlace> enlaces, Set<String> idsDeClase, int vistas) {
+            List<String> interfaces = new ArrayList<>();
+            for (Nodo d : definiciones) {
+                if (!d.es("Interface") || consumidos.contains(d.id())) continue;
+                consumidos.add(d.id());
+                if (nombreDe(d) != null) interfaces.add(nombreDe(d));
+            }
+            if (!interfaces.isEmpty()) {
+                boolean realizadas = !interfacesDe.isEmpty();
+                advertencias.add((interfaces.size() == 1 ? "La interfaz " + interfaces.get(0) + " no entra como clase"
+                        : "Las interfaces " + String.join(", ", interfaces) + " no entran como clases")
+                        + ": ColabModel no modela interfaces"
+                        + (realizadas ? " (sus operaciones se copiaron a las clases que las realizan)." : "."));
+            }
             Map<String, Integer> ignorados = new TreeMap<>();
             for (Nodo d : definiciones) {
                 if (consumidos.contains(d.id())) continue;
@@ -1377,7 +1541,7 @@ public class LectorXmi implements LectorDeModelo {
                         "lowerValue", "upperValue", "defaultValue", "generalization", "specification",
                         "ownedComment", "bodyCondition", "nestedClassifier", "packageImport",
                         "profileApplication", "eAnnotations", "details", "references", "contents")) continue;
-                if (d.padre != null && d.padre.id() != null && !d.es(FRONTERAS.toArray(String[]::new))
+                if (d.padre != null && d.padre.id() != null && !d.es(FRONTERAS_ARR)
                         && nombreDe(d) == null) continue;
                 ignorados.merge(clase, 1, Integer::sum);
             }

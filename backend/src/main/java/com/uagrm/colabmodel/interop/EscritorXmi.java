@@ -154,7 +154,10 @@ public final class EscritorXmi {
         List<String> perdidas = new ArrayList<>();
         Map<UUID, List<UmlAttribute>> atrsPorClase = agrupar(atributos, UmlAttribute::getClassId);
         for (UmlClass c : clases) {
-            if (c.getStereotype() != null && !ea) {   // en EA viaja en la Extension
+            // En EA viaja en la Extension; una enumeracion o un valor con atributos
+            // salen como uml:Enumeration / uml:DataType, que son UML estandar (T-05).
+            boolean estandar = !metaclase(c, atrsPorClase.getOrDefault(c.getId(), List.of())).equals("uml:Class");
+            if (c.getStereotype() != null && !ea && !estandar) {
                 perdidas.add(c.getName() + " es «" + c.getStereotype() + "»: el estereotipo no viaja en UML 2.5.1"
                         + " puro (Regla 5). Se exporta como una clase comun; hay que volver a marcarla al"
                         + " reimportar.");
@@ -186,10 +189,35 @@ public final class EscritorXmi {
         return List.copyOf(perdidas);
     }
 
+    /**
+     * Con que metaclase de UML 2.5.1 sale cada clase (T-05). Una enumeracion ES
+     * una `uml:Enumeration` y un valor sin identidad, un `uml:DataType`: son
+     * UML estandar, EA los muestra como lo que son y nuestro lector los vuelve a
+     * leer como «enumeration» y «embeddable». Un valor sin atributos sale como
+     * clase con su estereotipo: un DataType vacio se reimporta como un primitivo.
+     */
+    private static String metaclase(UmlClass c, List<UmlAttribute> propios) {
+        String s = c.getStereotype() == null ? "" : c.getStereotype().toLowerCase(Locale.ROOT);
+        if (s.equals("enumeration")) return "uml:Enumeration";
+        if (s.equals("embeddable") && !propios.isEmpty()) return "uml:DataType";
+        return "uml:Class";
+    }
+
     private void escribirClase(Xml x, UmlClass c, List<UmlAttribute> propios, List<UmlMethod> propiosMetodos,
                                       List<UmlRelationship> generalizaciones, Map<String, String> idTipo) {
-        x.abrir("packagedElement", "xmi:type", "uml:Class", "xmi:id", id("c", c.getId()), "name", c.getName(),
+        String metaclase = metaclase(c, propios);
+        x.abrir("packagedElement", "xmi:type", metaclase, "xmi:id", id("c", c.getId()), "name", c.getName(),
                 "visibility", ea ? "public" : null, "isAbstract", c.isAbstract() ? "true" : ea ? "false" : null);
+
+        if (metaclase.equals("uml:Enumeration")) {
+            for (UmlAttribute a : propios) {
+                x.vacio("ownedLiteral", "xmi:type", "uml:EnumerationLiteral", "xmi:id", id("a", a.getId()),
+                        "name", a.getName());
+            }
+            for (UmlMethod m : propiosMetodos) escribirOperacion(x, m, idTipo);
+            x.cerrar("packagedElement");
+            return;
+        }
 
         for (UmlRelationship g : generalizaciones) {
             if (g.getSourceClassId().equals(c.getId())) {
@@ -392,12 +420,14 @@ public final class EscritorXmi {
 
         x.abrir("elements");
         for (UmlClass c : clases) {
-            x.abrir("element", "xmi:idref", id("c", c.getId()), "xmi:type", "uml:Class", "name", c.getName(),
+            List<UmlAttribute> atrs = atrsPorClase.getOrDefault(c.getId(), List.of());
+            String metaclase = metaclase(c, atrs);
+            x.abrir("element", "xmi:idref", id("c", c.getId()), "xmi:type", metaclase, "name", c.getName(),
                     "scope", "public");
             x.vacio("model", "package", paquete, "ea_eleType", "element");
-            x.vacio("properties", "isSpecification", "false", "sType", "Class", "nType", "0", "scope", "public",
+            x.vacio("properties", "isSpecification", "false", "sType", metaclase.substring("uml:".length()),
+                    "nType", "0", "scope", "public",
                     "isAbstract", c.isAbstract() ? "true" : "false", "stereotype", c.getStereotype());
-            List<UmlAttribute> atrs = atrsPorClase.getOrDefault(c.getId(), List.of());
             if (!atrs.isEmpty()) {
                 x.abrir("attributes");
                 for (UmlAttribute a : atrs) {

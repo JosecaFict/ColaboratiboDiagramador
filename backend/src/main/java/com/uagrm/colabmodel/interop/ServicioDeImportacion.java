@@ -106,7 +106,8 @@ public class ServicioDeImportacion {
                 // que el usuario ve y decide, no algo que se marque solo.
                 atributos.add(new PropuestaDeImportacion.AtributoPropuesto(a.nombre(), a.tipoLeido(), s.dataType(),
                         a.pk(), a.requerido(), a.unico(), a.multivaluado(), a.derivado(), a.claveParcial(),
-                        yaTiene.contains(a.nombre().toLowerCase(Locale.ROOT)), s));
+                        yaTiene.contains(a.nombre().toLowerCase(Locale.ROOT)), s, a.visibilidad(),
+                        a.valorPorDefecto()));
             }
             List<PropuestaDeImportacion.MetodoPropuesto> metodosPropuestos = new ArrayList<>();
             for (ModeloLeido.MetodoLeido m : c.metodos()) {

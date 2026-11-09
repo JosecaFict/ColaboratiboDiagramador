@@ -254,9 +254,11 @@ class LectorXmiToleranciaTest {
                 .anyMatch(a -> a.contains("Class") && a.contains("se omitio") && a.contains("no tiene nombre"))
                 .anyMatch(a -> a.contains("extremo que no apunta a ninguna clase"))
                 .anyMatch(a -> a.contains("une 3 clases") && a.contains("n-aria"))
-                .anyMatch(a -> a.contains("Quedaron afuera") && a.contains("1 Interface") && a.contains("1 StateMachine")
+                .anyMatch(a -> a.contains("Quedaron afuera") && a.contains("1 StateMachine")
                         && a.contains("1 Component") && a.contains("1 ReglaDeNegocio"))
-                .anyMatch(a -> a.contains("dependencia o realizacion"))
+                // La interfaz se nombra en su propio aviso, y su realizacion ya no cuenta como dependencia (T-05).
+                .anyMatch(a -> a.contains("La interfaz Prestable no entra como clase"))
+                .noneMatch(a -> a.contains("Interface") || a.contains("realiza la interfaz"))
                 .anyMatch(a -> a.contains("tipo que no esta en el archivo") && a.contains("_a7Hk2PQzEe2x"))
                 .anyMatch(a -> a.contains("no escriben su multiplicidad"));
         assertThat(p.advertencias().get(0)).contains("4 clases UML").contains("Herramienta Desconocida");

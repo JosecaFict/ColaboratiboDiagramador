@@ -35,10 +35,21 @@ public record PropuestaDeImportacion(String formato, String fuente, List<ClasePr
      * @param tipo       el que se va a usar si el usuario no lo cambia
      * @param yaExiste   la clase existente ya tiene un atributo con ese nombre
      * @param sugerencia rol, confianza y motivo (InferenciaDeAtributos)
+     * @param visibilidad     la del archivo, o null (se crea con la de siempre)
+     * @param valorPorDefecto el del archivo, o null
      */
     public record AtributoPropuesto(String nombre, String tipoLeido, String tipo, boolean pk, boolean requerido,
                                     boolean unico, boolean multivaluado, boolean derivado, boolean claveParcial,
-                                    boolean yaExiste, InferenciaDeAtributos.Sugerencia sugerencia) { }
+                                    boolean yaExiste, InferenciaDeAtributos.Sugerencia sugerencia,
+                                    String visibilidad, String valorPorDefecto) {
+        /** Sin visibilidad ni valor por defecto: la IA y los formatos que no los traen. */
+        public AtributoPropuesto(String nombre, String tipoLeido, String tipo, boolean pk, boolean requerido,
+                                 boolean unico, boolean multivaluado, boolean derivado, boolean claveParcial,
+                                 boolean yaExiste, InferenciaDeAtributos.Sugerencia sugerencia) {
+            this(nombre, tipoLeido, tipo, pk, requerido, unico, multivaluado, derivado, claveParcial, yaExiste,
+                    sugerencia, null, null);
+        }
+    }
 
     /**
      * Un metodo del archivo, listo para su tilde en la revision (REGLA 6).

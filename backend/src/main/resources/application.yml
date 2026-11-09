@@ -36,8 +36,12 @@ spring:
       # Tiene que ser >= colabmodel.vision.max-bytes. Si fuera menor, el limite
       # real lo pondria Spring con un 500 generico en vez del 400 explicado que
       # devuelve ImagenDeEntrada, y el usuario no sabria que achicar la foto.
-      max-file-size: 8MB
-      max-request-size: 10MB
+      # La foto igual queda en 8 MB (su propio limite); esto es lo que deja
+      # entrar a un XMI: el de Enterprise Architect con 1000 clases y su
+      # diagrama pesa unos 9 MB (T-05). Lo que pase de aca recibe un 413
+      # explicado (ManejadorDeErrores).
+      max-file-size: 25MB
+      max-request-size: 27MB
 
 colabmodel:
   jwt:

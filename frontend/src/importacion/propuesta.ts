@@ -22,6 +22,10 @@ export interface AtributoPropuesto {
   claveParcial: boolean
   yaExiste: boolean
   sugerencia: SugerenciaAtributo
+  /** La del archivo (PUBLIC, PRIVATE, PROTECTED, PACKAGE); sin ella queda la de siempre. */
+  visibilidad?: string | null
+  /** El valor inicial que traia el archivo, tal cual. */
+  valorPorDefecto?: string | null
 }
 
 export interface ParametroPropuesto {
@@ -274,6 +278,9 @@ export function planDeImportacion(r: Revision, modelo: EstadoModelo, nuevoId: ()
           attributeId: nuevoId(), classId: idClase, name: a.nombre.trim(), dataType: a.tipo,
           pk: a.pk, required: a.requerido, unique: a.unico, multivalued: a.multivaluado,
           derived: a.derivado, partialKey: a.claveParcial, ordinal: ordinal++,
+          // Solo si el archivo los trae: sin ellos, el backend pone los de siempre.
+          ...(a.visibilidad ? { visibility: a.visibilidad } : {}),
+          ...(a.valorPorDefecto ? { defaultValue: a.valorPorDefecto } : {}),
         },
       })
       conteo.atributos++

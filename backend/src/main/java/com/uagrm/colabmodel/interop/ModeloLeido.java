@@ -34,9 +34,20 @@ public record ModeloLeido(String formato, List<ClaseLeida> clases, List<Relacion
     public record ClaseLeida(String clave, String nombre, String estereotipo, boolean abstracta,
                              List<AtributoLeido> atributos, List<MetodoLeido> metodos) { }
 
-    /** @param tipoLeido como venia escrito en el archivo (`varchar(50)`, `real`), o null */
+    /**
+     * @param tipoLeido       como venia escrito en el archivo (`varchar(50)`, `real`), o null
+     * @param visibilidad     PUBLIC, PRIVATE, PROTECTED o PACKAGE, o null si el archivo no la dice
+     * @param valorPorDefecto el valor inicial tal cual venia (`PENDIENTE`, `0.0`), o null
+     */
     public record AtributoLeido(String nombre, String tipoLeido, boolean pk, boolean requerido, boolean unico,
-                                boolean multivaluado, boolean derivado, boolean claveParcial) { }
+                                boolean multivaluado, boolean derivado, boolean claveParcial,
+                                String visibilidad, String valorPorDefecto) {
+        /** Los formatos que no traen visibilidad ni valor por defecto (SQL, JSON, ERD). */
+        public AtributoLeido(String nombre, String tipoLeido, boolean pk, boolean requerido, boolean unico,
+                             boolean multivaluado, boolean derivado, boolean claveParcial) {
+            this(nombre, tipoLeido, pk, requerido, unico, multivaluado, derivado, claveParcial, null, null);
+        }
+    }
 
     /**
      * Una operacion UML, tal cual la trae el archivo (REGLA 6): no va a la

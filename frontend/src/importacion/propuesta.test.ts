@@ -70,6 +70,19 @@ describe('planDeImportacion', () => {
     expect(plan.comandos.some((c) => c.type === 'ADD_ATTRIBUTE' && c.payload.name === 'cliente_id')).toBe(false)
   })
 
+  it('la visibilidad y el valor por defecto del archivo viajan en ADD_ATTRIBUTE, solo si vinieron (T-05)', () => {
+    const p = propuesta()
+    p.clases[0].atributos.push({ ...atributo('estado', 'string'), visibilidad: 'PROTECTED', valorPorDefecto: 'ACTIVO' })
+    const comandos = planDeImportacion(revisionDe(p), estadoVacio('d'), nuevoId).comandos
+      .filter((c) => c.type === 'ADD_ATTRIBUTE')
+    const estado = comandos.find((c) => c.payload.name === 'estado')!
+    expect(estado.payload).toMatchObject({ visibility: 'PROTECTED', defaultValue: 'ACTIVO' })
+    // Sin datos del archivo, ni la clave va: el backend pone PRIVATE y sin valor inicial.
+    const nombre = comandos.find((c) => c.payload.name === 'nombre')!
+    expect(nombre.payload).not.toHaveProperty('visibility')
+    expect(nombre.payload).not.toHaveProperty('defaultValue')
+  })
+
   it('las clases van antes que los atributos que las usan', () => {
     const tipos = planDeImportacion(revisionDe(propuesta()), estadoVacio('d'), nuevoId).comandos.map((c) => c.type)
     expect(tipos.indexOf('ADD_ATTRIBUTE')).toBeGreaterThan(tipos.lastIndexOf('CREATE_CLASS'))
