@@ -325,3 +325,34 @@ nuevo que supersede al anterior.
 - La clave viaja en la cabecera `x-goog-api-key`, nunca en `?key=`: en la URL quedaría escrita en los logs de acceso y en el historial de cualquier proxy.
 **Consecuencia que hay que decir en voz alta:** con esta capa encendida, **los recortes de la foto salen de la máquina**. Es opt-in y se apaga sola: sin `GEMINI_API_KEY` la capa no existe, el modelo local sigue siendo la opción sin red, y el nivel 1 responde igual en los dos casos.
 **Descartado:** (a) **apuntar `EnriquecedorPorModelo` al endpoint compatible con OpenAI de Gemini** —tres líneas de configuración, pero conserva una petición por recorte, que es exactamente lo que no entra en la cuota—; (b) **mandarle la imagen entera y pedirle el modelo UML** —es la pregunta que ADR-023 evita: sin la geometría que lo ancle, el modelo devuelve atributos que no estaban, y ahí ya no hay filtro que alcance—.
+
+---
+**ADR-034 · El backend generado sale listo para producción** — *Aceptada* · amplía ADR-011 y la Regla 7
+
+**Decisión:** el CRUD generado agrega `PATCH`, paginación y orden opcionales (`page`, `size`, `sort`; sin `page` devuelve todo, así la app móvil no cambia), `X-Total-Count`, `201` + `Location`, `409` al borrar algo referenciado, auditoría, bloqueo optimista `@Version`, perfiles `dev`/`prod` por variables de entorno, Actuator, `Dockerfile` + `docker-compose.yml`, `README` y pruebas MockMvc. Contrato completo en `DISENO-FASE-2.md` §A.
+**Consecuencia:** el manifiesto P2→P3 solo crece con campos opcionales; `manifestVersion` sigue en 1.
+
+---
+**ADR-035 · Segunda salida del generador: MongoDB** — *Aceptada* · PostgreSQL sigue siendo la salida por defecto, como pide el enunciado
+
+**Decisión:** `?store=mongo` en `/codegen` y `/codegen/resumen` emite Spring Boot + Spring Data MongoDB con las mismas 5 capas, las mismas rutas, los mismos DTO y el mismo manifiesto. Composición → documento incrustado; asociación/agregación → referencia por id; herencia → una colección con `_tipo`. Se agrega la Vista Documental (`GET /diagrams/{id}/documental`), de solo lectura.
+**Descartado:** guardar los diagramas de la herramienta en NoSQL — rompe el log de operaciones, Flyway y la validación JPA↔DDL (ADR-009) sin ganar nada para el usuario.
+**Apéndice (2026-11-01) · Recortes por falta de transacciones.** El backend generado usa Mongo de un solo nodo, sin replica set, así que no hay transacciones entre documentos. Para no dejar datos a medias:
+- Trasladar una parte incrustada a otro todo responde `409` sin escribir nada. Editarla dentro del mismo todo sigue permitido.
+- Borrar un todo cuyas partes viven en otra colección responde `409` mientras queden partes: primero se borran las partes.
+- Una parte con atributos únicos o con referencias 1:1 propias no se incrusta: va a su propia colección con índice único (`sparse` en las 1:1), y se avisa.
+- Cada recorte aparece como advertencia en la Vista Documental y en el README del zip.
+**Pendiente:** operaciones atómicas con transacciones (replica set) quedan como mejora, no para la demo. La verificación de una referencia y la escritura siguiente no son atómicas: una carrera concurrente todavía puede dejar una referencia colgante.
+
+---
+**ADR-036 · Visor en vivo en la app móvil** — *Aceptada* · excepción acotada a "P3 no consume P1"
+
+**Decisión:** la app Flutter suma un modo **solo lectura** que inicia sesión en la herramienta, baja el snapshot, escucha `/topic/diagram/{id}/ops` y se pone al día con `?sinceSeq=` al reconectar. El modo Asistente sigue consumiendo solo el backend generado. El efecto de cada comando se copia en Dart (`aplicar_operacion.dart`), quinto espejo junto a `CommandApplier.java` y `applyOperation.ts`.
+**Consecuencia:** el visor nunca escribe; un VIEWER alcanza para usarlo.
+
+---
+**ADR-037 · Control de versiones tipo Git sobre el log de operaciones** — *Aceptada* · se apoya en ADR-002 (bus único de escritura) y ADR-014 (catálogo cerrado)
+
+**Decisión:** un commit es un `seq` con nombre, mensaje, autor y snapshot (`diagram_versions`). Una rama es un diagrama del mismo proyecto que nace de una versión **conservando la identidad lógica de los elementos (id XOR sal de la rama; la sal no toca los bits de versión/variante)**. Los ids de `uml_class`, `uml_attribute`, `uml_method` y `uml_relationship` son PK globales, así que una rama no puede repetirlos: cada diagrama tiene una sal (`diagrams.id_salt`, nula en un diagrama raíz) y `id físico = id lógico XOR sal`. El XOR es su propio inverso, no necesita tabla de mapeo, es atómico con cualquier escritura y una rama de una rama vuelve sola al espacio de ids de la raíz. Toda la traducción vive en `versiones.IdentidadLogica`. La API expone siempre los ids físicos del diagrama que se mira; en el merge, `elementId` es el id del destino ("nuestro"). Diff por id de elemento; merge a tres bandas cuya base es la versión de la que nació la rama (subiendo por las ramas hasta el primer diagrama común, la más vieja de las dos) o, si ya se mergearon entre sí, el estado del origen en el último merge (`diagram_merges`, como el segundo padre de un merge commit). Restaurar, copiar a una rama y mergear se traducen a **un `BATCH` por el bus** (`versiones.PlanDeCambios`): no hay comandos nuevos, se ven en vivo, quedan auditados y respetan los locks; además se revisan los locks de todo lo que el lote toca, también borrados, y un lock ajeno da `409` con quién lo tiene.
+**Descartado:** guardar el diagrama en un repositorio git real — mezcla dos fuentes de verdad y no ve los cambios en vivo · PK compuesta `(diagram_id, id)` en el metamodelo — toca ~29 archivos (entidades, applier, mapping, interop, codegen) · tabla de linaje `(diagram_id, element_id, origin_id)` — hay que escribirla en la misma transacción que el `BATCH` y mantenerla en cada merge.
+**Consecuencias:** lo que el catálogo no sabe cambiar en el lugar se rehace con el mismo id dentro del lote (un método distinto se quita y se vuelve a agregar; una relación que cambió de extremos o una clase que cambió de estereotipo o de abstracta se borra y se recrea reusando el tombstone). Un conflicto de borrado contra modificación usa el campo `existencia` (`existe`/`eliminado`); mover cajas en los dos lados no es conflicto (gana "nuestro"). **Límites conocidos:** una decisión de modelado que existe hoy y no en la versión no se puede "olvidar" (no hay comando), así que restaurar la deja; un lote tiene tope de 500 cambios (restaurar o mergear más que eso se rechaza con el motivo; copiar a una rama se parte en varios lotes); el pedido REST no tiene sesión STOMP, así que un lock propio en otra pestaña también frena el restore.

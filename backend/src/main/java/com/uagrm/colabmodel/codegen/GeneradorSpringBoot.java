@@ -27,9 +27,86 @@ import java.util.stream.Collectors;
  */
 public final class GeneradorSpringBoot {
 
-    public record Opciones(String nombreProyecto, String paquete) {
+    /**
+     * Donde guarda los datos el backend generado (ADR-035). PostgreSQL es la
+     * salida por defecto; MongoDB emite las mismas rutas, los mismos DTO y el
+     * mismo manifiesto, asi que quien consume la API no se entera.
+     */
+    public enum Almacen {
+        POSTGRES, MONGO;
+
+        /** "postgres" o "mongo" (sin importar mayusculas); null o vacio es POSTGRES. */
+        public static Almacen de(String texto) {
+            if (texto == null || texto.isBlank()) return POSTGRES;
+            return switch (texto.trim().toLowerCase(java.util.Locale.ROOT)) {
+                case "postgres", "postgresql" -> POSTGRES;
+                case "mongo", "mongodb" -> MONGO;
+                default -> throw new IllegalArgumentException(
+                        "Almacen desconocido: '" + texto + "'. Valores: postgres, mongo");
+            };
+        }
+    }
+
+    public record Opciones(String nombreProyecto, String paquete, Almacen almacen) {
+        public Opciones(String nombreProyecto, String paquete) {
+            this(nombreProyecto, paquete, Almacen.POSTGRES);
+        }
+
         public static Opciones por(String nombreProyecto) {
-            return new Opciones(nombreProyecto, "com.uagrm.generado");
+            return por(nombreProyecto, Almacen.POSTGRES);
+        }
+
+        public static Opciones por(String nombreProyecto, Almacen almacen) {
+            return new Opciones(nombreProyecto, "com.uagrm.generado", almacen);
+        }
+    }
+
+    /**
+     * Todo lo que el generador sabe de UNA entidad antes de escribirla. Se
+     * junta primero y se escribe despues, porque la misma entidad sale como
+     * JPA o como documento de MongoDB y las dos tienen que salir del mismo
+     * analisis: si cada variante decidiera por su cuenta, sus DTO podrian
+     * dejar de ser iguales.
+     *
+     * @param tabla       la tabla de la clase (da la ruta REST)
+     * @param tablaFisica donde viven sus filas: en SINGLE_TABLE, la de la raiz
+     * @param propios     lo que la clase declara (la Entity / el documento)
+     * @param campos      lo que la clase ES, con lo heredado (el DTO y el Service)
+     */
+    record Unidad(String clase, String nombreUml, String tabla, String tablaFisica,
+                  List<Campo> propios, List<Asociacion> asociacionesPropias, List<Coleccion> colecciones,
+                  List<ColeccionDeValores> valoresPropios, Herencia herencia,
+                  List<ModeloLogico.Incrustado> incrustadosPropios,
+                  List<Campo> campos, List<Asociacion> asociaciones, List<ColeccionDeValores> valores,
+                  List<ModeloLogico.Incrustado> incrustados, Stubs stubs) {
+
+        boolean instanciable() { return !herencia.abstracta(); }
+
+        String recurso() { return recursoDe(tabla); }
+    }
+
+    /**
+     * Los campos de auditoria y de bloqueo optimista (ADR-034). Si el modelo
+     * ya usa alguno de esos nombres --un Software con `version`--, se cambian
+     * los tres para todo el proyecto en vez de emitir dos campos homonimos.
+     */
+    record Meta(String version, String creado, String actualizado,
+                String columnaVersion, String columnaCreado, String columnaActualizado) {
+
+        static Meta para(List<Unidad> unidades) {
+            Set<String> usados = new HashSet<>();
+            for (Unidad u : unidades) {
+                u.campos().forEach(c -> usados.add(c.nombreJava()));
+                u.asociaciones().forEach(a -> usados.add(a.campo() + "Id"));
+                u.valores().forEach(v -> usados.add(v.campo()));
+                u.incrustados().forEach(i -> usados.add(NombresJava.campo(i.campo())));
+            }
+            boolean choca = usados.contains("version") || usados.contains("createdAt")
+                    || usados.contains("updatedAt");
+            return choca
+                    ? new Meta("versionRegistro", "registroCreadoEn", "registroActualizadoEn",
+                            "version_registro", "registro_creado_en", "registro_actualizado_en")
+                    : new Meta("version", "createdAt", "updatedAt", "version", "created_at", "updated_at");
         }
     }
 
@@ -55,20 +132,27 @@ public final class GeneradorSpringBoot {
                                            List<UmlMethod> metodos,
                                            List<UmlRelationship> relaciones,
                                            Decisiones decisiones) {
+        return generarCompleto(opciones, clases, atributos, metodos, relaciones, decisiones).proyecto();
+    }
+
+    /** El zip y la Vista Documental, salidos del MISMO analisis. */
+    private record Resultado(ProyectoGenerado proyecto, MapeoDocumental documental) { }
+
+    private static Resultado generarCompleto(Opciones opciones,
+                                             List<UmlClass> clases,
+                                             List<UmlAttribute> atributos,
+                                             List<UmlMethod> metodos,
+                                             List<UmlRelationship> relaciones,
+                                             Decisiones decisiones) {
         ModeloLogico logico = DerivadorLogico.derivar(clases, atributos, relaciones, decisiones);
         Map<String, String> archivos = new LinkedHashMap<>();
         List<String> advertencias = new ArrayList<>(logico.advertencias());
 
         String pkg = opciones.paquete();
         String ruta = "src/main/java/" + pkg.replace('.', '/');
-
-        archivos.put("pom.xml", pom(opciones));
-        archivos.put(ruta + "/GeneratedApplication.java", aplicacion(pkg));
-        archivos.put(ruta + "/web/ManejadorDeErrores.java", manejadorDeErrores(pkg));
-        archivos.put(ruta + "/config/CorsConfig.java", cors(pkg));
-        archivos.put("src/main/resources/static/index.html", consola());
-        archivos.put("src/main/resources/application.yml", configuracion(opciones));
-        archivos.put(RUTA_DDL, ddl(logico));
+        boolean mongo = opciones.almacen() == Almacen.MONGO;
+        List<Unidad> unidades = new ArrayList<>();
+        Map<String, List<Campo>> camposDeValores = new LinkedHashMap<>();
 
         List<UmlClass> vivas = clases.stream().filter(c -> c.getDeletedAt() == null).toList();
         Map<UUID, UmlRelationship> porRelacion = relaciones.stream()
@@ -171,7 +255,10 @@ public final class GeneradorSpringBoot {
                 String nombreValor = NombresJava.clase(i.clase());
                 if (!valoresEmitidos.add(nombreValor)) continue;
                 List<Campo> camposValor = camposDeValor(t, i);
-                archivos.put(ruta + "/domain/" + nombreValor + ".java", valorEmbebido(pkg, nombreValor, camposValor));
+                camposDeValores.put(nombreValor, camposValor);
+                archivos.put(ruta + "/domain/" + nombreValor + ".java", mongo
+                        ? PlantillasMongo.valorEmbebido(pkg, nombreValor, camposValor)
+                        : valorEmbebido(pkg, nombreValor, camposValor));
                 archivos.put(ruta + "/web/dto/" + nombreValor + "Dto.java", dtoDeValor(pkg, nombreValor, camposValor));
             }
         }
@@ -270,22 +357,12 @@ public final class GeneradorSpringBoot {
                 }
             }
 
-            archivos.put(ruta + "/domain/" + nombreJava + ".java",
-                    entidad(pkg, nombreJava, tabla, propios, asociaciones, colecciones,
-                            valoresPorClase.getOrDefault(clase.getId(), List.of()), herencia,
-                            incrustadosPropios));
-            archivos.put(ruta + "/repository/" + nombreJava + "Repository.java",
-                    repositorio(pkg, nombreJava, asociacionesCompletas));
-            archivos.put(ruta + "/service/" + nombreJava + "Service.java",
-                    servicio(pkg, nombreJava, campos, asociacionesCompletas, valores, incrustadosCompletos,
-                            stubsDe(clase.getName(), nombreJava,
-                                    metodosPorClase.getOrDefault(clase.getId(), List.of()),
-                                    advertencias, tiposEnum, pkg),
-                            !herencia.abstracta()));
-            archivos.put(ruta + "/web/dto/" + nombreJava + "Dto.java",
-                    dto(pkg, nombreJava, campos, asociacionesCompletas, valores, incrustadosCompletos));
-            archivos.put(ruta + "/web/" + nombreJava + "Controller.java",
-                    controlador(pkg, nombreJava, tabla, !herencia.abstracta(), asociacionesCompletas));
+            unidades.add(new Unidad(nombreJava, clase.getName(), tabla, t.nombre(), propios, asociaciones,
+                    colecciones, valoresPorClase.getOrDefault(clase.getId(), List.of()), herencia,
+                    incrustadosPropios, campos, asociacionesCompletas, valores, incrustadosCompletos,
+                    stubsDe(clase.getName(), nombreJava,
+                            metodosPorClase.getOrDefault(clase.getId(), List.of()),
+                            advertencias, tiposEnum, pkg)));
             manifiesto.add(new ManifestDeApp.Entidad(nombreJava, clase.getName(), recursoDe(tabla),
                     herencia.abstracta(), herencia.madre(),
                     camposDelManifiesto(campos, asociacionesCompletas, valores, incrustadosCompletos,
@@ -303,21 +380,12 @@ public final class GeneradorSpringBoot {
             List<Asociacion> asociaciones = asociacionesPorTabla.getOrDefault(tabla, List.of());
             List<Campo> campos = camposDe(t, asociaciones);
 
-            archivos.put(ruta + "/domain/" + nombreJava + ".java",
-                    entidad(pkg, nombreJava, tabla, campos, asociaciones,
-                            coleccionesDe(nombreJava, logico, asociacionesPorTabla, porRelacion,
-                                    claseDeTabla),
-                            List.of(), Herencia.NINGUNA, List.of()));
-            archivos.put(ruta + "/repository/" + nombreJava + "Repository.java",
-                    repositorio(pkg, nombreJava, asociaciones));
             // Sin metodos: una clase asociativa no sale de ninguna clase UML,
             // asi que no hay firmas del modelo que aterrizar (Regla 6).
-            archivos.put(ruta + "/service/" + nombreJava + "Service.java",
-                    servicio(pkg, nombreJava, campos, asociaciones, List.of(), List.of(), Stubs.NINGUNO, true));
-            archivos.put(ruta + "/web/dto/" + nombreJava + "Dto.java",
-                    dto(pkg, nombreJava, campos, asociaciones, List.of(), List.of()));
-            archivos.put(ruta + "/web/" + nombreJava + "Controller.java",
-                    controlador(pkg, nombreJava, tabla, true, asociaciones));
+            unidades.add(new Unidad(nombreJava, tabla.replace('_', ' '), tabla, tabla, campos, asociaciones,
+                    coleccionesDe(nombreJava, logico, asociacionesPorTabla, porRelacion, claseDeTabla),
+                    List.of(), Herencia.NINGUNA, List.of(), campos, asociaciones, List.of(), List.of(),
+                    Stubs.NINGUNO));
             manifiesto.add(new ManifestDeApp.Entidad(nombreJava, tabla.replace('_', ' '), recursoDe(tabla),
                     false, null,
                     camposDelManifiesto(campos, asociaciones, List.of(), List.of(),
@@ -342,11 +410,117 @@ public final class GeneradorSpringBoot {
                             : " todavia no genera Entity."));
         }
 
+        Meta meta = Meta.para(unidades);
+        Map<String, List<String>> literales = new HashMap<>(literalesDe);
+        MapeoDocumental documental = MapeoDocumental.de(logico, unidades, porRelacion, claseDeTabla,
+                camposDeValores, meta);
+
+        // Lo que no depende de la base: la API, sus errores y sus pruebas.
+        archivos.put("pom.xml", mongo ? PlantillasMongo.pom(opciones) : pom(opciones));
+        archivos.put(ruta + "/GeneratedApplication.java", aplicacion(pkg));
+        archivos.put(ruta + "/config/CorsConfig.java", PlantillasProduccion.cors(pkg));
+        archivos.put("src/main/resources/static/index.html", PlantillaConsola.html(meta)); // la consola de prueba (GET /), T-12
+        PlantillasProduccion.comunes(pkg, ruta).forEach(archivos::put);
+        for (Unidad u : unidades) {
+            archivos.put(ruta + "/web/dto/" + u.clase() + "Dto.java",
+                    dto(pkg, u.clase(), u.campos(), u.asociaciones(), u.valores(), u.incrustados(), meta));
+            archivos.put(ruta + "/web/" + u.clase() + "Controller.java",
+                    PlantillasProduccion.controlador(pkg, u));
+            archivos.put("src/test/java/" + pkg.replace('.', '/') + "/web/" + u.clase() + "ControllerTest.java",
+                    PlantillasProduccion.prueba(pkg, u, camposDeValores, literales));
+        }
+
+        if (mongo) {
+            archivos.put("src/main/resources/application.yml", PlantillasMongo.configuracion(opciones));
+            PlantillasMongo.archivos(pkg, ruta, unidades, documental, meta).forEach(archivos::put);
+            archivos.put(MapeoDocumental.RUTA, documental.json());
+            advertencias.addAll(documental.vista().advertencias());
+        } else {
+            archivos.put("src/main/resources/application.yml", configuracion(opciones));
+            archivos.put(RUTA_DDL, ddl(logico));
+            archivos.put(RUTA_AUDITORIA, auditoria(unidades, meta));
+            for (Unidad u : unidades) {
+                archivos.put(ruta + "/domain/" + u.clase() + ".java",
+                        entidad(pkg, u.clase(), u.tabla(), u.propios(), u.asociacionesPropias(), u.colecciones(),
+                                u.valoresPropios(), u.herencia(), u.incrustadosPropios(), meta));
+                archivos.put(ruta + "/repository/" + u.clase() + "Repository.java",
+                        repositorio(pkg, u.clase(), u.asociaciones()));
+                archivos.put(ruta + "/service/" + u.clase() + "Service.java",
+                        servicio(pkg, u.clase(), u.campos(), u.asociaciones(), u.valores(), u.incrustados(),
+                                u.stubs(), u.instanciable(), meta, referenciasA(u, unidades, logico)));
+            }
+            Set<String> abstractas = new HashSet<>();
+            unidades.stream().filter(u -> u.herencia().abstracta()).forEach(u -> abstractas.add(u.tablaFisica()));
+            String ejemplo = DatosDeEjemplo.sql(logico, conEntity, abstractas);
+            if (ejemplo != null) archivos.put(DatosDeEjemplo.RUTA, ejemplo);
+        }
+
+        PlantillasProduccion.despliegue(opciones).forEach(archivos::put);
         archivos.put(ManifestDeApp.RUTA, ManifestDeApp.json(opciones.nombreProyecto(), manifiesto));
-        String ejemplo = DatosDeEjemplo.sql(logico, conEntity);
-        if (ejemplo != null) archivos.put(DatosDeEjemplo.RUTA, ejemplo);
-        archivos.put("README.md", readme(opciones, entidades, advertencias));
-        return new ProyectoGenerado(opciones.nombreProyecto(), archivos, advertencias);
+        archivos.put("README.md", readme(opciones, entidades, advertencias, meta));
+        return new Resultado(new ProyectoGenerado(opciones.nombreProyecto(), archivos, advertencias), documental);
+    }
+
+    /**
+     * La Vista Documental (ADR-035): como guarda este modelo la variante
+     * MongoDB. Sale del mismo analisis que el zip, asi que lo que se ve es lo
+     * que se entrega.
+     */
+    public static ModeloDocumental documental(String nombreProyecto, List<UmlClass> clases,
+                                              List<UmlAttribute> atributos, List<UmlMethod> metodos,
+                                              List<UmlRelationship> relaciones, Decisiones decisiones) {
+        return generarCompleto(Opciones.por(nombreProyecto, Almacen.MONGO), clases, atributos, metodos,
+                relaciones, decisiones).documental().vista();
+    }
+
+    /** Donde va la migracion de auditoria. Aparte de V1: V1 es la base que se confirma (ADR-032). */
+    public static final String RUTA_AUDITORIA = "src/main/resources/db/migration/V2__auditoria.sql";
+
+    /**
+     * Las columnas de auditoria y de version, en una migracion APARTE.
+     *
+     * V1 es exactamente el esquema que muestra la Vista Fisica y que el
+     * equipo confirma: su huella viaja con la descarga (ADR-032). Si estas
+     * columnas fueran ahi, toda base ya confirmada dejaria de coincidir sin
+     * que nadie haya tocado el modelo. Solo las tablas raiz las llevan: una
+     * hija JOINED las hereda por la misma fila de la madre.
+     */
+    private static String auditoria(List<Unidad> unidades, Meta meta) {
+        StringBuilder sb = new StringBuilder("-- Auditoria y bloqueo optimista (ADR-034). Generado: no editar a mano.\n\n");
+        Set<String> tablas = new LinkedHashSet<>();
+        for (Unidad u : unidades) {
+            if (u.herencia().madre() == null) tablas.add(u.tablaFisica());
+        }
+        for (String t : tablas) {
+            sb.append("ALTER TABLE ").append(t).append(" ADD COLUMN ").append(meta.columnaVersion())
+                    .append(" bigint DEFAULT 0 NOT NULL;\n")
+              .append("ALTER TABLE ").append(t).append(" ADD COLUMN ").append(meta.columnaCreado())
+                    .append(" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL;\n")
+              .append("ALTER TABLE ").append(t).append(" ADD COLUMN ").append(meta.columnaActualizado())
+                    .append(" timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL;\n\n");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Quien apunta a esta entidad, por la restriccion de clave foranea que
+     * emite el DDL. Sirve para que el 409 de un borrado diga QUE la referencia
+     * en vez de un "viola una restriccion" generico.
+     */
+    private static Map<String, String> referenciasA(Unidad destino, List<Unidad> unidades, ModeloLogico logico) {
+        Map<String, String> salida = new LinkedHashMap<>();
+        for (ModeloLogico.Tabla t : logico.tablas()) {
+            for (ModeloLogico.Columna c : t.columnas()) {
+                if (c.referencia() == null) continue;
+                String tablaApuntada = c.referencia().substring(0, c.referencia().indexOf('('));
+                if (!tablaApuntada.equals(destino.tablaFisica())) continue;
+                String quien = unidades.stream().filter(u -> u.tablaFisica().equals(t.nombre())
+                                && u.herencia().madre() == null)
+                        .map(Unidad::clase).findFirst().orElse(t.nombre());
+                salida.put(nombreDeFk(t, c), quien + "." + campoDeFk(c.nombre()));
+            }
+        }
+        return salida;
     }
 
     // ------------------------------------------------------------ MANIFIESTO
@@ -450,7 +624,7 @@ public final class GeneradorSpringBoot {
         return Nombres.identificador("fk_" + tabla.nombre() + "_" + columna.nombre());
     }
 
-    private record Campo(String nombreJava, String columna, String tipoJava, boolean nullable,
+    record Campo(String nombreJava, String columna, String tipoJava, boolean nullable,
                          boolean esId, Integer largo, boolean enumerado, boolean obligatorio,
                          ModeloLogico.Rango rango, boolean unico) {
         Campo comoObligatorio() {
@@ -459,8 +633,8 @@ public final class GeneradorSpringBoot {
     }
 
     /** REGLA 7: el lado que tiene la FK. `@ManyToOne` (o `@OneToOne` en 1:1). */
-    private record Asociacion(String campo, String claseDestino, String columna,
-                              boolean nullable, boolean unoAUno) { }
+    record Asociacion(String campo, String claseDestino, String columna,
+                      boolean nullable, boolean unoAUno, RelationKind kind) { }
 
     /**
      * El repositorio con el que el Service de `clase` resuelve una asociacion.
@@ -489,7 +663,7 @@ public final class GeneradorSpringBoot {
      * @param abstracta raiz abstracta: no se puede instanciar, asi que su API
      *                  solo lista, obtiene y elimina
      */
-    private record Herencia(String madre, boolean raiz, boolean abstracta,
+    record Herencia(String madre, boolean raiz, boolean abstracta,
                             boolean tablaUnica, String discriminador, int largoDiscriminador,
                             String valor) {
         static final Herencia NINGUNA = new Herencia(null, false, false, false, null, 0, null);
@@ -556,11 +730,11 @@ public final class GeneradorSpringBoot {
     }
 
     /** A-3 leido como OO: una coleccion de VALORES, no de entidades. */
-    private record ColeccionDeValores(String campo, String tipoElemento, String tabla,
+    record ColeccionDeValores(String campo, String tipoElemento, String tabla,
                                       String joinColumn, String columna, boolean enumerado) { }
 
     /** El lado inverso: la coleccion, con el cascade que pide el tipo de relacion. */
-    private record Coleccion(String campo, String claseElemento, String mappedBy,
+    record Coleccion(String campo, String claseElemento, String mappedBy,
                              String cascade, boolean unoAUno) { }
 
     private static List<Campo> camposDe(ModeloLogico.Tabla t, List<Asociacion> asociaciones) {
@@ -597,7 +771,7 @@ public final class GeneradorSpringBoot {
             String claseDestino = claseDeTabla.get(tablaDestino);
             if (claseDestino == null) continue;
             asociaciones.add(new Asociacion(campoDeFk(c.nombre()), claseDestino, c.nombre(),
-                    c.nullable(), c.unique()));
+                    c.nullable(), c.unique(), r.getKind()));
         }
         return asociaciones;
     }
@@ -641,7 +815,7 @@ public final class GeneradorSpringBoot {
     }
 
     /** "libro_id" -> "libro". El sufijo lo puso la Regla 3, aca estorba. */
-    private static String campoDeFk(String columna) {
+    static String campoDeFk(String columna) {
         String base = columna.endsWith("_id") ? columna.substring(0, columna.length() - 3) : columna;
         return NombresJava.campo(base);
     }
@@ -764,7 +938,7 @@ public final class GeneradorSpringBoot {
                             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                             <version>2.8.9</version>
                         </dependency>
-                    </dependencies>
+                {{comunes}}    </dependencies>
 
                     <build>
                         <plugins>
@@ -776,8 +950,14 @@ public final class GeneradorSpringBoot {
                     </build>
                 </project>
                 """
-                .replace("{{artefacto}}", Nombres.identificador(o.nombreProyecto()).replace('_', '-'))
+                .replace("{{comunes}}", PlantillasProduccion.dependenciasComunes())
+                .replace("{{artefacto}}", artefacto(o))
                 .replace("{{proyecto}}", o.nombreProyecto());
+    }
+
+    /** El artifactId de Maven: tambien es el nombre del jar y de la base. */
+    static String artefacto(Opciones o) {
+        return Nombres.identificador(o.nombreProyecto()).replace('_', '-');
     }
 
     private static String aplicacion(String pkg) {
@@ -797,343 +977,24 @@ public final class GeneradorSpringBoot {
     }
 
     /**
-     * La consola de prueba que viaja DENTRO del backend generado.
-     *
-     * Responde al requisito de "probar el backend con un frontend hecho en
-     * cinco minutos": son cero minutos, porque ya viene en el zip.
-     *
-     * Tres decisiones, y las tres son por lo mismo --que no pueda fallar el
-     * dia de la demo--:
-     *
-     *   - va en `resources/static/`, asi que la sirve el mismo Spring Boot en
-     *     `GET /`. MISMO ORIGEN: no hay CORS que configurar, que es lo que
-     *     rompe a cualquier frontend separado;
-     *   - un solo archivo, sin Node, sin npm install, sin build. Lo unico que
-     *     hace falta es el jar que ya se esta corriendo;
-     *   - se arma leyendo `app-manifest.json`, el MISMO contrato que consume
-     *     la app movil (ADR-011). No conoce ninguna entidad de antemano, asi
-     *     que sirve para cualquier dominio que traiga el docente, y si el
-     *     manifiesto esta mal se nota aca antes que en el telefono.
+     * Tres perfiles (ADR-034):
+     *   - `dev` (por defecto): H2 en memoria con datos de ejemplo. Arranca sin
+     *     instalar nada, que es lo que hace que el zip se pruebe en cualquier
+     *     maquina. `h2` sigue funcionando como alias.
+     *   - `prod`: PostgreSQL. La base, el usuario, la clave, el puerto y los
+     *     origenes CORS salen de variables de entorno; ninguna clave queda
+     *     escrita en el jar.
+     *   - `postgres`: el PostgreSQL local de desarrollo, como antes.
      */
-    private static String consola() {
-        return """
-                <!DOCTYPE html>
-                <html lang="es">
-                <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <title>Consola de prueba</title>
-                <style>
-                  * { box-sizing: border-box; }
-                  body { margin: 0; font: 14px system-ui, sans-serif; color: #1e293b; background: #f8fafc; }
-                  header { background: #0f172a; color: #fff; padding: 14px 20px; }
-                  header h1 { margin: 0; font-size: 16px; font-weight: 600; }
-                  header span { opacity: .7; font-size: 12px; }
-                  main { display: flex; align-items: flex-start; gap: 20px; padding: 20px; flex-wrap: wrap; }
-                  nav { min-width: 170px; }
-                  nav button { display: block; width: 100%; text-align: left; padding: 8px 12px;
-                               margin-bottom: 4px; border: 1px solid #cbd5e1; border-radius: 6px;
-                               background: #fff; cursor: pointer; font: inherit; }
-                  nav button.activa { background: #0f172a; color: #fff; border-color: #0f172a; }
-                  section { flex: 1; min-width: 320px; }
-                  .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
-                           padding: 16px; margin-bottom: 16px; }
-                  .panel h2 { margin: 0 0 12px; font-size: 14px; }
-                  label { display: block; margin-bottom: 8px; font-size: 12px; color: #475569; }
-                  label span { display: block; margin-bottom: 3px; }
-                  input, select { width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1;
-                                  border-radius: 5px; font: inherit; }
-                  button.accion { padding: 8px 16px; border: 0; border-radius: 6px;
-                                  background: #2563eb; color: #fff; cursor: pointer; font: inherit; }
-                  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-                  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e2e8f0;
-                           white-space: nowrap; }
-                  th { color: #64748b; font-weight: 600; }
-                  .vacio { color: #94a3b8; font-style: italic; }
-                  .error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
-                  .borrar { border: 0; background: none; color: #dc2626; cursor: pointer; font: inherit; }
-                  .req { color: #dc2626; }
-                </style>
-                </head>
-                <body>
-                <header>
-                  <h1 id="titulo">Consola de prueba</h1>
-                  <span>Se arma sola desde app-manifest.json &middot;
-                        <a href="/swagger-ui.html" style="color:#93c5fd">Swagger</a> &middot;
-                        <a href="/app-manifest.json" style="color:#93c5fd">manifiesto</a></span>
-                </header>
-                <main>
-                  <nav id="menu"></nav>
-                  <section id="cuerpo"></section>
-                </main>
-                <script>
-                let manifiesto = null;
-                let actual = null;
-
-                const $ = (id) => document.getElementById(id);
-
-                // El endpoint del manifiesto ya trae /api; baseUrl viene vacio
-                // a proposito para que todo resuelva contra este mismo host.
-                const url = (e, extra) => (manifiesto.baseUrl || '') + e.endpoint + (extra || '');
-
-                async function arrancar() {
-                  try {
-                    const r = await fetch('app-manifest.json');
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    manifiesto = await r.json();
-                  } catch (err) {
-                    $('cuerpo').innerHTML =
-                      '<div class="panel error">No se pudo leer app-manifest.json: ' + err.message + '</div>';
-                    return;
-                  }
-                  $('titulo').textContent = manifiesto.app || 'Consola de prueba';
-                  document.title = $('titulo').textContent;
-                  if (!manifiesto.entities.length) {
-                    $('cuerpo').innerHTML = '<div class="panel vacio">El modelo no genero ninguna entidad.</div>';
-                    return;
-                  }
-                  dibujarMenu();
-                  elegir(manifiesto.entities[0]);
-                }
-
-                function dibujarMenu() {
-                  const menu = $('menu');
-                  menu.innerHTML = '';
-                  manifiesto.entities.forEach((e) => {
-                    const b = document.createElement('button');
-                    b.textContent = e.name;
-                    b.onclick = () => elegir(e);
-                    b.dataset.nombre = e.name;
-                    menu.appendChild(b);
-                  });
-                }
-
-                function elegir(entidad) {
-                  actual = entidad;
-                  [...$('menu').children].forEach((b) =>
-                    b.classList.toggle('activa', b.dataset.nombre === entidad.name));
-                  dibujarFormulario();
-                  listar();
-                }
-
-                function dibujarFormulario() {
-                  const puedeCrear = actual.actions.includes('crear');
-                  const panel = document.createElement('div');
-                  panel.className = 'panel';
-                  panel.id = 'panel-alta';
-                  panel.innerHTML = '<h2>' + actual.name + ' &middot; ' + actual.endpoint + '</h2>';
-
-                  if (!puedeCrear) {
-                    panel.innerHTML += '<p class="vacio">Es una raiz abstracta: solo se puede listar.</p>';
-                  } else {
-                    const form = document.createElement('form');
-                    actual.fields.forEach((f) => {
-                      const lab = document.createElement('label');
-                      const cap = document.createElement('span');
-                      cap.innerHTML = f.name + ' <em>' + f.type + '</em>' +
-                        (f.required ? ' <span class="req">*</span>' : '') +
-                        (f.target ? ' &rarr; ' + f.target : '');
-                      lab.appendChild(cap);
-                      lab.appendChild(control(f));
-                      form.appendChild(lab);
-                    });
-                    const btn = document.createElement('button');
-                    btn.className = 'accion';
-                    btn.type = 'submit';
-                    btn.textContent = 'Crear';
-                    form.appendChild(btn);
-                    form.onsubmit = (ev) => { ev.preventDefault(); crear(form); };
-                    panel.appendChild(form);
-                  }
-                  const cuerpo = $('cuerpo');
-                  cuerpo.innerHTML = '';
-                  cuerpo.appendChild(panel);
-                  const lista = document.createElement('div');
-                  lista.className = 'panel';
-                  lista.id = 'panel-lista';
-                  cuerpo.appendChild(lista);
-                }
-
-                function control(f) {
-                  if (f.type === 'boolean') {
-                    const s = document.createElement('select');
-                    s.innerHTML = '<option value="">(vacio)</option>' +
-                                  '<option value="true">true</option><option value="false">false</option>';
-                    s.name = f.name;
-                    return s;
-                  }
-                  const i = document.createElement('input');
-                  i.name = f.name;
-                  if (f.type === 'int' || f.type === 'long') i.type = 'number';
-                  else if (f.type === 'decimal') { i.type = 'number'; i.step = 'any'; }
-                  else if (f.type === 'date') i.type = 'date';
-                  else if (f.type === 'datetime') i.type = 'datetime-local';
-                  if (f.required) i.required = true;
-                  i.placeholder = f.type;
-                  return i;
-                }
-
-                function valor(f, crudo) {
-                  if (crudo === '' || crudo === null) return null;
-                  if (f.type === 'int' || f.type === 'long') return parseInt(crudo, 10);
-                  if (f.type === 'decimal') return parseFloat(crudo);
-                  if (f.type === 'boolean') return crudo === 'true';
-                  return crudo;
-                }
-
-                async function crear(form) {
-                  const cuerpo = {};
-                  actual.fields.forEach((f) => {
-                    const v = valor(f, form.elements[f.name].value);
-                    if (v !== null) cuerpo[f.name] = v;
-                  });
-                  try {
-                    const r = await fetch(url(actual), {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(cuerpo),
-                    });
-                    if (!r.ok) {
-                      avisar('La API respondio ' + r.status + ': ' + (await r.text()));
-                      return;
-                    }
-                    form.reset();
-                    listar();
-                  } catch (err) {
-                    avisar('No se pudo llamar a la API: ' + err.message);
-                  }
-                }
-
-                async function borrar(id) {
-                  try {
-                    const r = await fetch(url(actual, '/' + id), { method: 'DELETE' });
-                    if (!r.ok) { avisar('No se pudo eliminar: HTTP ' + r.status); return; }
-                    listar();
-                  } catch (err) {
-                    avisar('No se pudo llamar a la API: ' + err.message);
-                  }
-                }
-
-                async function listar() {
-                  const panel = $('panel-lista');
-                  panel.className = 'panel';
-                  panel.innerHTML = '<h2>Registros</h2>';
-                  let filas;
-                  try {
-                    const r = await fetch(url(actual));
-                    if (!r.ok) { panel.className = 'panel error'; panel.innerHTML +=
-                      'La API respondio ' + r.status; return; }
-                    filas = await r.json();
-                  } catch (err) {
-                    panel.className = 'panel error';
-                    panel.innerHTML += 'No se pudo llamar a la API: ' + err.message;
-                    return;
-                  }
-                  if (!Array.isArray(filas) || !filas.length) {
-                    panel.innerHTML += '<p class="vacio">Todavia no hay registros.</p>';
-                    return;
-                  }
-                  const columnas = Object.keys(filas[0]);
-                  const tabla = document.createElement('table');
-                  const thead = document.createElement('tr');
-                  columnas.forEach((c) => {
-                    const th = document.createElement('th');
-                    th.textContent = c;
-                    thead.appendChild(th);
-                  });
-                  thead.appendChild(document.createElement('th'));
-                  tabla.appendChild(thead);
-                  filas.forEach((fila) => {
-                    const tr = document.createElement('tr');
-                    columnas.forEach((c) => {
-                      const td = document.createElement('td');
-                      td.textContent = fila[c] === null ? '' : String(fila[c]);
-                      tr.appendChild(td);
-                    });
-                    const td = document.createElement('td');
-                    if (actual.actions.includes('eliminar') && fila.id) {
-                      const b = document.createElement('button');
-                      b.className = 'borrar';
-                      b.textContent = 'eliminar';
-                      b.onclick = () => borrar(fila.id);
-                      td.appendChild(b);
-                    }
-                    tr.appendChild(td);
-                    tabla.appendChild(tr);
-                  });
-                  panel.appendChild(tabla);
-                }
-
-                function avisar(texto) {
-                  const panel = $('panel-alta');
-                  let caja = document.getElementById('aviso');
-                  if (!caja) {
-                    caja = document.createElement('p');
-                    caja.id = 'aviso';
-                    panel.appendChild(caja);
-                  }
-                  caja.className = 'req';
-                  caja.textContent = texto;
-                }
-
-                arrancar();
-                </script>
-                </body>
-                </html>
-                """;
-    }
-
-    /**
-     * CORS abierto en el backend generado.
-     *
-     * Hace falta para que un frontend servido desde OTRO origen --Flutter web,
-     * una pagina suelta, un Vite-- pueda llamar a esta API: sin esto el
-     * navegador bloquea la respuesta, y parece un error del cliente cuando es
-     * del servidor.
-     *
-     * NO hace falta para Flutter en el telefono: CORS es una regla del
-     * navegador, y un cliente HTTP nativo no la aplica.
-     *
-     * Abierto a proposito: esto es un artefacto de demostracion que vive en una
-     * red de aula, no un servicio publicado. Restringir origenes aca seria
-     * pedirle al docente que configure algo antes de poder probar.
-     */
-    private static String cors(String pkg) {
-        return """
-                package {{pkg}}.config;
-
-                import org.springframework.context.annotation.Configuration;
-                import org.springframework.web.servlet.config.annotation.CorsRegistry;
-                import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-                @Configuration
-                public class CorsConfig implements WebMvcConfigurer {
-
-                    @Override
-                    public void addCorsMappings(CorsRegistry registry) {
-                        registry.addMapping("/**")
-                                .allowedOriginPatterns("*")
-                                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                                .allowedHeaders("*");
-                    }
-                }
-                """.replace("{{pkg}}", pkg);
-    }
-
     private static String configuracion(Opciones o) {
-        return """
-                server:
-                  port: 8081
-
+        return (PlantillasProduccion.yamlComun(o) + """
                 spring:
                   application:
                     name: {{proyecto}}
-                  # Sin perfil: H2 en memoria. Arranca sin instalar ni levantar nada,
-                  # que es lo que hace que este artefacto se pueda probar en cualquier
-                  # maquina. PostgreSQL queda a un `--spring.profiles.active=postgres`
-                  # de distancia, con el MISMO DDL: el esquema no se bifurca.
                   profiles:
-                    default: h2
+                    default: dev
+                    group:
+                      h2: dev
                   jpa:
                     hibernate:
                       # El esquema lo crea Flyway; Hibernate SOLO valida. Si el mapeo
@@ -1147,7 +1008,7 @@ public final class GeneradorSpringBoot {
                 spring:
                   config:
                     activate:
-                      on-profile: h2
+                      on-profile: dev
                   datasource:
                     # MODE=PostgreSQL para que el mismo DDL valga en las dos bases.
                     # DB_CLOSE_DELAY=-1 para que la base no se borre cuando el pool
@@ -1162,6 +1023,9 @@ public final class GeneradorSpringBoot {
                     # `db/demo` solo se lee aca: los datos de ejemplo no ensucian
                     # una base de verdad.
                     locations: classpath:db/migration,classpath:db/demo
+                logging:
+                  level:
+                    "{{pkg}}": DEBUG
 
                 ---
                 spring:
@@ -1174,8 +1038,25 @@ public final class GeneradorSpringBoot {
                     password: colabmodel
                   flyway:
                     locations: classpath:db/migration
+
+                ---
+                # PRODUCCION: nada sensible queda escrito aca. Sin DB_URL, DB_USER o
+                # DB_PASSWORD la aplicacion no arranca, en vez de arrancar contra
+                # una base equivocada.
+                spring:
+                  config:
+                    activate:
+                      on-profile: prod
+                  datasource:
+                    url: ${DB_URL}
+                    username: ${DB_USER}
+                    password: ${DB_PASSWORD}
+                  flyway:
+                    locations: classpath:db/migration
                 """
+                + PlantillasProduccion.yamlProd(o))
                 .replace("{{proyecto}}", o.nombreProyecto())
+                .replace("{{pkg}}", o.paquete())
                 .replace("{{db}}", Nombres.identificador(o.nombreProyecto()));
     }
 
@@ -1267,7 +1148,7 @@ public final class GeneradorSpringBoot {
     private static String entidad(String pkg, String clase, String tabla, List<Campo> campos,
                                   List<Asociacion> asociaciones, List<Coleccion> colecciones,
                                   List<ColeccionDeValores> valores, Herencia herencia,
-                                  List<ModeloLogico.Incrustado> incrustados) {
+                                  List<ModeloLogico.Incrustado> incrustados, Meta meta) {
         StringBuilder relaciones = new StringBuilder();
         StringBuilder accesoresRel = new StringBuilder();
 
@@ -1332,7 +1213,7 @@ public final class GeneradorSpringBoot {
         }
 
         return entidadTexto(pkg, clase, tabla, campos, relaciones.toString(), accesoresRel.toString(),
-                !colecciones.isEmpty() || !valores.isEmpty(), herencia);
+                !colecciones.isEmpty() || !valores.isEmpty(), herencia, meta);
     }
 
     /** REGLA 5: la clase de valor. Sin @Id y sin tabla: vive dentro de quien la use. */
@@ -1446,6 +1327,49 @@ public final class GeneradorSpringBoot {
         return sb.toString();
     }
 
+    /**
+     * Version y auditoria de la raiz (ADR-034). `@Version` hace que dos
+     * escrituras concurrentes sobre la misma fila no se pisen: la segunda
+     * falla y el manejador de errores responde 409. Las fechas las pone la
+     * propia entidad al guardarse, sin depender de quien la llame.
+     */
+    private static String auditoriaJpa(Meta m) {
+        return """
+                    @Version
+                    @Column(name = "{{cv}}", nullable = false)
+                    private Long {{v}};
+
+                    @Column(name = "{{cc}}", nullable = false, updatable = false)
+                    private LocalDateTime {{c}};
+
+                    @Column(name = "{{ca}}", nullable = false)
+                    private LocalDateTime {{a}};
+
+                    @PrePersist
+                    void alCrear() {
+                        LocalDateTime ahora = LocalDateTime.now();
+                        {{c}} = ahora;
+                        {{a}} = ahora;
+                    }
+
+                    @PreUpdate
+                    void alActualizar() {
+                        {{a}} = LocalDateTime.now();
+                    }
+
+                    public Long {{gv}}() { return {{v}}; }
+                    public LocalDateTime {{gc}}() { return {{c}}; }
+                    public LocalDateTime {{ga}}() { return {{a}}; }
+
+                """
+                .replace("{{cv}}", m.columnaVersion()).replace("{{cc}}", m.columnaCreado())
+                .replace("{{ca}}", m.columnaActualizado())
+                .replace("{{gv}}", NombresJava.getter(m.version()))
+                .replace("{{gc}}", NombresJava.getter(m.creado()))
+                .replace("{{ga}}", NombresJava.getter(m.actualizado()))
+                .replace("{{v}}", m.version()).replace("{{c}}", m.creado()).replace("{{a}}", m.actualizado());
+    }
+
     private static String accesores(String tipo, String campo) {
         return "    public " + tipo + " " + NombresJava.getter(campo) + "() { return " + campo + "; }\n"
                 + "    public void " + NombresJava.setter(campo) + "(" + tipo + " " + campo
@@ -1454,7 +1378,7 @@ public final class GeneradorSpringBoot {
 
     private static String entidadTexto(String pkg, String clase, String tabla, List<Campo> campos,
                                        String relaciones, String accesoresRel, boolean conListas,
-                                       Herencia herencia) {
+                                       Herencia herencia, Meta meta) {
         StringBuilder cuerpo = new StringBuilder();
         for (Campo c : campos) {
             if (c.esId()) {
@@ -1498,8 +1422,11 @@ public final class GeneradorSpringBoot {
                 @Entity
                 {{anotacionTabla}}{{herencia}}public {{abstracta}}class {{clase}}{{extends}} {
 
-                {{campos}}{{relaciones}}{{accesores}}{{accesoresRel}}{{igualdad}}}
+                {{campos}}{{relaciones}}{{auditoria}}{{accesores}}{{accesoresRel}}{{igualdad}}}
                 """
+                // ADR-034: solo la raiz declara version y auditoria; una hija
+                // las hereda, igual que hereda el id.
+                .replace("{{auditoria}}", herencia.madre() != null ? "" : auditoriaJpa(meta))
                 // Una subclase SINGLE_TABLE no declara tabla: vive en la de su raiz.
                 .replace("{{anotacionTabla}}", herencia.tablaUnica() && herencia.madre() != null
                         ? "" : "@Table(name = \"" + tabla + "\")\n")
@@ -1524,7 +1451,9 @@ public final class GeneradorSpringBoot {
                             public int hashCode() { return {{clase}}.class.hashCode(); }
                         """)
                 .replace("{{pkg}}", pkg)
-                .replace("{{importsLista}}", conListas ? "import java.util.ArrayList;\nimport java.util.List;\n" : "")
+                .replace("{{importsLista}}", (conListas ? "import java.util.ArrayList;\nimport java.util.List;\n" : "")
+                        + (herencia.madre() == null && !importsDe(campos).contains("java.time.LocalDateTime;")
+                                ? "import java.time.LocalDateTime;\n" : ""))
                 .replace("{{imports}}", importsDe(campos))
                 .replace("{{tabla}}", tabla)
                 .replace("{{campos}}", cuerpo.toString())
@@ -1554,20 +1483,26 @@ public final class GeneradorSpringBoot {
                 .collect(Collectors.joining(", "));
 
         // Un buscador por cada FK. Lo que hace falta para que "los pedidos de
-        // un cliente" sea una consulta y no traerse la tabla entera.
+        // un cliente" sea una consulta y no traerse la tabla entera. Con
+        // orden (todo) y con pagina (ADR-034).
         StringBuilder porFk = new StringBuilder();
         for (Asociacion a : asociaciones) {
+            String metodo = "findBy" + mayuscula(a.campo()) + "_Id(UUID " + a.campo() + "Id";
             porFk.append("\n    /** El lado inverso de ").append(a.campo())
                     .append(": lo que `inverseOf` promete en app-manifest.json. */\n")
                     .append("    @EntityGraph(attributePaths = { ").append(rutas).append(" })\n")
-                    .append("    List<").append(clase).append("> findBy")
-                    .append(mayuscula(a.campo())).append("_Id(UUID ").append(a.campo()).append("Id);\n");
+                    .append("    List<").append(clase).append("> ").append(metodo).append(", Sort orden);\n\n")
+                    .append("    @EntityGraph(attributePaths = { ").append(rutas).append(" })\n")
+                    .append("    Page<").append(clase).append("> ").append(metodo).append(", Pageable pagina);\n");
         }
 
         return """
                 package {{pkg}}.repository;
 
                 import {{pkg}}.domain.{{clase}};
+                import org.springframework.data.domain.Page;
+                import org.springframework.data.domain.Pageable;
+                import org.springframework.data.domain.Sort;
                 import org.springframework.data.jpa.repository.EntityGraph;
                 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -1584,6 +1519,14 @@ public final class GeneradorSpringBoot {
                     @Override
                     @EntityGraph(attributePaths = { {{rutas}} })
                     List<{{clase}}> findAll();
+
+                    @Override
+                    @EntityGraph(attributePaths = { {{rutas}} })
+                    List<{{clase}}> findAll(Sort orden);
+
+                    @Override
+                    @EntityGraph(attributePaths = { {{rutas}} })
+                    Page<{{clase}}> findAll(Pageable pagina);
                 {{porFk}}}
                 """.replace("{{pkg}}", pkg).replace("{{rutas}}", rutas)
                 .replace("{{porFk}}", porFk.toString()).replace("{{clase}}", clase);
@@ -1594,10 +1537,24 @@ public final class GeneradorSpringBoot {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
+    /**
+     * Los campos por los que el listado acepta `sort`: los propios de la
+     * entidad (no las asociaciones ni las colecciones) y los de auditoria.
+     * Un nombre que no esta aca es un 400, no un 500 de Spring Data.
+     */
+    static String ordenables(List<Campo> campos, Meta meta) {
+        List<String> nombres = new ArrayList<>();
+        for (Campo c : campos) nombres.add("\"" + c.nombreJava() + "\"");
+        nombres.add("\"" + meta.creado() + "\"");
+        nombres.add("\"" + meta.actualizado() + "\"");
+        return "Set.of(" + String.join(", ", nombres) + ")";
+    }
+
     private static String servicio(String pkg, String clase, List<Campo> campos,
                                    List<Asociacion> asociaciones, List<ColeccionDeValores> valores,
                                    List<ModeloLogico.Incrustado> incrustados,
-                                   Stubs stubs, boolean instanciable) {
+                                   Stubs stubs, boolean instanciable, Meta meta,
+                                   Map<String, String> referencias) {
         StringBuilder copiar = new StringBuilder();
         for (Campo c : campos) {
             if (c.esId()) continue;
@@ -1608,6 +1565,14 @@ public final class GeneradorSpringBoot {
         // sin traer la fila entera de la base.
         for (Asociacion a : asociaciones) {
             String campoId = a.campo() + "Id";
+            // Apuntar a un id que no existe es un 409 que dice cual, no la
+            // violacion de FK generica que daria la base al hacer flush.
+            copiar.append("        if (dto.").append(campoId).append("() != null && !")
+                    .append(repositorioDe(clase, a.claseDestino())).append(".existsById(dto.").append(campoId)
+                    .append("())) {\n")
+                    .append("            throw new ConflictoException(\"No existe ").append(a.claseDestino())
+                    .append(" \" + dto.").append(campoId).append("() + \" (").append(campoId).append(")\");\n")
+                    .append("        }\n");
             copiar.append("        entidad.").append(NombresJava.setter(a.campo()))
                     .append("(dto.").append(campoId).append("() == null ? null : ")
                     .append(repositorioDe(clase, a.claseDestino())).append(".getReferenceById(dto.")
@@ -1641,6 +1606,17 @@ public final class GeneradorSpringBoot {
             String getter = "e." + NombresJava.getter(NombresJava.campo(i.campo())) + "()";
             aDto.add(getter + " == null ? null : " + NombresJava.clase(i.clase()) + "Dto.de(" + getter + ")");
         }
+        aDto.add("e." + NombresJava.getter(meta.version()) + "()");
+        aDto.add("e." + NombresJava.getter(meta.creado()) + "()");
+        aDto.add("e." + NombresJava.getter(meta.actualizado()) + "()");
+
+        // Quien referencia a esta entidad, por nombre de restriccion: asi el
+        // 409 del borrado dice que la sostiene.
+        String mapaReferencias = referencias.isEmpty() ? "Map.of()" : "Map.ofEntries(\n"
+                + referencias.entrySet().stream()
+                        .map(e -> "            Map.entry(\"" + e.getKey() + "\", \"" + e.getValue() + "\")")
+                        .collect(Collectors.joining(",\n"))
+                + ")";
 
         StringBuilder deps = new StringBuilder();
         StringBuilder params = new StringBuilder();
@@ -1675,11 +1651,17 @@ public final class GeneradorSpringBoot {
                 import {{pkg}}.domain.{{clase}};
                 import {{pkg}}.repository.{{clase}}Repository;
                 {{importsRel}}import {{pkg}}.web.dto.{{clase}}Dto;
+                import org.springframework.dao.DataIntegrityViolationException;
+                import org.springframework.data.domain.Page;
+                import org.springframework.data.domain.Sort;
                 import org.springframework.stereotype.Service;
                 import org.springframework.transaction.annotation.Transactional;
 
                 {{importArrayList}}import java.util.List;
+                import java.util.Locale;
+                import java.util.Map;
                 import java.util.NoSuchElementException;
+                import java.util.Set;
                 import java.util.UUID;
 
                 /**
@@ -1694,15 +1676,33 @@ public final class GeneradorSpringBoot {
                 @Service
                 public class {{clase}}Service {
 
+                    /** Por que campos se puede ordenar el listado (`sort=campo,asc|desc`). */
+                    static final Set<String> ORDENABLES = {{ordenables}};
+
+                    /** Restriccion de clave foranea -> quien la sostiene, para el 409 del borrado. */
+                    private static final Map<String, String> REFERENCIAS = {{referencias}};
+
                     private final {{clase}}Repository repositorio;
                 {{deps}}
                     public {{clase}}Service({{clase}}Repository repositorio{{params}}) {
                         this.repositorio = repositorio;
                 {{asigna}}    }
 
+                    /**
+                     * Sin `page` devuelve todo (la app movil lista asi); con `page`,
+                     * esa pagina. En los dos casos el total viaja aparte, en la
+                     * cabecera X-Total-Count.
+                     */
                     @Transactional(readOnly = true)
-                    public List<{{clase}}Dto> listar() {
-                        return repositorio.findAll().stream().map({{clase}}Service::aDto).toList();
+                    public Pagina<{{clase}}Dto> listar(Integer page, Integer size, String sort) {
+                        Sort orden = Paginas.orden(sort, ORDENABLES);
+                        if (page == null) {
+                            List<{{clase}}Dto> todos = repositorio.findAll(orden).stream().map({{clase}}Service::aDto).toList();
+                            return new Pagina<>(todos, todos.size());
+                        }
+                        Page<{{clase}}> pagina = repositorio.findAll(Paginas.pagina(page, size, orden));
+                        return new Pagina<>(pagina.getContent().stream().map({{clase}}Service::aDto).toList(),
+                                pagina.getTotalElements());
                     }
                 {{listarPorFk}}
                     @Transactional(readOnly = true)
@@ -1716,10 +1716,21 @@ public final class GeneradorSpringBoot {
                         if (!repositorio.existsById(id)) {
                             throw new NoSuchElementException("No existe {{clase}} " + id);
                         }
-                        repositorio.deleteById(id);
-                        // Flush aca y no al commit: si una FK impide el borrado, la
-                        // excepcion sale traducida y el manejador responde 409, no 500.
-                        repositorio.flush();
+                        try {
+                            repositorio.deleteById(id);
+                            // Flush aca y no al commit: si una FK impide el borrado, la
+                            // excepcion sale aca y se traduce a un 409 que dice por que.
+                            repositorio.flush();
+                        } catch (DataIntegrityViolationException e) {
+                            throw new ConflictoException("No se puede eliminar {{clase}} " + id + ": "
+                                    + quienReferencia(e) + " todavia lo referencia. Elimina o reasigna eso primero.");
+                        }
+                    }
+
+                    private static String quienReferencia(DataIntegrityViolationException e) {
+                        String detalle = String.valueOf(e.getMostSpecificCause().getMessage()).toLowerCase(Locale.ROOT);
+                        return REFERENCIAS.entrySet().stream().filter(r -> detalle.contains(r.getKey()))
+                                .map(Map.Entry::getValue).findFirst().orElse("otro registro");
                     }
 
                     private {{clase}} buscar(UUID id) {
@@ -1742,6 +1753,8 @@ public final class GeneradorSpringBoot {
                 .replace("{{params}}", params.toString())
                 .replace("{{asigna}}", asigna.toString())
                 .replace("{{listarPorFk}}", listarPorFk(clase, asociaciones))
+                .replace("{{ordenables}}", ordenables(campos, meta))
+                .replace("{{referencias}}", mapaReferencias)
                 // Una clase abstracta no se instancia: su API lista, obtiene y
                 // elimina (polimorficamente), y se crea a traves de sus hijas.
                 .replace("{{escritura}}", !instanciable ? "" : """
@@ -1752,14 +1765,22 @@ public final class GeneradorSpringBoot {
                                 return aDto(repositorio.saveAndFlush(entidad));
                             }
 
+                            /**
+                             * Reemplazo completo. Si el cliente manda la version que leyo y
+                             * ya no es la actual, alguien escribio en el medio: 409 en vez
+                             * de pisarle el cambio sin avisar.
+                             */
                             @Transactional
                             public {{clase}}Dto actualizar(UUID id, {{clase}}Dto dto) {
                                 {{clase}} entidad = buscar(id);
+                                Versiones.comprobar(dto.{{version}}(), entidad.{{getVersion}}(), "{{clase}}", id);
                                 copiar(dto, entidad);
                                 return aDto(repositorio.saveAndFlush(entidad));
                             }
 
                         """)
+                .replace("{{version}}", meta.version())
+                .replace("{{getVersion}}", NombresJava.getter(meta.version()))
                 .replace("{{copiarMetodo}}", !instanciable ? "" : """
                             private void copiar({{clase}}Dto dto, {{clase}} entidad) {
                         {{copiar}}    }
@@ -1781,18 +1802,32 @@ public final class GeneradorSpringBoot {
     private static String listarPorFk(String clase, List<Asociacion> asociaciones) {
         StringBuilder salida = new StringBuilder();
         for (Asociacion a : asociaciones) {
-            salida.append("\n    @Transactional(readOnly = true)\n")
-                    .append("    public List<").append(clase).append("Dto> listarPor")
-                    .append(mayuscula(a.campo())).append("(UUID ").append(a.campo()).append("Id) {\n")
-                    .append("        return repositorio.findBy").append(mayuscula(a.campo()))
-                    .append("_Id(").append(a.campo()).append("Id).stream().map(")
-                    .append(clase).append("Service::aDto).toList();\n    }\n");
+            String id = a.campo() + "Id";
+            String buscar = "repositorio.findBy" + mayuscula(a.campo()) + "_Id(" + id;
+            salida.append("""
+
+                        @Transactional(readOnly = true)
+                        public Pagina<{{clase}}Dto> listarPor{{Campo}}(UUID {{id}}, Integer page, Integer size, String sort) {
+                            Sort orden = Paginas.orden(sort, ORDENABLES);
+                            if (page == null) {
+                                List<{{clase}}Dto> todos = {{buscar}}, orden).stream().map({{clase}}Service::aDto).toList();
+                                return new Pagina<>(todos, todos.size());
+                            }
+                            Page<{{clase}}> pagina = {{buscar}}, Paginas.pagina(page, size, orden));
+                            return new Pagina<>(pagina.getContent().stream().map({{clase}}Service::aDto).toList(),
+                                    pagina.getTotalElements());
+                        }
+                    """
+                    .replace("{{Campo}}", mayuscula(a.campo()))
+                    .replace("{{id}}", id)
+                    .replace("{{buscar}}", buscar)
+                    .replace("{{clase}}", clase));
         }
         return salida.toString();
     }
 
     /** El codigo de los stubs y los imports que hacen falta para compilarlos. */
-    private record Stubs(String codigo, List<String> imports) {
+    record Stubs(String codigo, List<String> imports) {
         static final Stubs NINGUNO = new Stubs("", List.of());
     }
 
@@ -1898,7 +1933,7 @@ public final class GeneradorSpringBoot {
 
     private static String dto(String pkg, String clase, List<Campo> campos,
                               List<Asociacion> asociaciones, List<ColeccionDeValores> valores,
-                              List<ModeloLogico.Incrustado> incrustados) {
+                              List<ModeloLogico.Incrustado> incrustados, Meta meta) {
         List<String> componentes = new ArrayList<>();
         boolean necesitaValidacion = false;
         boolean necesitaRango = false;
@@ -1965,6 +2000,12 @@ public final class GeneradorSpringBoot {
         for (ColeccionDeValores v : valores) {
             if (v.enumerado()) importsExtra.add("import " + pkg + ".domain." + v.tipoElemento() + ";");
         }
+        // ADR-034: la version y la auditoria SALEN siempre; al entrar se
+        // ignoran, salvo la version, que si viene se compara con la actual.
+        componentes.add("        Long " + meta.version());
+        componentes.add("        LocalDateTime " + meta.creado());
+        componentes.add("        LocalDateTime " + meta.actualizado());
+        importsExtra.add("import java.time.LocalDateTime;");
         String imports = importsDe(campos);
         for (String imp : importsExtra) {
             if (!imports.contains(imp)) imports = imports.isEmpty() ? imp : imports + "\n" + imp;
@@ -2002,174 +2043,6 @@ public final class GeneradorSpringBoot {
                 .replace("{{clase}}", clase);
     }
 
-    /**
-     * El REST de una entidad.
-     *
-     * EL LISTADO ACEPTA UN FILTRO POR CADA FK, con el mismo nombre con que el
-     * id viaja en el DTO y en `app-manifest.json` (`clienteId`). Sin esto, el
-     * `inverseOf` del manifiesto era una promesa que la API no cumplia: un
-     * frontend que queria "los pedidos de este cliente" tenia que pedir
-     * `GET /api/pedido` entero y filtrar en el navegador.
-     *
-     * RECORTE DECLARADO: se aplica UN filtro, el primero que venga. Cruzar dos
-     * necesita Specifications y nadie lo pidio todavia; combinarlos mal en
-     * silencio seria peor que no ofrecerlo.
-     */
-    private static String controlador(String pkg, String clase, String recurso, boolean instanciable,
-                                      List<Asociacion> asociaciones) {
-        // La continuacion se alinea con el parentesis de `listar(`, que depende
-        // del largo del nombre de la clase. El texto de la plantilla no puede
-        // saberlo, asi que se calcula aca.
-        String sangria = " ".repeat(("    public List<" + clase + "Dto> listar(").length());
-        StringBuilder parametros = new StringBuilder();
-        StringBuilder despacho = new StringBuilder();
-        for (Asociacion a : asociaciones) {
-            String param = a.campo() + "Id";
-            parametros.append(parametros.isEmpty() ? "" : ",\n" + sangria)
-                    .append("@RequestParam(required = false) UUID ").append(param);
-            despacho.append("        if (").append(param).append(" != null) return servicio.listarPor")
-                    .append(mayuscula(a.campo())).append("(").append(param).append(");\n");
-        }
-
-        return """
-                package {{pkg}}.web;
-
-                import {{pkg}}.service.{{clase}}Service;
-                import {{pkg}}.web.dto.{{clase}}Dto;
-                import jakarta.validation.Valid;
-                import org.springframework.http.ResponseEntity;
-                import org.springframework.web.bind.annotation.*;
-
-                import java.util.List;
-                import java.util.UUID;
-
-                /** Solo DTOs: la entidad JPA no cruza nunca esta frontera. */
-                @RestController
-                @RequestMapping("/api/{{recurso}}")
-                public class {{clase}}Controller {
-
-                    private final {{clase}}Service servicio;
-
-                    public {{clase}}Controller({{clase}}Service servicio) {
-                        this.servicio = servicio;
-                    }
-
-                    @GetMapping
-                    public List<{{clase}}Dto> listar({{parametros}}) {
-                {{despacho}}        return servicio.listar();
-                    }
-
-                    @GetMapping("/{id}")
-                    public {{clase}}Dto obtener(@PathVariable UUID id) {
-                        return servicio.obtener(id);
-                    }
-
-                {{escritura}}
-                    @DeleteMapping("/{id}")
-                    public ResponseEntity<Void> eliminar(@PathVariable UUID id) {
-                        servicio.eliminar(id);
-                        return ResponseEntity.noContent().build();
-                    }
-                }
-                """
-                .replace("{{pkg}}", pkg)
-                .replace("{{escritura}}", !instanciable ? "" : """
-                            @PostMapping
-                            public ResponseEntity<{{clase}}Dto> crear(@Valid @RequestBody {{clase}}Dto dto) {
-                                return ResponseEntity.ok(servicio.crear(dto));
-                            }
-
-                            @PutMapping("/{id}")
-                            public {{clase}}Dto actualizar(@PathVariable UUID id, @Valid @RequestBody {{clase}}Dto dto) {
-                                return servicio.actualizar(id, dto);
-                            }
-
-                        """)
-                .replace("{{parametros}}", parametros.toString())
-                .replace("{{despacho}}", despacho.toString())
-                .replace("{{recurso}}", recursoDe(recurso).substring("/api/".length()))
-                .replace("{{clase}}", clase);
-    }
-
-    /**
-     * Codigos HTTP honestos para los errores que un cliente provoca siempre:
-     * pedir algo que no existe, mandar un cuerpo invalido, escribir mal un id
-     * en la URL y romper una restriccion de la base. Sin esto los cuatro
-     * salian como 500 o con el JSON por defecto de Spring, que no tiene la
-     * misma forma que el resto de la API.
-     *
-     * EL 400 DE VALIDACION DEVUELVE EL CAMPO, no solo un mensaje. Las
-     * anotaciones (@NotNull, @Size, @Min) ya se generan en el DTO desde el
-     * modelo, asi que el backend sabe exactamente cual fallo; si no lo dice,
-     * el formulario del frontend no puede marcarlo y el usuario tiene que
-     * adivinar. La clave del mapa es el nombre del campo TAL CUAL viaja en el
-     * JSON y en `app-manifest.json`, que es con lo que el cliente pinta el
-     * formulario.
-     */
-    private static String manejadorDeErrores(String pkg) {
-        return """
-                package {{pkg}}.web;
-
-                import org.springframework.dao.DataIntegrityViolationException;
-                import org.springframework.http.HttpStatus;
-                import org.springframework.http.ResponseEntity;
-                import org.springframework.validation.FieldError;
-                import org.springframework.web.bind.MethodArgumentNotValidException;
-                import org.springframework.web.bind.annotation.ExceptionHandler;
-                import org.springframework.web.bind.annotation.RestControllerAdvice;
-                import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
-                import java.util.LinkedHashMap;
-                import java.util.Map;
-                import java.util.NoSuchElementException;
-
-                @RestControllerAdvice
-                public class ManejadorDeErrores {
-
-                    /** Un id que no existe es un 404, no una falla del servidor. */
-                    @ExceptionHandler(NoSuchElementException.class)
-                    public ResponseEntity<Map<String, String>> noEncontrado(NoSuchElementException e) {
-                        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                                .body(Map.of("error", String.valueOf(e.getMessage())));
-                    }
-
-                    /**
-                     * Cuerpo que no pasa las validaciones del DTO.
-                     *
-                     * Se devuelve `errores` campo por campo para que un formulario
-                     * pueda marcar el que fallo. Si un campo junta dos violaciones
-                     * se informa la primera: una por campo es lo que un formulario
-                     * sabe mostrar.
-                     */
-                    @ExceptionHandler(MethodArgumentNotValidException.class)
-                    public ResponseEntity<Map<String, Object>> invalido(MethodArgumentNotValidException e) {
-                        Map<String, String> errores = new LinkedHashMap<>();
-                        for (FieldError f : e.getBindingResult().getFieldErrors()) {
-                            errores.putIfAbsent(f.getField(), f.getDefaultMessage());
-                        }
-                        return ResponseEntity.badRequest().body(Map.of(
-                                "error", "Hay campos invalidos", "errores", errores));
-                    }
-
-                    /** Un uuid mal escrito en la URL o en un filtro es culpa del cliente. */
-                    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-                    public ResponseEntity<Map<String, String>> tipoInvalido(
-                            MethodArgumentTypeMismatchException e) {
-                        return ResponseEntity.badRequest().body(Map.of("error",
-                                "El valor de '" + e.getName() + "' no tiene el formato esperado"));
-                    }
-
-                    /** Clave unica repetida, o borrar una fila que otra todavia referencia. */
-                    @ExceptionHandler(DataIntegrityViolationException.class)
-                    public ResponseEntity<Map<String, String>> conflicto(DataIntegrityViolationException e) {
-                        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error",
-                                "La operacion viola una restriccion de la base: un valor unico repetido,"
-                                        + " o una fila que otra todavia referencia."));
-                    }
-                }
-                """.replace("{{pkg}}", pkg);
-    }
-
     private static String enumeracion(String pkg, String nombre, ModeloLogico.Enumeracion e) {
         return """
                 package {{pkg}}.domain;
@@ -2190,84 +2063,7 @@ public final class GeneradorSpringBoot {
                         .map(l -> "    " + l).collect(Collectors.joining(",\n")));
     }
 
-    private static String readme(Opciones o, int entidades, List<String> advertencias) {
-        String lista = advertencias.isEmpty()
-                ? "Ninguna: el modelo se mapeo completo.\n"
-                : advertencias.stream().map(a -> "- " + a + "\n").reduce("", String::concat);
-        return """
-                # {{proyecto}}
-
-                Generado por ColabModel desde el modelo conceptual. **No edites a mano**:
-                si volves a generar, se pisa.
-
-                Entidades generadas: {{entidades}}. Cada una trae 5 capas
-                (Entity, Repository, Service, DTO y Controller) y su DDL de Flyway.
-
-                ## Como levantarlo
-
-                ```bash
-                mvn spring-boot:run
-                ```
-
-                **No hace falta instalar ni levantar nada mas.** Por defecto usa H2 en
-                memoria, con el esquema creado por Flyway y unas filas de ejemplo ya
-                cargadas. La base se borra al apagar, que es justo lo que se quiere para
-                probar.
-
-                Para usar PostgreSQL --misma aplicacion, mismo DDL, sin datos de
-                ejemplo--:
-
-                ```bash
-                mvn spring-boot:run -Dspring-boot.run.profiles=postgres
-                ```
-
-                Los datos de conexion estan en `src/main/resources/application.yml`.
-                Hibernate solo VALIDA el esquema: si el mapeo y el DDL no coinciden, la
-                aplicacion no arranca, y eso es el sistema funcionando.
-
-                ## Como probarlo
-
-                Apenas arranca, sin instalar ni escribir nada:
-
-                | Donde | Que es |
-                |---|---|
-                | `/` | Consola de prueba: un ABM por entidad, servido por este mismo backend |
-                | `/swagger-ui.html` | La API completa, para probarla a mano |
-                | `/app-manifest.json` | El contrato que lee la app movil (ADR-011) |
-
-                La consola se arma leyendo el manifiesto, igual que la app movil: no
-                conoce ninguna entidad de antemano. Como la sirve este mismo backend,
-                comparte origen con la API y no hay CORS que configurar.
-
-                ### Desde el telefono
-
-                La app movil lee `/app-manifest.json` y aprende el dominio sola, asi que
-                el mismo APK sirve para cualquier modelo. Dos cosas del dia de la demo:
-
-                - usa la **IP de esta maquina en la red**, no `localhost`: para el
-                  telefono, `localhost` es el telefono;
-                - Android 9 y posteriores bloquean HTTP sin TLS, asi que la app tiene que
-                  declarar `usesCleartextTraffic`.
-
-                `baseUrl` viene **vacio** a proposito en el manifiesto: significa "resolve
-                las rutas contra el host del que me bajaste". Cualquier IP escrita ahi
-                quedaria vieja apenas cambie la red.
-
-                ## Decisiones tomadas y limites de esta version
-
-                {{advertencias}}
-                Las asociaciones se emiten completas (Regla 7): `@ManyToOne` con
-                `LAZY` explicito, el lado inverso con `mappedBy`, el cascade que
-                corresponde al tipo de relacion —la composicion arrastra a la parte,
-                la agregacion no— y `@EntityGraph` en los listados para no caer en
-                N+1.
-
-                Todavia NO se emiten: `@ManyToMany` para las N:M (su tabla puente no
-                genera Entity), ni `@Inheritance(JOINED)` con `extends` para la
-                herencia, que en el DDL ya comparte la PK.
-                """
-                .replace("{{proyecto}}", o.nombreProyecto())
-                .replace("{{entidades}}", String.valueOf(entidades))
-                .replace("{{advertencias}}", lista);
+    private static String readme(Opciones o, int entidades, List<String> advertencias, Meta meta) {
+        return PlantillasProduccion.readme(o, entidades, advertencias, meta);
     }
 }

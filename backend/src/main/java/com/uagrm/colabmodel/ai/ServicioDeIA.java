@@ -8,6 +8,9 @@ import com.uagrm.colabmodel.modelcore.command.CommandType;
 import com.uagrm.colabmodel.modelcore.command.Lote;
 import com.uagrm.colabmodel.modelcore.command.Origin;
 import com.uagrm.colabmodel.modelcore.metamodel.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,14 +43,44 @@ public class ServicioDeIA {
     private final UmlAttributeRepository attributes;
     private final UmlMethodRepository methods;
     private final UmlRelationshipRepository relationships;
+    /** T-09. Null en las pruebas que construyen el servicio a mano: sin memoria ni presupuesto. */
+    private final MemoriaDeConversacion memoria;
+    private final PresupuestoDeContexto presupuesto;
 
     public ServicioDeIA(ProveedorDeIA proveedor, UmlClassRepository classes, UmlAttributeRepository attributes,
                         UmlMethodRepository methods, UmlRelationshipRepository relationships) {
+        this(proveedor, classes, attributes, methods, relationships, null, (PresupuestoDeContexto) null);
+    }
+
+    /**
+     * El presupuesto de contexto (T-09): con el proveedor local es el contexto
+     * configurado de Ollama; con los de la nube, uno amplio. Se puede fijar con
+     * {@code colabmodel.ai.memoria.presupuesto-tokens}.
+     */
+    @Autowired
+    public ServicioDeIA(ProveedorDeIA proveedor, UmlClassRepository classes, UmlAttributeRepository attributes,
+                        UmlMethodRepository methods, UmlRelationshipRepository relationships,
+                        MemoriaDeConversacion memoria, ObjectMapper mapper,
+                        @Value("${colabmodel.ai.proveedor:ollama}") String proveedorActivo,
+                        @Value("${colabmodel.ai.ollama.contexto:4096}") int contextoOllama,
+                        @Value("${colabmodel.ai.memoria.presupuesto-tokens:0}") int presupuestoTokens,
+                        @Value("${colabmodel.ai.memoria.reserva-respuesta-tokens:512}") int reservaRespuesta) {
+        this(proveedor, classes, attributes, methods, relationships, memoria,
+                new PresupuestoDeContexto(presupuestoTokens > 0 ? presupuestoTokens
+                        : "ollama".equalsIgnoreCase(proveedorActivo) ? contextoOllama : 32_000,
+                        reservaRespuesta, mapper));
+    }
+
+    ServicioDeIA(ProveedorDeIA proveedor, UmlClassRepository classes, UmlAttributeRepository attributes,
+                 UmlMethodRepository methods, UmlRelationshipRepository relationships,
+                 MemoriaDeConversacion memoria, PresupuestoDeContexto presupuesto) {
         this.proveedor = proveedor;
         this.classes = classes;
         this.attributes = attributes;
         this.methods = methods;
         this.relationships = relationships;
+        this.memoria = memoria;
+        this.presupuesto = presupuesto;
     }
 
     @Transactional(readOnly = true)
@@ -62,6 +95,19 @@ public class ServicioDeIA {
 
     @Transactional(readOnly = true)
     public PropuestaDeIA generar(UUID diagramId, String prompt, Origin origin, ModoIA modo, String modelo) {
+        return generar(diagramId, prompt, origin, modo, modelo, null);
+    }
+
+    /**
+     * Con {@code quien} (T-09), la IA recibe la conversacion previa del
+     * diagrama, sabe quien pregunta y sigue la configuracion del proyecto. La
+     * identidad la pone el controlador desde la sesion, nunca el cliente.
+     *
+     * @throws ContextoExcedidoException si el pedido y el diagrama no entran en el contexto del modelo
+     */
+    @Transactional(readOnly = true)
+    public PropuestaDeIA generar(UUID diagramId, String prompt, Origin origin, ModoIA modo, String modelo,
+                                 ContextoDeEquipo.Interlocutor quien) {
         if (origin != Origin.TEXT && origin != Origin.VOICE) {
             throw new IllegalArgumentException("La IA solo produce comandos con origen TEXT o VOICE, no " + origin);
         }
@@ -102,12 +148,17 @@ public class ServicioDeIA {
             case RECOMENDAR, VERIFICAR -> throw new IllegalArgumentException(
                     "RECOMENDAR no produce una propuesta de cambios; usa el endpoint de recomendaciones");
         };
-        RespuestaIA respuesta = proveedor.generar(new SolicitudIA(prompt, modo, contexto, relaciones, herramientas, modelo));
+        // T-09 (Diego): la IA recibe la conversacion del equipo y el pedido se ajusta al contexto del modelo.
+        ContextoDeEquipo equipo = memoria != null && quien != null ? memoria.para(diagramId, quien) : null;
+        SolicitudIA solicitud = new SolicitudIA(prompt, modo, contexto, relaciones, herramientas, modelo, equipo);
+        if (presupuesto != null) solicitud = presupuesto.ajustar(solicitud);
+        RespuestaIA respuesta = proveedor.generar(solicitud);
         boolean planCompleto = modo == ModoIA.DISENAR && respuesta.comandos().stream()
                 .anyMatch(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo()));
         List<String> sinResolver = List.of();
+        java.util.Set<String> historicas = java.util.Set.of();
         if (modo == ModoIA.DISENAR) {
-            respuesta = revisarPlan(prompt, respuesta, contexto, relaciones, modelo);
+            respuesta = revisarPlan(prompt, respuesta, contexto, relaciones, modelo, solicitud.equipo());
             respuesta = NormalizadorPlanUml.normalizar(respuesta, prompt, nombres(contexto));
             List<String> pendientes = hallazgosFinales(respuesta, prompt, contexto);
             if (!pendientes.isEmpty()) {
@@ -123,11 +174,13 @@ public class ServicioDeIA {
                     sinResolver = pendientes;
                 }
             }
+            // Lo que el modelo marco historica=true (Diego), leido antes de expandir el plan en comandos.
+            historicas = NormalizadorPlanUml.clasesHistoricas(respuesta);
             respuesta = ExpansorPlanUml.expandir(respuesta);
         }
 
         PropuestaDeIA propuesta = validar(diagramId, origin, modo, respuesta, existentes, atributosPorClase, metodosPorClase,
-                relacionesExistentes, modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo);
+                relacionesExistentes, modelo == null || modelo.isBlank() ? proveedor.nombre() : modelo, historicas);
         if (planCompleto && (propuesta.truncada() || !propuesta.rechazados().isEmpty())) {
             throw new ProveedorIAException("El plan no pudo convertirse completo en cambios validos: "
                     + propuesta.rechazados().stream().map(PropuestaDeIA.ComandoRechazado::motivo)
@@ -173,7 +226,8 @@ public class ServicioDeIA {
      */
     private RespuestaIA revisarPlan(String requisito, RespuestaIA borrador,
                                     List<SolicitudIA.ClaseEnContexto> contexto,
-                                    List<SolicitudIA.RelacionEnContexto> relaciones, String modelo) {
+                                    List<SolicitudIA.RelacionEnContexto> relaciones, String modelo,
+                                    ContextoDeEquipo equipo) {
         ComandoPropuestoIA plan = borrador.comandos().stream()
                 .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
         if (ProveedorOllama.errorDeFormatoDelPlan(plan) != null) return borrador;
@@ -198,7 +252,8 @@ public class ServicioDeIA {
                 Para cada relacion aplica esta regla sin excepciones: la multiplicidad junto a una clase indica
                 cuantas instancias DE ESA CLASE puede tener una instancia del extremo contrario. Verifica la lectura
                 en ambos sentidos antes de responder. Las entidades de evento o historial normalmente deben conectar
-                al menos al actor y al objeto involucrado. Comprueba que la auditoria describa exactamente las
+                al menos al actor y al objeto involucrado; marca historica=true solo en las clases que registran
+                hechos en el tiempo. Comprueba que la auditoria describa exactamente las
                 relaciones realmente incluidas. Antes de agregar atributos secundarios, garantiza que ninguna clase
                 quede desconectada y que toda clase asociativa conecte exactamente los conceptos que vincula. Reserva
                 primero el presupuesto para todas las clases, una identidad minima por clase y todas las relaciones
@@ -208,8 +263,12 @@ public class ServicioDeIA {
                         hallazgosBase.isEmpty() ? "Sin hallazgos estructurales; revisa la cobertura del requisito."
                                 : String.join("\n", hallazgosBase));
         try {
-            RespuestaIA revisada = proveedor.generar(new SolicitudIA(pedidoRevision, ModoIA.DISENAR,
-                    contexto, relaciones, List.of(EsquemaPlanUml.herramienta()), modelo));
+            // La revision conserva el contexto del equipo, pero con el borrador
+            // adentro el presupuesto se recalcula: si no entra, queda el primer plan.
+            SolicitudIA revision = new SolicitudIA(pedidoRevision, ModoIA.DISENAR,
+                    contexto, relaciones, List.of(EsquemaPlanUml.herramienta()), modelo, equipo);
+            if (presupuesto != null) revision = presupuesto.ajustar(revision);
+            RespuestaIA revisada = proveedor.generar(revision);
             ComandoPropuestoIA planRevisado = revisada.comandos().stream()
                     .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
             if (ProveedorOllama.errorDeFormatoDelPlan(planRevisado) != null) return borrador;
@@ -217,7 +276,7 @@ public class ServicioDeIA {
             if (pierdeClases(baseNormalizada, candidata)) return borrador;
             return hallazgosFinales(candidata, requisito, contexto).size() > hallazgosBase.size()
                     ? borrador : revisada;
-        } catch (ProveedorIAException e) {
+        } catch (ProveedorIAException | ContextoExcedidoException e) {
             return new RespuestaIA(borrador.comandos(), unirNotas(borrador.notaDelModelo(),
                     "La revision automatica no estuvo disponible; se conserva el primer plan validado."));
         }
@@ -318,7 +377,8 @@ public class ServicioDeIA {
     private PropuestaDeIA validar(UUID diagramId, Origin origin, ModoIA modo, RespuestaIA respuesta, List<UmlClass> existentes,
                                   Map<UUID, List<UmlAttribute>> atributosPorClase,
                                   Map<UUID, List<UmlMethod>> metodosPorClase,
-                                  List<UmlRelationship> relacionesExistentes, String modelo) {
+                                  List<UmlRelationship> relacionesExistentes, String modelo,
+                                  java.util.Set<String> historicas) {
         ResolutorDeReferencias resolutor = new ResolutorDeReferencias(existentes, atributosPorClase,
                 metodosPorClase, relacionesExistentes);
 
@@ -362,7 +422,8 @@ public class ServicioDeIA {
                 .map(v -> new PropuestaDeIA.ComandoAceptado(v.tipo(), v.payload(), v.resumen()))
                 .toList();
 
-        List<String> advertencias = AuditorDePropuestaIA.auditar(aceptados, existentes.stream()
+        // Con las historicas que marco el modelo (Diego) y los nombres de las clases del diagrama (MODIFICAR).
+        List<String> advertencias = AuditorDePropuestaIA.auditar(aceptados, historicas, existentes.stream()
                 .collect(java.util.stream.Collectors.toMap(c -> c.getId().toString(), UmlClass::getName, (a, b) -> a)));
         return new PropuestaDeIA(diagramId, origin, aceptados, List.copyOf(rechazados), descartadosPorTope,
                 advertencias, respuesta.comandos().size(), respuesta.notaDelModelo(), modelo, null);
@@ -381,6 +442,9 @@ public class ServicioDeIA {
         }
         ObjectNode payload = J.objectNode();
         payload.put("descripcion", "Generado por IA (" + propuesta.origin() + ")");
+        if (propuesta.interaccionId() != null) {
+            payload.put(HistorialIA.CLAVE_INTERACCION, propuesta.interaccionId().toString());
+        }
         ArrayNode lista = payload.putArray("comandos");
         for (PropuestaDeIA.ComandoAceptado a : propuesta.aceptados()) {
             ObjectNode c = lista.addObject();

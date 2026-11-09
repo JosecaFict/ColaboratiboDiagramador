@@ -1,15 +1,40 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { EstadoModelo } from '../canvas/applyOperation'
+import type { CambioDelLote } from '../importacion/propuesta'
+import type { Rol } from '../auth/permisos'
+import type { ResultadoDeLote } from './esperaDeLotes'
+import type { AvisoIA } from './historial'
+import { textoDeDestinatario } from './chat'
+import { PanelConfiguracionIA } from './PanelConfiguracionIA'
 import { etiquetaOrigen } from './recomendaciones'
 import type { ModoIA } from './tipos'
-import { MODOS, REVISION_SIN_REQUISITO, type AsistenteIA } from './useAsistenteIA'
+import { MODOS, REVISION_SIN_REQUISITO, useAsistenteIA, type AsistenteIA, type OpcionesDeLoteIA } from './useAsistenteIA'
+import { AVISO_SIN_VOZ } from './voz'
 
-interface Props {
-  asistente: AsistenteIA
+export type { OpcionesDeLoteIA } from './useAsistenteIA'
+
+interface Comunes {
   modelo: EstadoModelo
   conectado: boolean
   puedeEditar: boolean
+  /** El proyecto del diagrama: la configuracion de la IA es del proyecto (Diego). */
+  proyectoId: string
+  token: string
+  /** Mi rol en el proyecto: solo el OWNER edita la configuracion de la IA. */
+  rol: Rol
+}
+
+/** Con el asistente compartido de App (la conversacion es la misma que la del chat flotante). */
+interface ConAsistente extends Comunes { asistente: AsistenteIA }
+
+/** Autonoma: la vista crea su propio asistente (asi la montan las pruebas y quien no comparte estado). */
+interface Autonoma extends Comunes {
+  asistente?: undefined
+  diagramId: string
+  usuarioId: string
   usuario: string
+  onAplicar: (comandos: CambioDelLote[], descripcion: string, opciones: OpcionesDeLoteIA) => Promise<ResultadoDeLote>
+  suscribirAvisos?: (alAviso: (aviso: AvisoIA) => void) => () => void
 }
 
 const INICIALES: Record<ModoIA, string[]> = {
@@ -24,15 +49,28 @@ export function IconoIA() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.7 9l5.3 1.7-5.3 1.7L12 18l-1.7-5.6L5 10.7 10.3 9 12 3.5Z"/><path d="m18 15 .8 2.2L21 18l-2.2.8L18 21l-.8-2.2L15 18l2.2-.8L18 15Z"/></svg>
 }
 
-/** Vista completa del asistente. El estado vive en App (useAsistenteIA) y lo comparte con el chat flotante. */
-export function VistaIA({ asistente, modelo, conectado, puedeEditar, usuario }: Props) {
+export function VistaIA(props: ConAsistente | Autonoma) {
+  return props.asistente ? <ContenidoVistaIA {...props} asistente={props.asistente} /> : <VistaIAAutonoma {...props} />
+}
+
+function VistaIAAutonoma(props: Autonoma) {
+  const asistente = useAsistenteIA({ diagramId: props.diagramId, token: props.token, modelo: props.modelo,
+    conectado: props.conectado, usuarioId: props.usuarioId, usuario: props.usuario, onAplicar: props.onAplicar,
+    suscribirAvisos: props.suscribirAvisos })
+  return <ContenidoVistaIA {...props} asistente={asistente} />
+}
+
+function ContenidoVistaIA({ asistente, modelo, conectado, puedeEditar, proyectoId, token, rol }: ConAsistente) {
   const {
-    modo, setModo, texto, setTexto, mensajes, consultando, error, seleccion, setSeleccion, ediciones,
+    modo, setModo, texto, escribir, mensajes, consultando, error, seleccion, setSeleccion, ediciones,
     estadoIA, cargandoHistorial, modeloIA, cambiarModeloIA, seleccionRec, setSeleccionRec, panel, setPanel,
     accionesEditadas, setAccionesEditadas, arreglosElegidos, setArreglosElegidos,
     ultimaPropuesta, ultimasRecomendaciones, recomendacionesOrdenadas, opcionesPorRecomendacion,
-    enviar, convertirRecomendaciones, corregirPendientes, aplicar, yaAplicada, editar, nombreDeClase,
+    enviar, convertirRecomendaciones, corregirPendientes, aplicar, yaAplicada, soloFaltaLaMarca, enviandoLote,
+    editar, nombreDeClase, dictar, dictando, vozDisponible, origenPedido,
   } = asistente
+  const [configAbierta, setConfigAbierta] = useState(false)
+  const [resumenConfig, setResumenConfig] = useState('')
   const relaciones = modelo.relationships.length
   const atributos = useMemo(() => modelo.classes.reduce((n, c) => n + c.attributes.length, 0), [modelo.classes])
 
@@ -62,6 +100,15 @@ export function VistaIA({ asistente, modelo, conectado, puedeEditar, usuario }: 
             {' · '}{estadoIA.modelos.find((m) => m.id === modeloIA)?.think ? 'razonamiento activo' : 'respuesta directa'}
           </small>}
         </div>}
+        <div className="ia-configuracion">
+          <button type="button" className="ia-config-cabecera" aria-expanded={configAbierta}
+            onClick={() => setConfigAbierta((a) => !a)}>
+            <strong>Configuración de la IA</strong>
+            <small>{resumenConfig || 'Rol, detalle e instrucciones'}</small>
+          </button>
+          {configAbierta && <PanelConfiguracionIA proyectoId={proyectoId} token={token} rol={rol}
+            onResumen={setResumenConfig} />}
+        </div>
         <div className="ia-privacidad"><span className="ia-punto" />
           {estadoIA ? <><strong>{modeloIA || estadoIA.modelo}</strong><br/><small>{estadoIA.local ? `Ollama local · ${estadoIA.contexto} tokens` : `Proveedor ${estadoIA.proveedor}`}</small></> : <><span>Consultando modelo…</span><br/></>}
           <small>{estadoIA?.local ? ' · El diagrama permanece en tu equipo.' : ''}</small>
@@ -72,24 +119,43 @@ export function VistaIA({ asistente, modelo, conectado, puedeEditar, usuario }: 
         <header><div><h2>Trabajá sobre el modelo</h2><p>Pregunta, revisa y convierte decisiones en cambios verificables.</p></div><span className={conectado ? 'ia-linea activo' : 'ia-linea'}>{conectado ? 'En directo' : 'Sin conexión'}</span></header>
         <div className="ia-mensajes" aria-live="polite">
           {cargandoHistorial && mensajes.length === 0 && <div className="ia-pensando"><span/><span/><span/> Recuperando la conversación del diagrama…</div>}
-          {!cargandoHistorial && mensajes.length === 0 && <div className="ia-vacio"><IconoIA/><h3>El contexto ya está preparado</h3><p>La IA conoce clases, atributos, métodos y relaciones de este diagrama.</p><div className="ia-sugerencias">{INICIALES[modo].map((s) => <button key={s} onClick={() => void enviar(s)}>{s}</button>)}</div></div>}
-          {mensajes.map((m) => <article key={m.id} className={`ia-mensaje ${m.autor}`}>
-            <div className="ia-avatar">{m.autor === 'usuario' ? (m.usuario ?? usuario).slice(0, 1).toUpperCase() : <IconoIA/>}</div>
-            <div><div className="ia-autor">{m.autor === 'usuario' ? (m.usuario ?? usuario) : 'ColabModel IA'} <span>{MODOS.find((x) => x.id === m.modo)?.nombre}</span>{m.propuesta?.modelo && <span>{m.propuesta.modelo}</span>}</div><p>{m.texto}</p>
+          {!cargandoHistorial && mensajes.length === 0 && <div className="ia-vacio"><IconoIA/><h3>El contexto ya está preparado</h3><p>La IA conoce clases, atributos, métodos y relaciones de este diagrama.</p><div className="ia-sugerencias">{INICIALES[modo].map((s) => <button key={s} onClick={() => void enviar(s, modo, 'TEXT')}>{s}</button>)}</div></div>}
+          {mensajes.map((m) => <article key={m.id}
+            className={`ia-mensaje ${m.autor} ${m.propio ? 'propio' : 'ajeno'}${m.enviando ? ' enviando' : ''}`}>
+            <div className="ia-avatar" aria-hidden="true">{m.autor === 'usuario' ? m.inicial : <IconoIA/>}</div>
+            <div><div className="ia-autor">{m.etiqueta}
+              {m.respondeA && <span className="ia-destinatario">{textoDeDestinatario(m.respondeA)}</span>}
+              <span>{MODOS.find((x) => x.id === m.modo)?.nombre}</span>{m.propuesta?.modelo && <span>{m.propuesta.modelo}</span>}</div><p>{m.texto}</p>
               {!!m.propuesta?.rechazados.length && <small className="ia-advertencia">{m.propuesta.rechazados.length} sugerencia(s) no pasaron la validación del servidor.</small>}
               {!!m.propuesta?.advertencias?.length && <small className="ia-advertencia">La auditoría automática encontró {m.propuesta.advertencias.length} punto(s) para revisar.</small>}
             </div>
           </article>)}
           {consultando && <div className="ia-pensando"><span/><span/><span/> Analizando el modelo y sus relaciones…</div>}
         </div>
-        {error && <div className="ia-error" role="alert"><strong>No se pudo completar la consulta.</strong><span>{error}</span></div>}
+        {error && <div className="ia-error" role="alert"><strong>Algo no salió bien.</strong><span>{error}</span></div>}
         <form className="ia-compositor" onSubmit={(e) => { e.preventDefault(); void enviar() }}>
-          <textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3}
+          <textarea value={texto} onChange={(e) => escribir(e.target.value)} rows={3}
             placeholder={modo === 'RECOMENDAR'
               ? 'Recomendar: pegá el requisito para verificarlo regla por regla, o dejalo vacío para revisar solo la estructura…'
               : `${MODOS.find((m) => m.id === modo)?.nombre}: escribí una instrucción sobre el diagrama…`}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void enviar() } }}/>
-          <div><span>Enter envía · Shift + Enter agrega una línea</span><button disabled={(!texto.trim() && modo !== 'RECOMENDAR') || consultando || !conectado}>{modo === 'RECOMENDAR' ? 'Revisar' : 'Enviar'}</button></div>
+          <div>
+            <span>
+              {dictando ? 'Escuchando… hablá y volvé a tocar el micrófono para terminar'
+                : vozDisponible ? 'Enter envía · Shift + Enter agrega una línea' : AVISO_SIN_VOZ}
+              {origenPedido === 'VOICE' && !dictando && <> · <strong className="ia-dictado">Pedido dictado</strong></>}
+            </span>
+            <button type="button" className={dictando ? 'ia-microfono activo' : 'ia-microfono'}
+              onClick={dictar} disabled={!vozDisponible || consultando}
+              style={{ marginLeft: 'auto', marginRight: 6, background: dictando ? '#c2410c' : 'transparent',
+                color: dictando ? '#fff' : 'var(--ia-lila)', boxShadow: 'inset 0 0 0 1px currentColor' }}
+              aria-pressed={dictando} aria-label={dictando ? 'Terminar el dictado' : 'Dictar el pedido'}
+              title={vozDisponible ? (dictando ? 'Terminar el dictado' : 'Dictar el pedido') : AVISO_SIN_VOZ}>
+              {dictando ? 'Detener' : 'Dictar'}
+            </button>
+            <button type="submit" disabled={(!texto.trim() && modo !== 'RECOMENDAR') || consultando || !conectado}>
+              {modo === 'RECOMENDAR' ? 'Revisar' : 'Enviar'}</button>
+          </div>
         </form>
       </div>
 
@@ -127,10 +193,10 @@ export function VistaIA({ asistente, modelo, conectado, puedeEditar, usuario }: 
                   return nuevo
                 })}>
                   <option value="">— elegí una opción (o dejá que la IA lo intente, menos confiable) —</option>
-                  {opcionesPorRecomendacion.get(r.id)!.map((o, i) => <option key={o.etiqueta} value={i}>{o.etiqueta}{o.sugerido ? " (sugerido)" : ""}</option>)}
+                  {opcionesPorRecomendacion.get(r.id)!.map((o, i) => <option key={o.etiqueta} value={i}>{o.etiqueta}{o.sugerido ? ' (sugerido)' : ''}</option>)}
                 </select>
               </label>}
-              {r.accion && arreglosElegidos[r.id] === undefined && <label className="ia-accion"><b>Acción para la IA</b>
+              {r.accion && arreglosElegidos[r.id] === undefined && !ultimasRecomendaciones.sinIA && <label className="ia-accion"><b>Acción para la IA</b>
                 <textarea rows={2} value={accionesEditadas[r.id] ?? r.accion} disabled={!marcada}
                   onChange={(e) => setAccionesEditadas((a) => ({ ...a, [r.id]: e.target.value }))}/>
               </label>}
@@ -161,11 +227,11 @@ export function VistaIA({ asistente, modelo, conectado, puedeEditar, usuario }: 
             const claseDestino = nombreDeClase(p.targetClassId, 'destino')
             return <div className={`ia-cambio ${activo ? '' : 'inactivo'}`} key={`${c.tipo}-${i}`}>
               <label className="ia-cambio-cabecera">
-                <input type="checkbox" checked={activo} disabled={yaAplicada}
+                <input type="checkbox" checked={activo} disabled={yaAplicada || enviandoLote}
                   onChange={(e) => setSeleccion((s) => ({ ...s, [String(i)]: e.target.checked }))}/>
                 <span><code>{c.tipo}</code><strong>{c.resumen}</strong></span>
               </label>
-              {activo && !yaAplicada && <div className="ia-edicion">
+              {activo && !yaAplicada && !enviandoLote && <div className="ia-edicion">
                 {(c.tipo === 'CREATE_CLASS' || c.tipo === 'ADD_ATTRIBUTE') &&
                   <label>Nombre<input value={String(p.name ?? '')} onChange={(e) => editar(i, 'name', e.target.value)}/></label>}
                 {c.tipo === 'ADD_ATTRIBUTE' && <>
@@ -194,7 +260,14 @@ export function VistaIA({ asistente, modelo, conectado, puedeEditar, usuario }: 
             <button className="ia-corregir" onClick={corregirPendientes} disabled={!yaAplicada || !puedeEditar || consultando}>Corregir pendientes</button>
             {!yaAplicada && <small>Aplicá primero la propuesta: los pendientes se corrigen sobre el diagrama.</small>}
           </div>}
-          <div className="ia-aplicar"><button onClick={aplicar} disabled={!puedeEditar || !conectado || yaAplicada || !ultimaPropuesta.aceptados.some((_, i) => seleccion[String(i)] !== false)}>{yaAplicada ? 'Propuesta aplicada' : 'Aplicar seleccionados'}</button><small>{puedeEditar ? 'Se enviarán como una sola operación colaborativa.' : 'Tu rol es de solo lectura.'}</small></div>
+          <div className="ia-aplicar"><button onClick={() => void aplicar()}
+            disabled={!puedeEditar || !conectado || enviandoLote
+              || (soloFaltaLaMarca ? false : yaAplicada || !ultimaPropuesta.aceptados.some((_, i) => seleccion[String(i)] !== false))}>
+            {soloFaltaLaMarca ? (enviandoLote ? 'Registrando la marca…' : 'Reintentar la marca')
+              : yaAplicada ? 'Propuesta aplicada' : enviandoLote ? 'Esperando confirmación…' : 'Aplicar seleccionados'}</button>
+            <small>{!puedeEditar ? 'Tu rol es de solo lectura.'
+              : soloFaltaLaMarca ? 'Los cambios ya se aplicaron al diagrama. Falta registrar la marca en el historial.'
+              : yaAplicada ? 'El servidor aceptó estos cambios.' : 'Se enviarán como una sola operación colaborativa.'}</small></div>
         </>}
       </aside>
     </section>

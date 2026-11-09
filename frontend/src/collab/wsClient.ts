@@ -42,6 +42,14 @@ export class ColabClient {
   /** Operaciones que llegaron mientras faltaban anteriores: esperan su turno. */
   private enEspera: AppliedOperation[] = []
   private reintento: ReturnType<typeof setTimeout> | null = null
+  /**
+   * Un backend sin el frente de versiones no deja suscribirse a `/versions` y,
+   * como cualquier SUBSCRIBE negado, corta TODA la conexion. Al primer rechazo
+   * se deja de pedir ese topic: la reconexion automatica vuelve sin el.
+   */
+  private versionesEnVivo = true
+  /** Lo mismo con `/ai` (T-04): un backend sin el historial compartido no corta la conexion. */
+  private iaEnVivo = true
 
   constructor(
     private diagramId: string,
@@ -52,6 +60,10 @@ export class ColabClient {
       onResincronizando?: (activo: boolean) => void
       onPresence?: (p: PresenceMessage) => void
       onLock?: (l: LockMessage) => void
+      /** Alguien guardo una version (ADR-037): el historial se vuelve a pedir. El cuerpo no se interpreta. */
+      onVersion?: () => void
+      /** Aviso del historial de la IA (T-04): un turno nuevo o una propuesta aplicada. */
+      onIA?: (aviso: unknown) => void
       onError?: (r: CommandRejection) => void
       onEstado?: (conectado: boolean) => void
       /**
@@ -77,8 +89,7 @@ export class ColabClient {
         this.conectado = false
         this.handlers.onEstado?.(false)
       },
-      onStompError: (frame) =>
-        this.handlers.onCanalRechazado?.(String(frame.headers['message'] ?? '')),
+      onStompError: (frame) => this.alErrorDeCanal(String(frame.headers['message'] ?? '')),
     })
   }
 
@@ -93,11 +104,42 @@ export class ColabClient {
     this.client.subscribe(`${base}/locks`, (m) =>
       this.handlers.onLock?.(JSON.parse(m.body)))
 
+
     // Cola de usuario: Spring la resuelve por sesion, el rechazo lo ve SOLO
     // quien lo provoco (antes era un /topic publico que cualquiera podia leer).
     this.client.subscribe('/user/queue/errors', (m) =>
       this.handlers.onError?.(JSON.parse(m.body)))
+
+    // Al final y solo si el servidor lo admite: lo esencial (ops, locks, presencia,
+    // errores) ya quedo suscrito antes de que esta pueda ser rechazada.
+    if (this.versionesEnVivo) this.client.subscribe(`${base}/versions`, () => this.handlers.onVersion?.())
+    if (this.iaEnVivo) this.client.subscribe(`${base}/ai`, (m) => this.handlers.onIA?.(JSON.parse(m.body)))
   }
+
+  /**
+   * El servidor cerro el canal con un frame ERROR. Si el motivo es la suscripcion
+   * a `/versions` (el mensaje nombra el destino) no es un problema de acceso:
+   * se anota que ese servidor no la tiene y no se avisa a la raiz, que
+   * revalidaria el acceso sin motivo.
+   * @returns true si era el rechazo de `/versions`.
+   */
+  alErrorDeCanal(motivo: string): boolean {
+    if (this.versionesEnVivo && motivo.includes('/versions')) {
+      this.versionesEnVivo = false
+      return true
+    }
+    if (this.iaEnVivo && /\/ai\b/.test(motivo)) {
+      this.iaEnVivo = false
+      return true
+    }
+    this.handlers.onCanalRechazado?.(motivo)
+    return false
+  }
+
+  /** false cuando el servidor rechazo `/versions`: el historial no se actualiza solo. */
+  tieneVersionesEnVivo() { return this.versionesEnVivo }
+  /** false cuando el servidor rechazo `/ai`: el historial de la IA solo se actualiza al recargar. */
+  tieneIAEnVivo() { return this.iaEnVivo }
 
   private recibir(op: AppliedOperation) {
     if (this.resincronizando) { this.enEspera.push(op); return }

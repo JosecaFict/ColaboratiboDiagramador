@@ -9,7 +9,18 @@ import java.util.List;
  */
 public record SolicitudIA(String prompt, ModoIA modo, List<ClaseEnContexto> clases,
                           List<RelacionEnContexto> relaciones, List<HerramientaIA> herramientas,
-                          String modelo) {
+                          String modelo, ContextoDeEquipo equipo) {
+
+    /** Sin contexto del equipo (T-09): pruebas, revisiones internas y proveedores anteriores. */
+    public SolicitudIA(String prompt, ModoIA modo, List<ClaseEnContexto> clases,
+                       List<RelacionEnContexto> relaciones, List<HerramientaIA> herramientas, String modelo) {
+        this(prompt, modo, clases, relaciones, herramientas, modelo, null);
+    }
+
+    /** La misma solicitud con otro contexto de equipo: lo usa el presupuesto al recortar la memoria. */
+    SolicitudIA conEquipo(ContextoDeEquipo otro) {
+        return new SolicitudIA(prompt, modo, clases, relaciones, herramientas, modelo, otro);
+    }
 
     public SolicitudIA(String prompt, ModoIA modo, List<ClaseEnContexto> clases,
                        List<RelacionEnContexto> relaciones, List<HerramientaIA> herramientas) {
@@ -32,12 +43,19 @@ public record SolicitudIA(String prompt, ModoIA modo, List<ClaseEnContexto> clas
                                      String multiplicidadOrigen, String multiplicidadDestino) { }
 
     public String instruccionDeSistema() {
-        return PromptDeSistema.para(modo);
+        String base = PromptDeSistema.para(modo);
+        return equipo == null ? base : base + equipo.paraLaInstruccionDeSistema();
     }
 
-    /** El mensaje de usuario que efectivamente se le manda al modelo. */
+    /**
+     * El mensaje de usuario que efectivamente se le manda al modelo. Con
+     * equipo (T-09) empieza por la conversacion previa y quien pregunta; el
+     * pedido y el diagrama van despues, completos.
+     */
     public String mensajeParaElModelo() {
-        StringBuilder sb = new StringBuilder(prompt);
+        StringBuilder sb = new StringBuilder();
+        if (equipo != null) sb.append(equipo.antesDelPedido());
+        sb.append(prompt);
         if (!clases.isEmpty()) {
             sb.append("\n\nClases existentes en el diagrama:\n");
             for (ClaseEnContexto c : clases) {

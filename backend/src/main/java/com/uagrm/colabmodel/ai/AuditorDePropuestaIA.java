@@ -19,20 +19,33 @@ import java.text.Normalizer;
  */
 final class AuditorDePropuestaIA {
 
-    private record Atributo(String nombre, boolean pk, boolean unique) { }
+    private record Atributo(String nombre, String tipo, boolean pk, boolean unique) { }
+
+    private static final Set<String> UNA_INSTANCIA = Set.of("1", "0..1");
 
     private AuditorDePropuestaIA() { }
 
     static List<String> auditar(List<PropuestaDeIA.ComandoAceptado> comandos) {
-        return auditar(comandos, Map.of());
+        return auditar(comandos, Set.of(), Map.of());
+    }
+
+    static List<String> auditar(List<PropuestaDeIA.ComandoAceptado> comandos, Set<String> historicasDeclaradas) {
+        return auditar(comandos, historicasDeclaradas, Map.of());
+    }
+
+    static List<String> auditar(List<PropuestaDeIA.ComandoAceptado> comandos, Map<String, String> existentes) {
+        return auditar(comandos, Set.of(), existentes);
     }
 
     /**
+     * @param historicasDeclaradas nombres de las clases que el modelo marco
+     *                             como historicas en el plan (modo Disenar)
      * @param existentes id -> nombre de las clases que ya estan en el diagrama: una propuesta
      *                   MODIFICAR relaciona clases existentes, y sin sus nombres el aviso decia
      *                   "clase origen [1] - [1] clase destino" (banco, 2026-11-08).
      */
-    static List<String> auditar(List<PropuestaDeIA.ComandoAceptado> comandos, Map<String, String> existentes) {
+    static List<String> auditar(List<PropuestaDeIA.ComandoAceptado> comandos, Set<String> historicasDeclaradas,
+                                Map<String, String> existentes) {
         Map<String, String> clases = new HashMap<>(existentes);
         Map<String, List<Atributo>> atributos = new HashMap<>();
         Set<String> creadas = new HashSet<>();
@@ -46,10 +59,20 @@ final class AuditorDePropuestaIA {
                 creadas.add(id);
             } else if (comando.tipo() == CommandType.ADD_ATTRIBUTE) {
                 atributos.computeIfAbsent(p.path("classId").asText(), k -> new ArrayList<>())
-                        .add(new Atributo(p.path("name").asText(), p.path("pk").asBoolean(false),
-                                p.path("unique").asBoolean(false)));
+                        .add(new Atributo(p.path("name").asText(), p.path("dataType").asText(""),
+                                p.path("pk").asBoolean(false), p.path("unique").asBoolean(false)));
             } else if (comando.tipo() == CommandType.CREATE_RELATION) {
                 relaciones.add(p);
+            }
+        }
+
+        Set<String> historicas = new HashSet<>();
+        for (String id : creadas) {
+            // Lo que declara el modelo o la forma del hecho, nunca el nombre (Diego): el aviso solo informa,
+            // y las multiplicidades de los registros ya las corrige el normalizador.
+            if (historicasDeclaradas.contains(clases.get(id))
+                    || pareceHistorica(id, atributos.getOrDefault(id, List.of()), relaciones)) {
+                historicas.add(id);
             }
         }
 
@@ -88,6 +111,9 @@ final class AuditorDePropuestaIA {
             } else if (esClaseAsociativa(nombre, attrs) && conexiones < 2) {
                 avisos.add("La posible clase asociativa " + nombre + " solo tiene " + conexiones
                         + " relacion; debe conectar los dos conceptos cuya relacion describe.");
+            } else if (historicas.contains(id) && conexiones < 2) {
+                avisos.add("La entidad historica " + nombre + " solo tiene " + conexiones
+                        + " relacion; verifica que conecte tanto al actor como al objeto del evento.");
             }
         }
 
@@ -110,25 +136,30 @@ final class AuditorDePropuestaIA {
                         + " es uno a uno; verifica que no deba conservar multiples instancias historicas.");
             }
 
-            boolean origenHistorico = esHistorica(origen, atributos.getOrDefault(origenId, List.of()));
-            boolean destinoHistorico = esHistorica(destino, atributos.getOrDefault(destinoId, List.of()));
-            boolean historica = origenHistorico || destinoHistorico;
-            // Reserva [1] - [1..*] Participante: la reserva es la duena de sus viajeros, no un historial limitado.
+            boolean origenHistorico = historicas.contains(origenId);
+            boolean destinoHistorico = historicas.contains(destinoId);
+            boolean todoParte = tipo.equals("COMPOSITION") || tipo.equals("AGGREGATION");
+            // El hecho historico como todo de sus partes (Venta -> LineaDeVenta)
+            // es correcto: solo preocupa el hecho como parte de otra cosa.
+            // Cabecera-detalle y Reserva [1] - [1..*] Participante: la entidad es la duena de sus partes,
+            // no un historial limitado.
             boolean patronEspecial = esPatronEspecial(origen, destino)
                     || (origenHistorico && mDestino.contains("*") && esDependiente(destino))
                     || (destinoHistorico && mOrigen.contains("*") && esDependiente(origen));
-            if (origenHistorico && !destinoHistorico && !patronEspecial && !mOrigen.equals("0..*")) {
+            boolean revisaMultiplicidad = !tipo.equals("GENERALIZATION") && !tipo.equals("DEPENDENCY")
+                    && !(todoParte && origenHistorico) && !patronEspecial;
+            if (revisaMultiplicidad && origenHistorico && !destinoHistorico && !mOrigen.contains("*")) {
                 avisos.add("La multiplicidad junto a la entidad historica " + origen + " es " + mOrigen
                         + "; podria limitar el historial. Normalmente debe permitir 0..* registros.");
             }
-            if (destinoHistorico && !origenHistorico && !patronEspecial && !mDestino.equals("0..*")) {
+            if (revisaMultiplicidad && destinoHistorico && !origenHistorico && !mDestino.contains("*")) {
                 avisos.add("La multiplicidad junto a la entidad historica " + destino + " es " + mDestino
                         + "; podria limitar el historial. Normalmente debe permitir 0..* registros.");
             }
-            if (historica && tipo.equals("COMPOSITION")) {
+            if (destinoHistorico && tipo.equals("COMPOSITION")) {
                 avisos.add("La composicion " + origen + " - " + destino + " involucra una entidad historica; "
                         + "usa ASSOCIATION para que retirar el otro extremo no implique borrar el historial.");
-            } else if (historica && tipo.equals("AGGREGATION")) {
+            } else if (destinoHistorico && tipo.equals("AGGREGATION")) {
                 avisos.add("La agregacion " + origen + " - " + destino + " no expresa baja logica ni conservacion "
                         + "historica; normalmente corresponde ASSOCIATION y una regla de negocio separada.");
             }
@@ -177,19 +208,28 @@ final class AuditorDePropuestaIA {
         return base.length() >= 4 && relacionada.startsWith(base);
     }
 
-    private static boolean esHistorica(String clase, List<Atributo> atributos) {
-        String nombre = normal(clase);
-        if (nombre.contains("prestamo") || nombre.contains("reserva") || nombre.contains("historial")
-                || nombre.contains("transaccion") || nombre.contains("movimiento") || nombre.contains("evento")
-                || nombre.contains("transferencia") || nombre.contains("traslado")
-                || nombre.contains("cancelacion")
-                || nombre.contains("cita") || nombre.contains("consulta") || nombre.contains("diagnostico")
-                || nombre.contains("receta") || nombre.contains("pedido") || nombre.contains("pago")
-                || nombre.contains("aplicacionproducto") || nombre.contains("aplicacionmedicamento")
-                || nombre.contains("version") || nombre.contains("asignacion")) return true;
-        return atributos.stream().map(a -> normal(a.nombre())).anyMatch(a ->
-                a.contains("fechadevolucion") || a.contains("fechavencimiento") || a.equals("inicio")
-                        || a.equals("fin") || a.contains("fechacierre"));
+    /**
+     * Forma de un hecho registrado, sin mirar el nombre: tiene una fecha y
+     * apunta a una sola instancia de al menos dos clases distintas (una Cita
+     * apunta a un Paciente y a un Medico; un Pago, a un Cliente y a una
+     * Factura). Solo se usa para avisar, nunca para cambiar el plan.
+     */
+    private static boolean pareceHistorica(String id, List<Atributo> atributos, List<JsonNode> relaciones) {
+        boolean tieneFecha = atributos.stream()
+                .anyMatch(a -> a.tipo().equals("date") || a.tipo().equals("datetime"));
+        if (!tieneFecha) return false;
+        Set<String> referenciadas = new HashSet<>();
+        for (JsonNode r : relaciones) {
+            String tipo = r.path("kind").asText("ASSOCIATION");
+            if (!tipo.equals("ASSOCIATION")) continue;
+            String origen = r.path("sourceClassId").asText();
+            String destino = r.path("targetClassId").asText();
+            if (id.equals(origen) && !id.equals(destino)
+                    && UNA_INSTANCIA.contains(r.path("targetMultiplicity").asText())) referenciadas.add(destino);
+            if (id.equals(destino) && !id.equals(origen)
+                    && UNA_INSTANCIA.contains(r.path("sourceMultiplicity").asText())) referenciadas.add(origen);
+        }
+        return referenciadas.size() >= 2;
     }
 
     private static boolean esClaseAsociativa(String clase, List<Atributo> atributos) {

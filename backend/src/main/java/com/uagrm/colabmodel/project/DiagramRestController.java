@@ -1,5 +1,6 @@
 package com.uagrm.colabmodel.project;
 
+import com.uagrm.colabmodel.codegen.GeneradorSpringBoot;
 import com.uagrm.colabmodel.modelcore.mapping.ModeloLogico;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -143,16 +144,44 @@ public class DiagramRestController {
      * Por la misma razon dice si la base que va en el zip es la confirmada.
      */
     @GetMapping("/diagrams/{id}/codegen/resumen")
-    public ResponseEntity<ResumenGeneracion> resumenCodigo(@PathVariable UUID id, Principal principal) {
+    public ResponseEntity<ResumenGeneracion> resumenCodigo(@PathVariable UUID id,
+                                                           @RequestParam(name = "store", required = false) String store,
+                                                           Principal principal) {
         exigirLectura(id, principal);
-        EsquemaFisico.Confirmacion confirmacion = snapshots.fisicaDe(id)
+        GeneradorSpringBoot.Almacen almacen = almacenDe(store);
+        // La confirmacion del esquema (ADR-032) es de la base relacional: en
+        // MongoDB no hay DDL que confirmar, asi que viaja vacia.
+        boolean relacional = almacen == GeneradorSpringBoot.Almacen.POSTGRES;
+        EsquemaFisico.Confirmacion confirmacion = !relacional ? null : snapshots.fisicaDe(id)
                 .map(EsquemaFisico::confirmacion).orElse(null);
         List<DiagramSnapshotService.CorreccionPreGeneracion> correcciones = snapshots
                 .correccionesPreGeneracionDe(id).orElse(List.of());
-        return snapshots.codigoDe(id)
-                .map(p -> ResumenGeneracion.de(p, confirmacion, correcciones))
+        return snapshots.codigoDe(id, almacen)
+                .map(p -> ResumenGeneracion.de(p, confirmacion, correcciones, relacional))
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /**
+     * La Vista Documental (ADR-035): como guarda este diagrama la variante
+     * MongoDB. Solo lectura, los tres roles la ven.
+     */
+    @GetMapping("/diagrams/{id}/documental")
+    public ResponseEntity<com.uagrm.colabmodel.modelcore.mapping.ModeloDocumental> documental(
+            @PathVariable UUID id, Principal principal) {
+        exigirLectura(id, principal);
+        return snapshots.documentalDe(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /** `?store=postgres|mongo`; sin `store`, PostgreSQL (ADR-035). Otro valor es un 400. */
+    private static GeneradorSpringBoot.Almacen almacenDe(String store) {
+        try {
+            return GeneradorSpringBoot.Almacen.de(store);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 
     /**
@@ -170,12 +199,16 @@ public class DiagramRestController {
     @GetMapping("/diagrams/{id}/codegen")
     public ResponseEntity<byte[]> codigo(@PathVariable UUID id,
                                          @RequestParam(name = "esquema", required = false) String esquema,
+                                         @RequestParam(name = "store", required = false) String store,
                                          Principal principal) {
         exigirLectura(id, principal);
-        var proyecto = snapshots.codigoDe(id);
+        GeneradorSpringBoot.Almacen almacen = almacenDe(store);
+        var proyecto = snapshots.codigoDe(id, almacen);
         if (proyecto.isEmpty()) return ResponseEntity.notFound().build();
         var p = proyecto.get();
-        if (esquema != null && !esquema.equals(ResumenGeneracion.hashDelDdl(p))) {
+        // El candado del esquema confirmado es de PostgreSQL: en MongoDB no hay DDL.
+        if (almacen == GeneradorSpringBoot.Almacen.POSTGRES
+                && esquema != null && !esquema.equals(ResumenGeneracion.hashDelDdl(p))) {
             // Respuesta directa y no una excepcion: /error no esta abierto en
             // la seguridad, y el 409 llegaria convertido en un 403 engañoso.
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -205,11 +238,26 @@ public class DiagramRestController {
         static ResumenGeneracion de(com.uagrm.colabmodel.codegen.ProyectoGenerado p,
                                     EsquemaFisico.Confirmacion confirmacion,
                                     List<DiagramSnapshotService.CorreccionPreGeneracion> correcciones) {
+            return de(p, confirmacion, correcciones, true);
+        }
+
+        /**
+         * @param relacional PostgreSQL: lleva la huella del DDL. En MongoDB
+         *                   `hashEsquema` y `confirmacion` viajan null, con la
+         *                   misma forma de respuesta.
+         */
+        static ResumenGeneracion de(com.uagrm.colabmodel.codegen.ProyectoGenerado p,
+                                    EsquemaFisico.Confirmacion confirmacion,
+                                    List<DiagramSnapshotService.CorreccionPreGeneracion> correcciones,
+                                    boolean relacional) {
+            // Una entidad = un controlador. Contar /domain/ sumaba tambien las
+            // enumeraciones, los objetos de valor y, en MongoDB, Registro.
             long entidades = p.archivos().keySet().stream()
-                    .filter(r -> r.contains("/domain/")).count();
+                    .filter(r -> r.contains("/web/") && r.endsWith("Controller.java")
+                            && r.startsWith("src/main/")).count();
             return new ResumenGeneracion(p.nombre(), p.carpetaRaiz() + ".zip", (int) entidades,
-                    List.copyOf(p.archivos().keySet()), p.advertencias(), hashDelDdl(p), confirmacion,
-                    correcciones);
+                    List.copyOf(p.archivos().keySet()), p.advertencias(), relacional ? hashDelDdl(p) : null,
+                    confirmacion, correcciones);
         }
 
         static String hashDelDdl(com.uagrm.colabmodel.codegen.ProyectoGenerado p) {

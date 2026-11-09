@@ -1,7 +1,8 @@
 # Documento de Arquitectura de Software (SAD)
 
 **ColabModel** · v1.0 · 07/09/2026 · Hito RUP: producido en *Inicio*, se
-congela en **LCA**.
+congela en **LCA**. · **v1.1 · 02/11/2026**: se agrega el estado del 2do parcial
+(sección [Estado al 2do parcial](#estado-al-2do-parcial-02112026)).
 
 > Este archivo es el índice operativo. El detalle vive en los documentos
 > hermanos y en el código, que es la fuente de verdad de los contratos.
@@ -71,9 +72,33 @@ Todo lo que esté por debajo del 5º requiere decisión del equipo completo y
 debe comunicarse al docente. **Recortar en silencio y que se note en la demo
 es peor que declarar el recorte.**
 
+## Estado al 2do parcial (02/11/2026)
+
+Qué cambió en la arquitectura desde el LCA. El resumen de lo que está y lo que falta
+va en el README («Informe del proyecto»).
+
+| Contenedor | Cambio | Dónde | Decisión | Estado |
+|---|---|---|---|---|
+| **P2** (generado) | Segunda salida: **MongoDB**, del mismo modelo (documentos incrustados y referencias). Cubre el punto NoSQL | `codegen/PlantillasMongo`, `codegen/MapeoDocumental` | ADR-035 | integrado |
+| **P2** | Listo para producción: perfiles `dev` (H2) / `postgres` / `prod` (variables de entorno), bloqueo optimista, errores uniformes, paginación con `X-Total-Count`, Docker | `codegen/PlantillasProduccion` | ADR-034 | integrado |
+| **P2** | Consola de prueba dentro del zip (`GET /`), armada desde `app-manifest.json`, mismo origen y sin build | `codegen/PlantillaConsola` | ADR-011 (contrato por metadatos) | integrado |
+| **P3** (móvil) | Visor en vivo de un diagrama de P1, solo lectura (excepción acotada a "P3 no consume P1") | `mobile/lib/visor/` | ADR-036 | integrado |
+| **P3** | Proyecto Android y APK; asistente contra P2 | `mobile/android/`, `mobile/lib/asistente/` | ADR-021 | integrado, con la voz y las preguntas pendientes |
+| **P1** (herramienta) | Historial de la IA compartido por STOMP (`/topic/diagram/{id}/ai`); "aplicada" solo si el log tiene el `BATCH` aceptado; dictado web | `ai/AvisosDeIA`, `ai/HistorialIA`, `frontend/src/ai/` | ADR-002 (un solo camino de escritura) | integrado |
+| **P1** | Memoria del chat grupal, quién pregunta y configuración de la IA por proyecto, con presupuesto de contexto | `ai/`, `frontend/src/ai/` | — | integrado |
+| **P1** | Control de versiones tipo Git sobre el log de operaciones | `versiones/` | ADR-037 | integrado |
+
+**Escenarios de calidad con evidencia nueva:**
+- **EC-10:** el mismo APK se usó en un teléfono real contra el backend generado de Tienda, y las pruebas del asistente corren contra los manifiestos generados de varios
+  dominios sin tocar el código de P3.
+- **P2:** la consola (también genérica desde el manifiesto) y el backend generado se probaron
+  por primera vez contra **PostgreSQL real** (16) y contra **MongoDB 7**, en un navegador.
+
+**Fuera del equipo de código:** la IA local (modelo y Ollama) la lleva otro compañero.
+
 ## Documentos hermanos
 
-- `ADR.md` — las decisiones con su justificación (ADR-001 a ADR-021)
+- `ADR.md` — las decisiones con su justificación (ADR-001 a ADR-037)
 - `REGLAS-MAPEO.md` — las 12 reglas, tipos, ambigüedades, normalización
 - `CASOS-DE-USO.md` — CU-01, CU-04 y CU-05: el criterio de salida del LCA, con evidencia
 - `../canonical-models/README.md` — la suite de regresión del generador

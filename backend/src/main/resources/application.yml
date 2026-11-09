@@ -59,6 +59,15 @@ colabmodel:
       #             Requiere ANTHROPIC_API_KEY; revisar antes claude.model,
       #             que define el costo por auditoria.
       proveedor: activo
+    # T-09: memoria del chat grupal que recibe la IA. Se mandan los ultimos
+    # turnos del diagrama (pedido, respuesta y resumen de la propuesta) con el
+    # nombre de cada autor. Si no entran en el contexto del modelo, se sacan
+    # primero los mas viejos. presupuesto-tokens en 0 = automatico: el contexto
+    # de Ollama con el proveedor local, 32000 con los de la nube.
+    memoria:
+      max-turnos: 8
+      presupuesto-tokens: 0
+      reserva-respuesta-tokens: 512
     # La misma conexion sirve al prompt de texto y a la lectura de imagen
     # (vision.nivel2.proveedor: claude). ADR-025.
     claude:

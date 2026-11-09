@@ -18,8 +18,24 @@ final class NormalizadorPlanUml {
 
     private NormalizadorPlanUml() { }
 
+    /** Sin requisito (Diego): solo los ajustes genericos; las reglas que leen el pedido no se activan. */
+    static RespuestaIA normalizar(RespuestaIA respuesta) {
+        return normalizar(respuesta, "", Set.of());
+    }
+
     static RespuestaIA normalizar(RespuestaIA respuesta, String requisito) {
         return normalizar(respuesta, requisito, Set.of());
+    }
+
+    /** Las clases que el modelo declaro historicas, con el nombre ya normalizado (Diego). */
+    static Set<String> clasesHistoricas(RespuestaIA respuesta) {
+        ComandoPropuestoIA comando = respuesta.comandos().stream()
+                .filter(c -> EsquemaPlanUml.NOMBRE.equals(c.tipo())).findFirst().orElse(null);
+        if (comando == null) return Set.of();
+        Set<String> historicas = new java.util.LinkedHashSet<>();
+        for (JsonNode clase : comando.parametros().path("classes"))
+            if (clase.path("historica").asBoolean(false)) historicas.add(clase.path("name").asText());
+        return Set.copyOf(historicas);
     }
 
     /** @param enDiagrama clases que ya existen en el diagrama: una relacion hacia ellas no es un extremo inexistente */
@@ -33,6 +49,8 @@ final class NormalizadorPlanUml {
                 + NormalizadorParentescoPlan.completarExplicitos(plan, requisito);
         Map<String, String> nombres = new HashMap<>();
         Set<String> historicas = new HashSet<>();
+        boolean declaraHistoricas = false;
+        for (JsonNode c : plan.path("classes")) if (c.has("historica")) declaraHistoricas = true;
         int identidadesAgregadas = 0;
         int clavesNaturalesReemplazadas = 0;
         int unicidadesRetiradas = 0;
@@ -69,7 +87,9 @@ final class NormalizadorPlanUml {
                         .put("required", true).put("unique", true).put("pk", true);
                 identidadesAgregadas++;
             }
-            if (esHistorica(clase)) historicas.add(limpio);
+            // Primero lo que declara el modelo (historica=true, Diego); la lista de nombres conocidos
+            // de registros solo decide cuando el plan no declara nada.
+            if (declaraHistoricas ? clase.path("historica").asBoolean(false) : esHistorica(clase)) historicas.add(limpio);
         }
 
         int coberturasAgregadas = completarCoberturaExplicita(plan, requisito);
@@ -81,18 +101,13 @@ final class NormalizadorPlanUml {
                     identificador(relacion.path("source").asText(), true)));
             relacion.put("target", nombres.getOrDefault(relacion.path("target").asText(),
                     identificador(relacion.path("target").asText(), true)));
-            if (relacion.has("name")) relacion.put("name", identificador(relacion.path("name").asText(), false));
-            if (relacion.has("sourceRole")) relacion.put("sourceRole",
-                    identificador(relacion.path("sourceRole").asText(), false));
-            if (relacion.has("targetRole")) relacion.put("targetRole",
-                    identificador(relacion.path("targetRole").asText(), false));
-            // Conserva nombres y roles significativos emitidos por el modelo.
-            // Regenerarlos siempre borraba distinciones como cuentaOrigen /
-            // cuentaDestino y producia dos asociaciones indistinguibles.
-            String nombreActual = relacion.path("name").asText("");
-            if (esAsociacion(relacion) && (nombreActual.isBlank() || normal(nombreActual).startsWith("relacion"))) {
-                relacion.put("name", nombreDeRelacion(relacion.path("source").asText(),
-                        relacion.path("target").asText()));
+            // El nombre y los roles son del modelo (Diego): se limpian, nunca se inventan ni se reemplazan.
+            // Regenerarlos borraba distinciones como cuentaOrigen / cuentaDestino. Vacios, se quitan.
+            for (String campo : List.of("name", "sourceRole", "targetRole")) {
+                if (!relacion.has(campo)) continue;
+                String valor = relacion.path(campo).asText("");
+                if (valor.isBlank()) relacion.remove(campo);
+                else relacion.put(campo, identificador(valor, false));
             }
         }
 
@@ -105,14 +120,16 @@ final class NormalizadorPlanUml {
                 + completarPrerrequisitos(plan, requisito);
         int rolesTrasladoAjustados = completarRolesTraslado(plan, requisito);
 
-        // Tambien se protege a cualquier clase directamente conectada a un
-        // evento historico: borrar una Copia no debe arrastrar sus Prestamos.
+        // Participante de un hecho historico (Diego): cualquier clase que el hecho referencia (el actor,
+        // el objeto); borrar una Copia no debe arrastrar sus Prestamos. No lo es la parte de una
+        // composicion cuyo todo es el propio hecho (Venta -> LineaDeVenta).
         Set<String> protegidas = new HashSet<>(historicas);
         for (JsonNode r : plan.path("relations")) {
             if (!esAsociacion(r)) continue;
             String source = r.path("source").asText();
             String target = r.path("target").asText();
-            if (historicas.contains(source)) protegidas.add(target);
+            boolean historicoEsElTodo = esTodoParte(r) && historicas.contains(source);
+            if (historicas.contains(source) && !historicoEsElTodo) protegidas.add(target);
             if (historicas.contains(target)) protegidas.add(source);
         }
 
@@ -123,8 +140,9 @@ final class NormalizadorPlanUml {
             String tipo = relacion.path("kind").asText();
             if (!esAsociacion(relacion)) continue;
             boolean cicloDeVida = tipo.equals("COMPOSITION") || tipo.equals("AGGREGATION");
-            if (cicloDeVida && (protegidas.contains(relacion.path("source").asText())
-                    || protegidas.contains(relacion.path("target").asText()))) {
+            // Borrar el todo no puede arrastrar un historial ni algo que el historial referencia: solo en ese
+            // caso la parte pasa a asociacion. Un hecho historico como todo de sus partes es correcto (Diego).
+            if (cicloDeVida && protegidas.contains(relacion.path("target").asText())) {
                 relacion.put("kind", "ASSOCIATION");
                 relacionesAjustadas++;
             }
@@ -132,6 +150,8 @@ final class NormalizadorPlanUml {
             String target = relacion.path("target").asText();
             boolean sourceHistorica = historicas.contains(source);
             boolean targetHistorica = historicas.contains(target);
+            // El hecho como todo de sus partes conserva sus multiplicidades (Diego).
+            if (esTodoParte(relacion) && sourceHistorica) continue;
             // Una entidad historica forma la coleccion; cada registro conserva
             // exactamente un propietario. Nunca se ensanchan ambos extremos,
             // porque eso inventaria una relacion N:M (p. ej. Usuario-Historial).
@@ -162,12 +182,11 @@ final class NormalizadorPlanUml {
 
         int referenciasDuplicadasRetiradas = retirarReferenciasDuplicadas(plan);
 
-        int coautoriasAjustadas = corregirCoautoriaExplicita(plan, requisito);
-        int decisionesDeObligatoriedad = ajustarObligatoriedadExplicita(plan, requisito);
-        boolean reglaPrestamoActivo = detectaReglaPrestamoActivo(plan, requisito);
         CorrectorEstructuralPlan.corregir(plan, requisito);
         int secundariosRecortados = recortarAtributosSecundarios(plan, requisito);
 
+        // Sin auditoria del modelo igual se informa lo que hizo el backend (Diego).
+        if (!(plan.path("audit") instanceof ArrayNode)) plan.putArray("audit");
         if (plan.path("audit") instanceof ArrayNode audit) {
             if (referenciasExplicitasAjustadas > 0) audit.add("El backend recupero la semantica de referencias explicitas ("
                     + referenciasExplicitasAjustadas + " ajustes en asociaciones y sus extremos).");
@@ -224,12 +243,9 @@ final class NormalizadorPlanUml {
                     + datosAsociativosAgregados + " clase(s) asociativa(s).");
             if (coberturasAgregadas > 0) audit.add("El backend completo " + coberturasAgregadas
                     + " atributo(s) mencionado(s) explicitamente en el requisito.");
-            if (coautoriasAjustadas > 0) audit.add("El backend ajusto la relacion de autoria para permitir coautoria.");
-            if (decisionesDeObligatoriedad > 0) audit.add("El backend ajusto la obligatoriedad de ISBN segun el requisito explicito.");
-            if (reglaPrestamoActivo) audit.add("Regla de negocio detectada: un Ejemplar no puede tener dos Prestamos "
-                    + "activos simultaneamente; se considera activo mientras fechaDevolucion sea nula.");
             if (secundariosRecortados > 0) audit.add("El backend omitio " + secundariosRecortados
-                    + " atributo(s) secundario(s) para conservar todas las relaciones dentro del limite seguro.");
+                    + " atributo(s) opcional(es) o secundario(s) para conservar todas las relaciones dentro del limite de "
+                    + Lote.TOPE_DISENO_TEXTO + " cambios.");
             while (audit.size() > 5) {
                 int quitar = 0;
                 for (int i = 0; i < audit.size(); i++) {
@@ -249,6 +265,12 @@ final class NormalizadorPlanUml {
     private static boolean tienePk(ObjectNode clase) {
         for (JsonNode a : clase.path("attributes")) if (a.path("pk").asBoolean(false)) return true;
         return false;
+    }
+
+    /** Composicion o agregacion: el origen es el todo y el destino la parte (Diego). */
+    private static boolean esTodoParte(JsonNode relacion) {
+        String tipo = relacion.path("kind").asText();
+        return tipo.equals("COMPOSITION") || tipo.equals("AGGREGATION");
     }
 
     private static boolean esAsociacion(JsonNode relacion) {
@@ -712,62 +734,6 @@ final class NormalizadorPlanUml {
                 || n.contains("descripcion") || n.contains("detalle") || n.contains("observacion");
     }
 
-    private static String nombreDeRelacion(String source, String target) {
-        String clave = normal(source) + "->" + normal(target);
-        return switch (clave) {
-            case "obra->autor" -> "tieneAutores";
-            case "obra->ejemplar", "obra->copia", "obra->copiafisica" -> "tieneEjemplares";
-            case "usuario->prestamo", "usuario->prestamohistorico" -> "realizaPrestamos";
-            case "ejemplar->prestamo", "copia->prestamo", "copiafisica->prestamo",
-                 "copiafisica->prestamohistorico" -> "registraPrestamos";
-            case "usuario->reserva" -> "solicitaReservas";
-            case "obra->reserva" -> "recibeReservas";
-            default -> "relacionaCon" + pluralPascal(target);
-        };
-    }
-
-    private static String pluralPascal(String nombre) {
-        String limpio = identificador(nombre, true);
-        String n = normal(limpio);
-        if (n.equals("autor")) return "Autores";
-        if (n.endsWith("s")) return limpio;
-        if (n.endsWith("z")) return limpio.substring(0, limpio.length() - 1) + "ces";
-        return limpio + (n.endsWith("r") || n.endsWith("l") || n.endsWith("n") ? "es" : "s");
-    }
-
-    private static int ajustarObligatoriedadExplicita(ObjectNode plan, String requisito) {
-        String pedido = normal(requisito);
-        boolean obligatorio = pedido.contains("isbn obligatorio") || pedido.contains("isbn requerido")
-                || pedido.matches("(?s).*toda(?:s)? (?:las )?obra(?:s)?[^.]*isbn.*");
-        boolean opcional = pedido.contains("isbn opcional") || pedido.contains("sin isbn")
-                || pedido.contains("no tenga isbn") || pedido.contains("no tienen isbn");
-        if (!obligatorio && !opcional) return 0;
-        for (JsonNode clase : plan.path("classes")) {
-            for (JsonNode atributo : clase.path("attributes")) {
-                if (normal(atributo.path("name").asText()).equals("isbn")) {
-                    ((ObjectNode) atributo).put("required", obligatorio);
-                    return 1;
-                }
-            }
-        }
-        return 0;
-    }
-
-    private static boolean detectaReglaPrestamoActivo(ObjectNode plan, String requisito) {
-        String pedido = normal(requisito);
-        boolean solicitada = pedido.contains("dos prestamos activos") || pedido.contains("prestamos activos simultaneos")
-                || pedido.contains("prestamo activo simultaneo");
-        if (!solicitada) return false;
-        boolean devolucion = false;
-        for (JsonNode clase : plan.path("classes")) {
-            if (!normal(clase.path("name").asText()).contains("prestamo")) continue;
-            for (JsonNode a : clase.path("attributes")) {
-                if (normal(a.path("name").asText()).equals("fechadevolucion")) devolucion = true;
-            }
-        }
-        return devolucion;
-    }
-
     private static boolean esExactamenteUno(String multiplicidad) {
         return "1".equals(multiplicidad == null ? "" : multiplicidad.trim());
     }
@@ -862,7 +828,8 @@ final class NormalizadorPlanUml {
             if (source == target) continue;
             ajustes += ponerSiCambio(relacion, "sourceMultiplicity", source ? "0..*" : "1");
             ajustes += ponerSiCambio(relacion, "targetMultiplicity", target ? "0..*" : "1");
-            relacion.put("kind", "ASSOCIATION");
+            // La cabecera como todo de sus lineas (Venta -> LineaDeVenta) es una composicion correcta (Diego).
+            if (!(esTodoParte(relacion) && !source && target)) relacion.put("kind", "ASSOCIATION");
         }
         return ajustes;
     }
@@ -1181,32 +1148,6 @@ final class NormalizadorPlanUml {
             ((ArrayNode) clase.path("attributes")).addObject().put("name", nombre).put("dataType", tipo)
                     .put("required", requerido).put("unique", false).put("pk", false);
             return 1;
-        }
-        return 0;
-    }
-
-    private static int corregirCoautoriaExplicita(ObjectNode plan, String requisito) {
-        String pedido = normal(requisito);
-        boolean solicitada = pedido.contains("mas de un autor") || pedido.contains("varios autores")
-                || pedido.contains("multiples autores") || pedido.contains("coautoria");
-        if (!solicitada) return 0;
-        for (JsonNode relacionNodo : plan.path("relations")) {
-            ObjectNode r = (ObjectNode) relacionNodo;
-            if (!esAsociacion(r)) continue;
-            String source = normal(r.path("source").asText());
-            String target = normal(r.path("target").asText());
-            if (source.contains("obra") && target.contains("autor")) {
-                r.put("sourceMultiplicity", "0..*");
-                r.put("targetMultiplicity", "1..*");
-                r.put("kind", "ASSOCIATION");
-                return 1;
-            }
-            if (source.contains("autor") && target.contains("obra")) {
-                r.put("sourceMultiplicity", "1..*");
-                r.put("targetMultiplicity", "0..*");
-                r.put("kind", "ASSOCIATION");
-                return 1;
-            }
         }
         return 0;
     }

@@ -25,8 +25,7 @@ class PlanUmlOllamaVivoTest {
         assertThat(cruda.comandos()).singleElement()
                 .satisfies(c -> assertThat(c.tipo()).isEqualTo(EsquemaPlanUml.NOMBRE));
 
-        RespuestaIA expandida = ExpansorPlanUml.expandir(NormalizadorPlanUml.normalizar(cruda,
-                "Biblioteca con prestamos historicos y devoluciones"));
+        RespuestaIA expandida = ExpansorPlanUml.expandir(NormalizadorPlanUml.normalizar(cruda));
         assertThat(expandida.comandos()).anyMatch(c -> c.tipo().equals("CREATE_CLASS"));
         assertThat(expandida.comandos()).anyMatch(c -> c.tipo().equals("ADD_ATTRIBUTE"));
         assertThat(expandida.comandos()).anyMatch(c -> c.tipo().equals("CREATE_RELATION"));

@@ -59,16 +59,6 @@ export interface PropuestaIA {
   interaccionId?: string
 }
 
-export interface MensajeIA {
-  id: string
-  autor: 'usuario' | 'asistente'
-  texto: string
-  modo: ModoIA
-  propuesta?: PropuestaIA
-  recomendaciones?: RecomendacionesIA
-  usuario?: string
-}
-
 export interface EntradaHistorialIA {
   id: string
   userId: string | null

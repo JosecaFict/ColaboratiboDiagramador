@@ -3,6 +3,7 @@ import { IconoIA } from './VistaIA'
 import { detectarIntencion, NOMBRE_INTENCION, type Intencion } from './intencion'
 import { REVISION_SIN_REQUISITO, type AsistenteIA } from './useAsistenteIA'
 import { etiquetaOrigen } from './recomendaciones'
+import { AVISO_SIN_VOZ } from './voz'
 
 interface Props {
   asistente: AsistenteIA
@@ -28,7 +29,8 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle, 
     convertirRecomendaciones, corregirPendientes, revisarGeneracion, aplicar, yaAplicada, estadoIA, modeloIA,
   } = asistente
   const [abierto, setAbierto] = useState(false)
-  const [texto, setTexto] = useState('')
+  // El cuadro de texto es el del asistente: lo dictado por voz (Diego) aparece aqui y el pedido sale como VOICE.
+  const { texto, escribir: setTexto, dictar, dictando, vozDisponible, origenPedido } = asistente
   const [intencionManual, setIntencionManual] = useState<Intencion | null>(null)
   const [vistos, setVistos] = useState(mensajes.length)
   const lista = useRef<HTMLDivElement>(null)
@@ -114,7 +116,11 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle, 
             '¿Qué representa este modelo?', '¿Está listo para generar?'].map((s) => <button key={s} onClick={() => mandar(s, detectarIntencion(s))}>{s}</button>)}
         </div>}
 
-        {mensajes.slice(-40).map((m) => <div key={m.id} className={`chat-mensaje ${m.autor}`}>
+        {mensajes.slice(-40).map((m) => <div key={m.id}
+          className={`chat-mensaje ${m.autor}${m.autor === 'usuario' && !m.propio ? ' ajeno' : ''}${m.enviando ? ' enviando' : ''}`}>
+          {/* La conversacion es del equipo (Diego): lo que piden los demas se ve con su nombre. */}
+          {m.autor === 'usuario' && !m.propio && <small className="chat-autor">{m.etiqueta}</small>}
+          {m.autor === 'asistente' && m.respondeA && !m.respondeA.tuyo && <small className="chat-autor">responde a {m.respondeA.nombre}</small>}
           <p>{m.texto}</p>
 
           {m.id === idPropuesta && ultimaPropuesta && <div className="chat-tarjeta">
@@ -177,10 +183,19 @@ export function ChatFlotante({ asistente, conectado, puedeEditar, onVerDetalle, 
             {INTENCIONES.map((i) => <option key={i} value={i}>{NOMBRE_INTENCION[i]}</option>)}
           </select>
         </div>
-        <textarea rows={2} value={texto} placeholder="Escribí tu pedido… (Enter envía)"
+        <textarea rows={2} value={texto}
+          placeholder={dictando ? 'Escuchando… hablá y tocá el micrófono para terminar' : 'Escribí o dictá tu pedido… (Enter envía)'}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); mandar() } }}/>
-        <button disabled={consultando || !conectado || (!texto.trim() && !['RECOMENDAR', 'CORREGIR'].includes(intencion))}>Enviar</button>
+        <div className="chat-botones">
+          <button type="button" className={dictando ? 'chat-microfono activo' : 'chat-microfono'} onClick={dictar}
+            disabled={!vozDisponible || consultando} aria-pressed={dictando}
+            aria-label={dictando ? 'Terminar el dictado' : 'Dictar el pedido'}
+            title={vozDisponible ? (dictando ? 'Terminar el dictado' : 'Dictar el pedido') : AVISO_SIN_VOZ}>
+            {dictando ? '■' : '🎤'}</button>
+          <button disabled={consultando || !conectado || (!texto.trim() && !['RECOMENDAR', 'CORREGIR', 'GENERAR'].includes(intencion))}>Enviar</button>
+        </div>
+        {origenPedido === 'VOICE' && !dictando && <small className="chat-dictado">Pedido dictado por voz</small>}
       </form>
     </section>
   )

@@ -283,8 +283,10 @@ public class ProveedorOllama implements ProveedorDeIA {
                 return "la clase " + nombre + " solo contiene identidad; agrega al menos un dato esencial";
             }
         }
-        if (!p.path("relations").isArray() || p.path("relations").isEmpty()) {
-            return "relations esta vacio o ausente";
+        // Una sola clase nueva puede quedar sin relaciones; varias, no.
+        if (p.has("relations") && !p.path("relations").isArray()) return "relations no es una lista";
+        if (p.path("classes").size() > 1 && p.path("relations").isEmpty()) {
+            return "hay " + p.path("classes").size() + " clases pero ninguna relacion";
         }
         // Presupuesto minimo: crear cada clase, identidad y un dato propio,
         // ademas de conservar todas las asociaciones. Permite recortar datos

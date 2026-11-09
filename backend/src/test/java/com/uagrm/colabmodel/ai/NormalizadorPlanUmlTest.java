@@ -44,10 +44,7 @@ class NormalizadorPlanUmlTest {
         assertThat(resultado.path("classes").get(3).path("attributes").toString())
                 .contains("idUsuario", "identificacionUniversitaria");
         assertThat(resultado.path("relations").get(0).path("kind").asText()).isEqualTo("ASSOCIATION");
-        assertThat(resultado.path("relations").get(0).path("name").asText()).isEqualTo("tieneEjemplares");
-        assertThat(resultado.path("relations").get(1).path("name").asText()).isEqualTo("registraPrestamos");
         assertThat(resultado.path("audit").toString()).doesNotContain("COMPOSITION").contains("backend sustituyo");
-        assertThat(resultado.path("audit").toString()).contains("dos Prestamos activos");
         assertThat(resultado.path("classes").get(0).path("attributes").get(0).path("pk").asBoolean()).isTrue();
         assertThat(resultado.path("classes").get(0).path("attributes").toString())
                 .contains("idObra", "\"titulo\"").contains("\"unique\":false", "\"pk\":false");

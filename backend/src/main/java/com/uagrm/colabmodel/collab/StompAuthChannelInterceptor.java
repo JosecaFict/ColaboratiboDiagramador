@@ -48,8 +48,10 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     private static final Logger log = LoggerFactory.getLogger(StompAuthChannelInterceptor.class);
 
     private static final String UUID_TEXTO = "([0-9a-fA-F-]{36})";
+    // `versions`: el aviso de commit nuevo (ADR-037). `ai`: el historial de la IA
+    // compartido (T-04). Los lee quien lee el diagrama.
     private static final Pattern TOPIC_DE_DIAGRAMA =
-            Pattern.compile("^/topic/diagram/" + UUID_TEXTO + "/(ops|presence|locks)$");
+            Pattern.compile("^/topic/diagram/" + UUID_TEXTO + "/(ops|presence|locks|versions|ai)$");
     private static final Pattern ENVIO_A_DIAGRAMA =
             Pattern.compile("^/app/diagram/" + UUID_TEXTO + "/(op|presence|lock|unlock)$");
 
