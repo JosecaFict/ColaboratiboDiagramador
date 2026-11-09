@@ -339,9 +339,9 @@ class _Aviso extends StatelessWidget {
         color: Colors.amber.shade200,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(children: [
-          const Icon(Icons.cloud_off, size: 16),
+          const Icon(Icons.cloud_off, size: 16, color: Colors.black87),
           const SizedBox(width: 8),
-          Expanded(child: Text(texto, style: const TextStyle(fontSize: 12))),
+          Expanded(child: Text(texto, style: const TextStyle(fontSize: 12, color: Colors.black87))),
         ]),
       );
 }

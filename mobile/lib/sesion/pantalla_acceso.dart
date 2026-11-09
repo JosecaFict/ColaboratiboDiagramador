@@ -111,14 +111,14 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
           width: 72,
           height: 72,
           decoration: BoxDecoration(
-              color: tema.colorScheme.primaryContainer,
+              color: tema.colorScheme.primary,
               borderRadius: BorderRadius.circular(20)),
           child: Icon(Icons.account_tree_outlined,
-              size: 40, color: tema.colorScheme.onPrimaryContainer)),
+              size: 40, color: tema.colorScheme.onPrimary)),
       const SizedBox(height: 12),
       Text('ColabModel',
           style: tema.textTheme.titleMedium
-              ?.copyWith(color: tema.colorScheme.primary)),
+              ?.copyWith(color: tema.colorScheme.onSurface)),
       const SizedBox(height: 4),
       Text(_registro ? 'Crear cuenta' : 'Iniciar sesión',
           style: tema.textTheme.headlineSmall),
