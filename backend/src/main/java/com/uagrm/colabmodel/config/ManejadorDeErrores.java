@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
@@ -73,6 +74,17 @@ public class ManejadorDeErrores {
         log.error("Error de base de datos al atender un pedido", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("mensaje", "El servidor no pudo completar la operación. Probá de nuevo"));
+    }
+
+    /**
+     * Un archivo mas grande que `spring.servlet.multipart.max-file-size`. Sin
+     * esto, Spring lo corta antes del controlador y llega un error generico.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, String>> archivoGrande(MaxUploadSizeExceededException e) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of("mensaje",
+                "El archivo es demasiado grande: el máximo es de 25 MB. Si es un XMI, exportá solo el paquete que"
+                        + " querés importar"));
     }
 
     /** Un id que no es un UUID en la ruta. */
