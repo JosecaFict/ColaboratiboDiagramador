@@ -61,9 +61,12 @@ class BackendFalso {
   ClienteBackend clienteBackend() => ClienteBackend('192.168.0.10:8081', cliente: cliente());
 }
 
-Future<ControladorAsistente> _conectar(BackendFalso b) async {
+/// Sin la confirmacion antes de crear: estas pruebas miran como se interpreta
+/// y se resuelve el pedido. La confirmacion tiene su propio grupo, abajo.
+Future<ControladorAsistente> _conectar(BackendFalso b, {bool confirmar = false}) async {
   final c = b.clienteBackend();
-  return ControladorAsistente(c, await c.cargarManifiesto(), reloj: () => DateTime(2026, 9, 16, 10));
+  return ControladorAsistente(c, await c.cargarManifiesto(),
+      reloj: () => DateTime(2026, 9, 16, 10), confirmarAntesDeCrear: confirmar);
 }
 
 String _ultimo(ControladorAsistente c) => c.mensajes.last.texto;
@@ -357,12 +360,84 @@ void main() {
           'crear préstamo del libro Rayuela al socio Ana con fecha de préstamo hoy');
       await tester.tap(find.byIcon(Icons.send));
       await tester.pumpAndSettle();
+      // Primero repite el pedido y espera el «sí»; recien despues resuelve las referencias.
+      expect(find.textContaining('¿Lo creo?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ActionChip, 'Sí, crear'));
+      await tester.pumpAndSettle();
       expect(find.byType(ActionChip), findsNWidgets(2));
 
       await tester.tap(find.byType(ActionChip).first);
       await tester.pumpAndSettle();
       expect(b.tablas['/api/prestamo'], hasLength(1));
       expect(find.byType(ActionChip), findsNothing);
+    });
+  });
+
+  // Lista del docente, CU-15: la orden se repite para que se confirme ANTES de
+  // enviarla. Dictando, un nombre mal oido se corrige sin tocar el backend.
+  group('controlador: confirmar antes de crear', () {
+    late BackendFalso b;
+    late ControladorAsistente c;
+    setUp(() async {
+      b = BackendFalso('biblioteca');
+      c = await _conectar(b, confirmar: true);
+    });
+
+    bool huboPost() => b.pedidos.any((p) => p.startsWith('POST'));
+
+    test('repite lo que va a crear y no postea hasta el si', () async {
+      await c.enviar('crear socio con nombre Carla Rojas');
+
+      expect(_ultimo(c), startsWith('Voy a crear socio con'));
+      expect(_ultimo(c), contains('Carla Rojas'));
+      expect(_ultimo(c), endsWith('¿Lo creo?'));
+      expect(c.mensajes.last.opciones.map((o) => o.etiqueta), ['Sí, crear', 'No']);
+      expect(huboPost(), isFalse);
+
+      await c.enviar('sí');
+      expect(b.tablas['/api/socio']!.single['nombre'], 'Carla Rojas');
+      expect(_ultimo(c), startsWith('Listo, creé socio'));
+    });
+
+    test('vale decirlo de otra forma, como al dictar', () async {
+      await c.enviar('crear socio con nombre Carla Rojas');
+      await c.enviar('dale');
+      expect(b.tablas['/api/socio'], hasLength(1));
+    });
+
+    test('con un no no crea nada y lo dice', () async {
+      await c.enviar('crear socio con nombre Carla Roja');
+      await c.enviar('no');
+
+      expect(huboPost(), isFalse);
+      expect(_ultimo(c), startsWith('No creé nada'));
+    });
+
+    test('tocar la opcion equivale a decirla', () async {
+      await c.enviar('crear socio con nombre Carla Rojas');
+      await c.elegir(c.mensajes.last.opciones.first);
+      expect(b.tablas['/api/socio'], hasLength(1));
+    });
+
+    test('un pedido nuevo en vez de contestar deja el anterior sin crear', () async {
+      await c.enviar('crear socio con nombre Carla Rojas');
+      await c.enviar('listar socios');
+
+      expect(huboPost(), isFalse);
+      expect(_ultimo(c), contains('No hay socio'));
+    });
+
+    test('listar no pregunta: no cambia nada', () async {
+      b.sembrar('/api/socio', {'nombre': 'Ana'});
+      await c.enviar('listar socios');
+      expect(_ultimo(c), startsWith('Socio (1):'));
+    });
+
+    test('las referencias se leen como se dijeron, antes de buscarlas', () async {
+      await c.enviar('crear préstamo del libro Rayuela al socio Ana con fecha de préstamo hoy');
+      expect(_ultimo(c), contains('«Rayuela»'));
+      expect(_ultimo(c), contains('«Ana»'));
+      expect(huboPost(), isFalse);
     });
   });
 
@@ -376,11 +451,14 @@ void main() {
       voz = VozFalsa();
     });
 
-    Future<void> conectar(WidgetTester tester, {http.Client? cliente}) async {
+    /// Estas pruebas miran el dictado y que cada frase se envie una sola vez;
+    /// la confirmacion antes de crear se apaga salvo que la prueba la pida.
+    Future<void> conectar(WidgetTester tester, {http.Client? cliente, bool confirmar = false}) async {
       await tester.pumpWidget(MaterialApp(
         home: PantallaAsistente(
           fabricaCliente: (h) => ClienteBackend(h, cliente: cliente ?? b.cliente()),
           reconocedorVoz: voz,
+          confirmarAntesDeCrear: confirmar,
         ),
       ));
       await tester.enterText(find.byType(TextField), 'h:1');
@@ -498,6 +576,26 @@ void main() {
       expect(posts(b), 1);
       expect(b.tablas['/api/socio'], hasLength(1));
       expect(find.text(frase), findsOneWidget, reason: 'una sola burbuja del usuario');
+    });
+
+    testWidgets('la orden dictada se confirma tambien dictando, y se postea una vez', (tester) async {
+      await conectar(tester, confirmar: true);
+      Future<void> dictarYEnviar(String texto) async {
+        await tester.tap(find.byTooltip('Dictar'));
+        await tester.pump();
+        voz.parcial(texto);
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.send));
+        await tester.pumpAndSettle();
+      }
+
+      await dictarYEnviar(frase);
+      expect(find.textContaining('¿Lo creo?'), findsOneWidget);
+      expect(posts(b), 0, reason: 'nada se postea antes del sí');
+
+      await dictarYEnviar('sí');
+      expect(posts(b), 1);
+      expect(b.tablas['/api/socio']!.single['nombre'], 'Ana Pérez');
     });
 
     testWidgets('Enter del teclado durante el dictado tambien envia una sola vez', (tester) async {

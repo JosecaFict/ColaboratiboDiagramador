@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { CLAVE_DE_SESION, almacenDeSesion, borrarSesion, guardarSesion, leerSesion, type Almacen } from './sesion'
+import {
+  CLAVE_DE_SESION, almacenDeSesion, avisarCierreAlServidor, borrarSesion, guardarSesion, leerSesion, type Almacen,
+} from './sesion'
 
 /** Un almacen en memoria: lo minimo de `Storage`. */
 function almacen(): Almacen & { datos: Map<string, string> } {
@@ -73,5 +75,26 @@ describe('sesion', () => {
   it('en un entorno sin navegador no hay almacen', () => {
     // Estas pruebas corren en Node: no existe `window`.
     expect(almacenDeSesion()).toBeNull()
+  })
+
+  it('cerrar sesion se lo avisa al servidor con el token que se cierra', async () => {
+    const llamadas: [string, RequestInit | undefined][] = []
+    const base = (async (url: string, init?: RequestInit) => {
+      llamadas.push([url, init])
+      return new Response(null, { status: 204 })
+    }) as typeof fetch
+
+    await avisarCierreAlServidor('jwt-de-ana', base)
+
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0][0]).toBe('/api/v1/auth/logout')
+    expect(llamadas[0][1]?.method).toBe('POST')
+    expect(llamadas[0][1]?.headers).toEqual({ Authorization: 'Bearer jwt-de-ana' })
+  })
+
+  it('sin red, cerrar sesion igual termina sin error', async () => {
+    const caido = (async () => { throw new TypeError('Failed to fetch') }) as typeof fetch
+
+    await expect(avisarCierreAlServidor('jwt', caido)).resolves.toBeUndefined()
   })
 })

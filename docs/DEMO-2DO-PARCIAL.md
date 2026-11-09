@@ -162,7 +162,7 @@ Swagger está apagado a propósito.
 | 6.1 | Beto | En la app, **Ver diagrama en vivo**: entra con su cuenta en `<IP>:8080` y abre el diagrama del Gimnasio | El diagrama en el teléfono |
 | 6.2 | Ana | En la web mueve una clase o agrega un atributo | Llega solo al teléfono (el visor es solo lectura) |
 | 6.3 | Beto | **Asistente** → dirección `<IP>:8081` (el backend generado) | «Conectado a Gimnasio… puedo crear y listar socio, plan, membresia…» |
-| 6.4 | Beto | Toca el **micrófono** y dice: «crear socio con nombre Carla Rojas» | La frase aparece en el campo y se envía sola; «Listo, creé socio» |
+| 6.4 | Beto | Toca el **micrófono** y dice: «crear socio con nombre Carla Rojas». Cuando el asistente pregunta, dice «sí» | La frase aparece en el campo y se envía sola; el asistente la repite: «Voy a crear socio con nombre Carla Rojas. ¿Lo creo?». Con el «sí», «Listo, creé socio». Nada llega al backend antes de confirmar |
 | 6.5 | Ana | Recarga la consola en la computadora | Carla Rojas está en la lista: **el teléfono habló con el backend generado, no con la herramienta** |
 | 6.6 | Beto | «listar socios» | La lista en el chat |
 

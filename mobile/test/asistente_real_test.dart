@@ -21,7 +21,8 @@ void main() {
   test('crear con referencia por nombre y listar contra el backend generado', () async {
     final cliente = ClienteBackend(url!);
     final manifiesto = await cliente.cargarManifiesto();
-    final c = ControladorAsistente(cliente, manifiesto, reloj: () => DateTime(2026, 9, 16, 10));
+    final c = ControladorAsistente(cliente, manifiesto,
+        reloj: () => DateTime(2026, 9, 16, 10), confirmarAntesDeCrear: false);
     // ignore: avoid_print
     void dicho() => print('  asistente> ${c.mensajes.last.texto.replaceAll('\n', '\n             ')}');
 

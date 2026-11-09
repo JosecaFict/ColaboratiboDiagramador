@@ -4,7 +4,7 @@ import { interpretarAviso, type AvisoDeAcceso } from './auth/avisos'
 import { ErrorDeApi, crearCliente, envolverFetch } from './auth/cliente'
 import { hashDe, parsearHash, proyectoDe, type Ruta } from './auth/ruta'
 import {
-  almacenDeSesion, borrarSesion, guardarSesion, leerSesion, type Sesion,
+  almacenDeSesion, avisarCierreAlServidor, borrarSesion, guardarSesion, leerSesion, type Sesion,
 } from './auth/sesion'
 import { MembresiaClient } from './collab/membresiaClient'
 import { Acceso } from './proyectos/Acceso'
@@ -157,7 +157,13 @@ export default function Raiz() {
 
   const refrescar = () => setRevision((n) => n + 1)
   const abrirProyecto = (id: string) => navegar({ tipo: 'proyecto', proyectoId: id })
-  const alCerrarSesion = () => cerrarSesion(null)
+  // Salir a pedido del usuario cierra la sesion tambien en el servidor. Cuando
+  // la sesion ya vencio (el 401 de arriba) no hay nada que avisar.
+  const alCerrarSesion = () => {
+    const token = sesionRef.current?.token
+    if (token) void avisarCierreAlServidor(token)
+    cerrarSesion(null)
+  }
 
   const abandonar = () => {
     setAvisoDeAcceso(`Abandonaste el proyecto «${detalle?.name ?? ''}».`)

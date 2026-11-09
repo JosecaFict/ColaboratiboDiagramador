@@ -48,7 +48,17 @@ class ControladorAsistente extends ChangeNotifier {
   List<Opcion> _opcionesVigentes = const [];
   Future<void> Function(Opcion)? _alElegir;
 
-  ControladorAsistente(this.cliente, this.manifiesto, {DateTime Function()? reloj})
+  /// Antes de crear, el asistente repite lo que va a crear y espera un «sí».
+  /// Dictando, un nombre mal oído se corrige antes de que llegue al backend.
+  /// Listar no pregunta: no cambia nada.
+  final bool confirmarAntesDeCrear;
+
+  /// Respuestas habladas o escritas que valen por las opciones «sí» y «no».
+  static const _afirmaciones = {'si', 'dale', 'confirmo', 'confirmar', 'ok', 'okey', 'claro', 'crealo', 'hacelo', 'listo'};
+  static const _negaciones = {'no', 'cancelar', 'cancela', 'cancelalo', 'mejor no', 'no gracias'};
+
+  ControladorAsistente(this.cliente, this.manifiesto,
+      {DateTime Function()? reloj, this.confirmarAntesDeCrear = true})
       : _motor = MotorDeIntenciones(manifiesto, reloj: reloj) {
     _decir('Conectado a ${manifiesto.app}. Decime qué necesitás: puedo crear y listar '
         '${_nombresCreables()}.');
@@ -80,7 +90,9 @@ class ControladorAsistente extends ChangeNotifier {
       final alElegir = _alElegir;
       final tocada = _opcionesVigentes
           .where((o) =>
-              normalizar(o.etiqueta) == normalizar(texto) || normalizar(o.valor) == normalizar(texto))
+              normalizar(o.etiqueta) == normalizar(texto) ||
+              normalizar(o.valor) == normalizar(texto) ||
+              _equivale(o.valor, texto))
           .toList();
       if (alElegir != null && tocada.length == 1) {
         await _elegir(tocada.single, alElegir);
@@ -179,6 +191,21 @@ class ControladorAsistente extends ChangeNotifier {
   // --------------------------------------------------------------- ejecutar
 
   Future<void> _ejecutar(Resuelta r) async {
+    if (r.accion != Accion.listar && confirmarAntesDeCrear) {
+      _preguntar('Voy a crear ${r.entidad.label.toLowerCase()} con ${_lectura(r)}. ¿Lo creo?',
+          [Opcion('si', 'Sí, crear'), Opcion('no', 'No')], (o) async {
+        if (o.valor == 'si') {
+          await _ejecutarSinPreguntar(r);
+        } else {
+          _decir('No creé nada. Decime el pedido de nuevo si querés corregir algo.');
+        }
+      });
+      return;
+    }
+    await _ejecutarSinPreguntar(r);
+  }
+
+  Future<void> _ejecutarSinPreguntar(Resuelta r) async {
     try {
       if (r.accion == Accion.listar) {
         await _listar(r.entidad);
@@ -249,6 +276,29 @@ class ControladorAsistente extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- ayudas
+
+  /// «sí», «dale», «confirmo»... valen por la opcion 'si'; «no», «cancelar»... por 'no'.
+  static bool _equivale(String valorDeOpcion, String dicho) {
+    final d = normalizar(dicho);
+    if (valorDeOpcion == 'si') return _afirmaciones.contains(d);
+    if (valorDeOpcion == 'no') return _negaciones.contains(d);
+    return false;
+  }
+
+  /// Lo que se va a crear, leido como se dijo: «nombre Carla Rojas, socio «Ana»».
+  /// Las referencias van con el texto dicho, porque todavia no se resolvieron.
+  String _lectura(Resuelta r) {
+    final partes = <String>[];
+    for (final c in r.entidad.fields) {
+      final v = r.cuerpo[c.name];
+      if (v == null || v is Map || v is List) continue;
+      partes.add('${c.label.toLowerCase()} $v');
+    }
+    for (final ref in r.referencias) {
+      partes.add('${ref.campo.label.toLowerCase()} «${ref.texto}»');
+    }
+    return partes.isEmpty ? 'los datos por defecto' : enumerar(partes, conjuncion: 'y');
+  }
 
   EntityDescriptor? _entidad(String nombre) {
     for (final e in manifiesto.entities) {

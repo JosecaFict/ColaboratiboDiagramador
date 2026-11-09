@@ -73,4 +73,19 @@ public class AuthController {
         }
         return ResponseEntity.ok(new TokenResponse(jwt.emitir(u), u.getId(), u.getFullName()));
     }
+
+    /**
+     * Cierra la sesion EN EL SERVIDOR: el token que viene en Authorization deja
+     * de servir desde ya, en la API y en el WebSocket, aunque alguien lo haya
+     * copiado. Responde 204 siempre, tambien sin token o con uno ya vencido:
+     * cerrar una sesion que no existe no es un error para quien sale.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Void> cerrarSesion(
+            @RequestHeader(name = "Authorization", required = false) String autorizacion) {
+        if (autorizacion != null && autorizacion.startsWith("Bearer ")) {
+            jwt.cerrarSesion(autorizacion.substring(7));
+        }
+        return ResponseEntity.noContent().build();
+    }
 }

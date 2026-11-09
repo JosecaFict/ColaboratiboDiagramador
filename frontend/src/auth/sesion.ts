@@ -67,3 +67,18 @@ export function borrarSesion(almacen: Almacen | null): void {
     /* nada que borrar */
   }
 }
+
+/**
+ * Le avisa al servidor que esta sesion se cierra: desde ahi el token deja de
+ * servir, aunque alguien lo haya copiado (POST /auth/logout). Borrarlo del
+ * navegador solo no alcanzaba: el token seguia valido hasta vencer.
+ *
+ * Nunca falla: si el servidor no responde, salir igual tiene que funcionar.
+ */
+export async function avisarCierreAlServidor(token: string, base: typeof fetch = fetch): Promise<void> {
+  try {
+    await base('/api/v1/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+  } catch {
+    /* sin red: el token vencera solo */
+  }
+}

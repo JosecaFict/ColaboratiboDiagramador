@@ -21,7 +21,11 @@ class PantallaAsistente extends StatefulWidget {
   /// Para pruebas: un reconocedor falso. Por defecto, el del sistema.
   final ReconocedorVoz? reconocedorVoz;
 
-  const PantallaAsistente({super.key, this.fabricaCliente, this.reconocedorVoz});
+  /// Repetir la orden y esperar un «sí» antes de crear. En la app, siempre.
+  final bool confirmarAntesDeCrear;
+
+  const PantallaAsistente(
+      {super.key, this.fabricaCliente, this.reconocedorVoz, this.confirmarAntesDeCrear = true});
 
   @override
   State<PantallaAsistente> createState() => _PantallaAsistenteState();
@@ -72,7 +76,8 @@ class _PantallaAsistenteState extends State<PantallaAsistente> {
       }
       setState(() {
         _cliente = cliente;
-        _controlador = ControladorAsistente(cliente, manifiesto);
+        _controlador = ControladorAsistente(cliente, manifiesto,
+            confirmarAntesDeCrear: widget.confirmarAntesDeCrear);
         _conectando = false;
       });
     } on Exception catch (e) {
