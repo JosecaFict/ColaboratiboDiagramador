@@ -13,7 +13,7 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | colaboratibodiagramador-00 | Claude Code | ? | Libre |
 | a0, b9, bd | Claude Code | — | Sesiones cerradas (D-09). Sus fichas quedan como memoria |
 
-**Turno de máquina (D-07):** ocupado · Claude: backend 8080 (prueba del login en el teléfono) y Vite para revisar T-18.
+**Turno de máquina (D-07):** libre.
 
 ## Tareas
 
@@ -38,6 +38,6 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | T-15a | Editor móvil: canal de escritura, locks, espejo de Command y controlador (D-12) | Alta | Codex | Codex (Herdr `t1q`) | `feat/editor-flutter-canal` | integrada en `main` (`a5730ca`, D-14) |
 | T-15b | Editor móvil: pantallas (menú, paleta, hojas, gestos) (D-12) | Media | Opus | Claude (worktree `project-analysis-comparison`) | `feat/editor-flutter-ui` | integrada en `main` (`a5730ca`, D-14) · probada en el teléfono |
 | T-16 | Versión móvil del editor web (navegador del teléfono) | Media | — | sin asignar | `feat/editor-movil-web` (por crear) | pendiente |
-| T-17 | Login de la app Flutter: crear cuenta, sesión guardada y cerrar sesión | Media | Codex | Codex (Herdr `t1q`) | `feat/login-flutter` (desde `dd05a30`) | integrada en `main` (`a5730ca`, D-14) · falta APK y prueba en el teléfono |
+| T-17 | Login de la app Flutter: crear cuenta, sesión guardada y cerrar sesión | Media | Codex | Codex (Herdr `t1q`) | `feat/login-flutter` (desde `dd05a30`) | integrada en `main` (`a5730ca`) · probada en el teléfono por el usuario · terminada |
 | T-18 | Mejora visual de la web: tema oscuro, menús, panel plegable y pulido (W4, W8, W10) | Media | Codex | Codex (Herdr `t1q`) | `feat/web-visual` (desde `b957c0a`) | integrada en `main` (`610dead`): Generar visible y tema Grafito · aprobada por Claude |
 | T-19 | Asistente móvil: ver, actualizar y borrar con confirmación (M2, M3) | Media | Opus | Claude (worktree `project-analysis-comparison`) | `feat/asistente-crud` | en revisión (`89f6d1f`) · la revisa Codex después de T-05 |
