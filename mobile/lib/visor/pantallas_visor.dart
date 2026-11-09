@@ -14,13 +14,17 @@ class PantallaProyectos extends StatefulWidget {
   final String nombre;
   final VoidCallback? alCerrarSesion;
   final List<ProyectoResumen>? proyectosIniciales;
+
+  /// Si se pasa, la lista ofrece el Asistente con un boton flotante.
+  final void Function(BuildContext)? alAbrirAsistente;
   const PantallaProyectos(
       {super.key,
       required this.cliente,
       required this.almacen,
       required this.nombre,
       this.alCerrarSesion,
-      this.proyectosIniciales});
+      this.proyectosIniciales,
+      this.alAbrirAsistente});
 
   @override
   State<PantallaProyectos> createState() => _PantallaProyectosState();
@@ -55,6 +59,12 @@ class _PantallaProyectosState extends State<PantallaProyectos> {
               icon: const Icon(Icons.logout),
               onPressed: widget.alCerrarSesion)
       ]),
+      floatingActionButton: widget.alAbrirAsistente == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => widget.alAbrirAsistente!(context),
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Asistente')),
       body: FutureBuilder<List<ProyectoResumen>>(
         future: _proyectos,
         builder: (context, s) {
