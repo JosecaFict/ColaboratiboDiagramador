@@ -13,7 +13,7 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | colaboratibodiagramador-00 | Claude Code | ? | Libre |
 | a0, b9, bd | Claude Code | — | Sesiones cerradas (D-09). Sus fichas quedan como memoria |
 
-**Turno de máquina (D-07):** libre.
+**Turno de máquina (D-07):** Claude (worktree `project-analysis-comparison`) · prueba de T-19 en el teléfono (backends 8080 y 8081, Docker).
 
 ## Tareas
 
@@ -41,3 +41,4 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | T-17 | Login de la app Flutter: crear cuenta, sesión guardada y cerrar sesión | Media | Codex | Codex (Herdr `t1q`) | `feat/login-flutter` (desde `dd05a30`) | integrada en `main` (`a5730ca`) · probada en el teléfono por el usuario · terminada |
 | T-18 | Mejora visual de la web: tema oscuro, menús, panel plegable y pulido (W4, W8, W10) | Media | Codex | Codex (Herdr `t1q`) | `feat/web-visual` (desde `b957c0a`) | integrada en `main` (`610dead`): Generar visible y tema Grafito · aprobada por Claude |
 | T-19 | Asistente móvil: ver, actualizar y borrar con confirmación (M2, M3) | Media | Opus | Claude (worktree `project-analysis-comparison`) | `feat/asistente-crud` | aprobada por Codex en `ad156ad` · en `main` (`b76120b`) · falta probarla en el teléfono (APK nuevo) |
+| T-20 | Móvil: tocar un diagrama abre el editor si el rol puede editar | Baja | Opus | Claude (worktree `project-analysis-comparison`) | `feat/toque-abre-editor` | en revisión · hecha en `5d66c9f` · falta la revisión y probarla en el teléfono |
