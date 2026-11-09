@@ -25,7 +25,7 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | T-03b | Proyecto Android y APK | Media | Sonnet | 00 (retoma de b9) | `feat/android-movil` | integrada (`24da966`) |
 | T-03c | Voz en el asistente móvil | Media | Sonnet | 00 | `feat/voz-movil` | integrada (`0d750f6`); repetir en el teléfono el envío automático tras el silencio en T-13 |
 | T-04 | Vista IA: sincronía, marca de aplicada y voz web | Media | Sonnet | líder 99 (D-10) | `feat/ia-voz` | integrada (`f1d846c`); Codex halló 2 P2, se corrigen en T-14 |
-| T-05 | Interoperabilidad XMI con Enterprise Architect sin archivo del docente; cuenta para la nota (D-13) | Media-Alta | Opus | Claude (worktree `project-analysis-comparison`) | `feat/xmi-ea` | integrada en `main` (`e0ff842`, con las 3 correcciones de Codex) · falta la última reevaluación |
+| T-05 | Interoperabilidad XMI con Enterprise Architect sin archivo del docente; cuenta para la nota (D-13) | Media-Alta | Opus | Claude (worktree `project-analysis-comparison`) | `feat/xmi-ea` | **terminada** · aprobada por Codex en `176d8ce` · en `main` (`e0ff842`) |
 | T-06 | Subir `main` a GitHub | Baja | líder | líder | `main` | bloqueada (falta autorización del usuario) |
 | T-07 | Evaluación conjunta del proyecto | Alta | líder + colíder | líder y colíder | `main` | terminada: D-04 y D-05 aprobadas; D-02 acordada con condiciones |
 | T-08 | README y SAD al día con el estado real | Baja | líder (redacta 00) | 00 | `docs/estado-2do-parcial` | integrada (`fef6395`); se actualizan las filas al integrar T-03c, T-09, T-10 y T-11 |
@@ -40,4 +40,4 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | T-16 | Versión móvil del editor web (navegador del teléfono) | Media | — | sin asignar | `feat/editor-movil-web` (por crear) | pendiente |
 | T-17 | Login de la app Flutter: crear cuenta, sesión guardada y cerrar sesión | Media | Codex | Codex (Herdr `t1q`) | `feat/login-flutter` (desde `dd05a30`) | integrada en `main` (`a5730ca`) · probada en el teléfono por el usuario · terminada |
 | T-18 | Mejora visual de la web: tema oscuro, menús, panel plegable y pulido (W4, W8, W10) | Media | Codex | Codex (Herdr `t1q`) | `feat/web-visual` (desde `b957c0a`) | integrada en `main` (`610dead`): Generar visible y tema Grafito · aprobada por Claude |
-| T-19 | Asistente móvil: ver, actualizar y borrar con confirmación (M2, M3) | Media | Opus | Claude (worktree `project-analysis-comparison`) | `feat/asistente-crud` | en revisión (`89f6d1f`) · la revisa Codex después de T-05 |
+| T-19 | Asistente móvil: ver, actualizar y borrar con confirmación (M2, M3) | Media | Opus | Claude (worktree `project-analysis-comparison`) | `feat/asistente-crud` | en revisión · correcciones de Codex en `5d141b2` · falta la reevaluación |
