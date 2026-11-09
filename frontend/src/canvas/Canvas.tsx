@@ -30,7 +30,7 @@ interface Props {
   centrar?: { id: string; n: number } | null
 }
 
-const COLOR_RESALTE = { agregado: '#16a34a', eliminado: '#dc2626', modificado: '#d97706' } as const
+const COLOR_RESALTE = { agregado: 'var(--verde)', eliminado: 'var(--rojo-vivo)', modificado: 'var(--ambar-vivo)' } as const
 
 export type NotacionCardinalidad = 'UML' | 'CHEN'
 
@@ -801,22 +801,22 @@ export function Canvas({
           {/* Generalizacion: triangulo HUECO. UML no usa punta rellena aca. */}
           <marker id="triangulo-hueco" markerWidth="14" markerHeight="12" refX="13" refY="6"
                   orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0,0 L13,6 L0,12 z" fill="#fff" stroke="#475569" strokeWidth={1.4} />
+            <path d="M0,0 L13,6 L0,12 z" fill="var(--panel)" stroke="var(--secundario)" strokeWidth={1.4} />
           </marker>
           {/* Dependencia: punta abierta, sin relleno ni base. */}
           <marker id="flecha-abierta" markerWidth="14" markerHeight="12" refX="12" refY="6"
                   orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0,0 L12,6 L0,12" fill="none" stroke="#475569" strokeWidth={1.4} />
+            <path d="M0,0 L12,6 L0,12" fill="none" stroke="var(--secundario)" strokeWidth={1.4} />
           </marker>
           {/* Agregacion: rombo hueco del lado del TODO. */}
           <marker id="rombo-hueco" markerWidth="20" markerHeight="12" refX="1" refY="6"
                   orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0,6 L9,0 L18,6 L9,12 z" fill="#fff" stroke="#475569" strokeWidth={1.4} />
+            <path d="M0,6 L9,0 L18,6 L9,12 z" fill="var(--panel)" stroke="var(--secundario)" strokeWidth={1.4} />
           </marker>
           {/* Composicion: el mismo rombo, relleno. */}
           <marker id="rombo-relleno" markerWidth="20" markerHeight="12" refX="1" refY="6"
                   orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0,6 L9,0 L18,6 L9,12 z" fill="#475569" stroke="#475569" strokeWidth={1.4} />
+            <path d="M0,6 L9,0 L18,6 L9,12 z" fill="var(--secundario)" stroke="var(--secundario)" strokeWidth={1.4} />
           </marker>
         </defs>
 
@@ -847,7 +847,7 @@ export function Canvas({
           return (
             <g key={r.id} className={onSelectRelation ? 'relacion' : undefined}>
               <polyline points={trazo} fill="none"
-                        stroke={elegida ? '#1d4ed8' : resaltados?.[r.id] ? COLOR_RESALTE[resaltados[r.id]] : '#64748b'}
+                        stroke={elegida ? 'var(--acento)' : resaltados?.[r.id] ? COLOR_RESALTE[resaltados[r.id]] : 'var(--tenue)'}
                         strokeWidth={elegida || resaltados?.[r.id] ? 2.5 : total && view === 'CHEN' ? 3 : 1.5}
                         strokeDasharray={n.punteada ? '6 4' : undefined}
                         markerStart={n.inicio} markerEnd={n.fin} />
@@ -878,10 +878,10 @@ export function Canvas({
                 <>
                   {/* rombo ER (no confundir con el de agregacion); doble si identifica */}
                   <polygon points={`${m.x},${m.y - 22} ${m.x + 42},${m.y} ${m.x},${m.y + 22} ${m.x - 42},${m.y}`}
-                           fill="#fff" stroke="#475569" strokeWidth={1.5} />
+                           fill="var(--panel)" stroke="var(--secundario)" strokeWidth={1.5} />
                   {r.identifying && (
                     <polygon points={`${m.x},${m.y - 16} ${m.x + 32},${m.y} ${m.x},${m.y + 16} ${m.x - 32},${m.y}`}
-                             fill="none" stroke="#475569" strokeWidth={1.2} />
+                             fill="none" stroke="var(--secundario)" strokeWidth={1.2} />
                   )}
                   {r.name && (
                     <text x={m.x} y={m.y + 4} textAnchor="middle" className="txt-rel">{r.name}</text>
@@ -907,7 +907,7 @@ export function Canvas({
         {/* Conector elastico mientras se arrastra una relacion nueva. */}
         {conector && (
           <line x1={conector.desde.x} y1={conector.desde.y} x2={conector.hasta.x} y2={conector.hasta.y}
-                stroke="#1d4ed8" strokeWidth={1.8} strokeDasharray="5 4" pointerEvents="none" />
+                stroke="var(--acento)" strokeWidth={1.8} strokeDasharray="5 4" pointerEvents="none" />
         )}
 
         {/* ---------------- ENTIDADES ---------------- */}
@@ -927,13 +927,13 @@ export function Canvas({
                   if (!p) return null
                   return (
                     <g key={a.id}>
-                      <line x1={cen.x} y1={cen.y} x2={p.x} y2={p.y} stroke="#94a3b8" strokeWidth={1} />
+                      <line x1={cen.x} y1={cen.y} x2={p.x} y2={p.y} stroke="var(--tenue)" strokeWidth={1} />
                       <ellipse cx={p.x} cy={p.y} rx={46} ry={19}
-                               fill="#fff" stroke="#475569"
+                               fill="var(--panel)" stroke="var(--secundario)"
                                strokeWidth={a.multivalued ? 3 : 1.4}
                                strokeDasharray={a.derived ? '5 3' : undefined} />
                       {a.multivalued && (
-                        <ellipse cx={p.x} cy={p.y} rx={41} ry={15} fill="none" stroke="#475569" strokeWidth={1.1} />
+                        <ellipse cx={p.x} cy={p.y} rx={41} ry={15} fill="none" stroke="var(--secundario)" strokeWidth={1.1} />
                       )}
                       <text x={p.x} y={p.y + 4} textAnchor="middle"
                             className={a.pk ? 'txt-attr clave' : a.partialKey ? 'txt-attr clave-parcial' : 'txt-attr'}>
@@ -943,10 +943,10 @@ export function Canvas({
                   )
                 })}
                 <rect x={l.x} y={l.y} width={l.width} height={l.height} rx={3}
-                      fill="#f8fafc" stroke={bloqueadaPor ? '#dc2626' : '#334155'} strokeWidth={2} />
+                      fill="var(--suave)" stroke={bloqueadaPor ? 'var(--rojo-vivo)' : 'var(--secundario)'} strokeWidth={2} />
                 {c.weak && (
                   <rect x={l.x + 5} y={l.y + 5} width={l.width - 10} height={l.height - 10} rx={2}
-                        fill="none" stroke="#334155" strokeWidth={1.2} />
+                        fill="none" stroke="var(--secundario)" strokeWidth={1.2} />
                 )}
                 <text x={cen.x} y={cen.y + 5} textAnchor="middle" className="txt-entidad">{c.name}</text>
                 {bloqueadaPor && (
@@ -973,8 +973,8 @@ export function Canvas({
                 </rect>
               )}
               <rect x={l.x} y={l.y} width={l.width} height={alto} rx={3}
-                    fill="#fff" stroke={bloqueadaPor ? '#dc2626' : '#334155'} strokeWidth={2} />
-              <rect x={l.x} y={l.y} width={l.width} height={28} rx={3} fill="#e2e8f0" />
+                    fill="var(--panel)" stroke={bloqueadaPor ? 'var(--rojo-vivo)' : 'var(--secundario)'} strokeWidth={2} />
+              <rect x={l.x} y={l.y} width={l.width} height={28} rx={3} fill="var(--elevado)" />
               {c.stereotype && (
                 <text x={l.x + l.width / 2} y={l.y + 11} textAnchor="middle" className="txt-estereotipo">
                   «{c.stereotype}»
@@ -982,7 +982,7 @@ export function Canvas({
               )}
               <text x={l.x + l.width / 2} y={l.y + (c.stereotype ? 23 : 19)} textAnchor="middle"
                     className={c.isAbstract ? 'txt-entidad abstracta' : 'txt-entidad'}>{c.name}</text>
-              <line x1={l.x} y1={l.y + 28} x2={l.x + l.width} y2={l.y + 28} stroke="#334155" />
+              <line x1={l.x} y1={l.y + 28} x2={l.x + l.width} y2={l.y + 28} stroke="var(--secundario)" />
               {c.attributes.map((a, i) => (
                 <text key={a.id} x={l.x + 10} y={l.y + 46 + i * 18} className="txt-attr">
                   {/* Un literal de enumeracion no lleva visibilidad ni tipo. */}
@@ -991,7 +991,7 @@ export function Canvas({
               ))}
               {c.methods.length > 0 && !esEnum && (
                 <>
-                  <line x1={l.x} y1={yMetodos} x2={l.x + l.width} y2={yMetodos} stroke="#334155" />
+                  <line x1={l.x} y1={yMetodos} x2={l.x + l.width} y2={yMetodos} stroke="var(--secundario)" />
                   {c.methods.map((m, i) => {
                     const firma = firmaDeMetodo(m)
                     return (

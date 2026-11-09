@@ -9,13 +9,13 @@
 export function Logo({ tamano = 30 }: { tamano?: number }) {
   return (
     <svg width={tamano} height={tamano} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <rect width="32" height="32" rx="8" fill="#1d4ed8" />
+      <rect width="32" height="32" rx="8" fill="var(--acento)" />
       {/* Dos clases y la relacion que las une. */}
-      <rect x="5" y="6" width="12" height="9" rx="1.5" fill="#fff" />
-      <rect x="5" y="6" width="12" height="3" rx="1.5" fill="#bfdbfe" />
-      <rect x="15" y="18" width="12" height="8" rx="1.5" fill="#fff" />
-      <rect x="15" y="18" width="12" height="3" rx="1.5" fill="#bfdbfe" />
-      <path d="M11 15v5.5a1.5 1.5 0 0 0 1.5 1.5H15" fill="none" stroke="#bfdbfe" strokeWidth="1.6" />
+      <rect x="5" y="6" width="12" height="9" rx="1.5" fill="var(--panel)" />
+      <rect x="5" y="6" width="12" height="3" rx="1.5" fill="var(--acento-linea)" />
+      <rect x="15" y="18" width="12" height="8" rx="1.5" fill="var(--panel)" />
+      <rect x="15" y="18" width="12" height="3" rx="1.5" fill="var(--acento-linea)" />
+      <path d="M11 15v5.5a1.5 1.5 0 0 0 1.5 1.5H15" fill="none" stroke="var(--acento-linea)" strokeWidth="1.6" />
     </svg>
   )
 }
@@ -24,9 +24,9 @@ export function Logo({ tamano = 30 }: { tamano?: number }) {
 function Cursor({ x, y, color, nombre }: { x: number; y: number; color: string; nombre: string }) {
   return (
     <g transform={`translate(${x} ${y})`}>
-      <path d="M0 0v15.5l4.2-3.6 3 6.7 2.6-1.2-3-6.5h5.6z" fill={color} stroke="#0f172a" strokeWidth="0.8" />
+      <path d="M0 0v15.5l4.2-3.6 3 6.7 2.6-1.2-3-6.5h5.6z" fill={color} stroke="var(--texto)" strokeWidth="0.8" />
       <rect x="11" y="13" width={nombre.length * 6.4 + 14} height="17" rx="8.5" fill={color} />
-      <text x="18" y="25" fontSize="10.5" fontWeight="600" fill="#fff">{nombre}</text>
+      <text x="18" y="25" fontSize="10.5" fontWeight="600" fill="var(--panel)">{nombre}</text>
     </g>
   )
 }
@@ -37,12 +37,12 @@ function Clase({ x, y, ancho, nombre, atributos }: {
   const alto = 30 + atributos.length * 17 + 8
   return (
     <g transform={`translate(${x} ${y})`}>
-      <rect width={ancho} height={alto} rx="6" fill="#f8fafc" stroke="#94a3b8" />
-      <path d={`M0 6a6 6 0 0 1 6-6h${ancho - 12}a6 6 0 0 1 6 6v18H0z`} fill="#dbeafe" />
-      <line x1="0" y1="24" x2={ancho} y2="24" stroke="#94a3b8" />
-      <text x={ancho / 2} y="17" fontSize="12" fontWeight="700" fill="#1e3a8a" textAnchor="middle">{nombre}</text>
+      <rect width={ancho} height={alto} rx="6" fill="var(--suave)" stroke="var(--tenue)" />
+      <path d={`M0 6a6 6 0 0 1 6-6h${ancho - 12}a6 6 0 0 1 6 6v18H0z`} fill="var(--acento-fondo)" />
+      <line x1="0" y1="24" x2={ancho} y2="24" stroke="var(--tenue)" />
+      <text x={ancho / 2} y="17" fontSize="12" fontWeight="700" fill="var(--acento)" textAnchor="middle">{nombre}</text>
       {atributos.map((a, i) => (
-        <text key={a} x="10" y={41 + i * 17} fontSize="10.5" fill="#334155" fontFamily="ui-monospace, monospace">{a}</text>
+        <text key={a} x="10" y={41 + i * 17} fontSize="10.5" fill="var(--secundario)" fontFamily="ui-monospace, monospace">{a}</text>
       ))}
     </g>
   )
@@ -55,13 +55,13 @@ export function Ilustracion() {
       <Clase x={226} y={140} ancho={152} nombre="Ejemplar" atributos={['- codigo: string', '- estado: Estado']} />
 
       {/* Composicion: rombo relleno del lado del todo, 1 a 0..* */}
-      <path d="M200 112H210V168H226" fill="none" stroke="#cbd5e1" strokeWidth="1.6" />
-      <path d="M180 112l10-6 10 6-10 6z" fill="#cbd5e1" />
-      <text x="205" y="104" fontSize="10" fill="#93c5fd">1</text>
-      <text x="196" y="184" fontSize="10" fill="#93c5fd">0..*</text>
+      <path d="M200 112H210V168H226" fill="none" stroke="var(--linea)" strokeWidth="1.6" />
+      <path d="M180 112l10-6 10 6-10 6z" fill="var(--linea)" />
+      <text x="205" y="104" fontSize="10" fill="var(--acento)">1</text>
+      <text x="196" y="184" fontSize="10" fill="var(--acento)">0..*</text>
 
-      <Cursor x={150} y={26} color="#16a34a" nombre="Ana" />
-      <Cursor x={312} y={112} color="#d97706" nombre="Beto" />
+      <Cursor x={150} y={26} color="var(--verde)" nombre="Ana" />
+      <Cursor x={312} y={112} color="var(--ambar-vivo)" nombre="Beto" />
     </svg>
   )
 }
