@@ -81,7 +81,13 @@ class ClienteStomp implements AutoCloseable {
 
     @Override
     public void close() {
-        if (sesion.isConnected()) sesion.disconnect();
+        // El servidor puede cerrar la sesion (p. ej. tras rechazar un SUBSCRIBE) entre
+        // isConnected() y disconnect(): esa carrera no es un fallo de la prueba.
+        try {
+            if (sesion.isConnected()) sesion.disconnect();
+        } catch (org.springframework.messaging.MessageDeliveryException yaCerrada) {
+            // la sesion ya estaba cerrada
+        }
         cliente.stop();
     }
 }
