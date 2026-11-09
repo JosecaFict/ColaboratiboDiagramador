@@ -242,4 +242,53 @@ class CorpusEnterpriseArchitectTest {
                 .isEqualTo(new ModeloLeido.Posicion(40, 420, 160, 70));
         assertThat(nombres(m)).doesNotContain("EARootClass", "String", "int");
     }
+
+    // ================================ revision de Codex (RevisionT05BordesTest)
+
+    private static ModeloLeido leerTexto(String cuerpo) {
+        return new LectorXmi().leer(("<xmi:XMI xmlns:xmi=\"http://schema.omg.org/spec/XMI/2.1\" "
+                + "xmlns:uml=\"http://schema.omg.org/spec/UML/2.1\" xmi:version=\"2.1\">"
+                + cuerpo + "</xmi:XMI>").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void un_datatype_primitivo_sin_atributos_deja_mandar_el_tipo_y_largo_de_ea() {
+        ModeloLeido m = leerTexto("""
+            <uml:Model xmi:id="m">
+              <packagedElement xmi:type="uml:DataType" xmi:id="str" name="String"/>
+              <packagedElement xmi:type="uml:Class" xmi:id="c" name="Cliente">
+                <ownedAttribute xmi:type="uml:Property" xmi:id="a" name="nombre" type="str"/>
+              </packagedElement>
+            </uml:Model>
+            <xmi:Extension extender="Enterprise Architect"><elements>
+              <element xmi:idref="c"><attributes>
+                <attribute xmi:idref="a" name="nombre"><properties type="varchar" length="80"/></attribute>
+              </attributes></element>
+            </elements></xmi:Extension>
+            """);
+        assertThat(m.clases()).hasSize(1);
+        assertThat(m.clases().get(0).atributos().get(0).tipoLeido()).isEqualTo("varchar(80)");
+    }
+
+    @Test
+    void una_interfaz_con_una_sobrecarga_transfiere_las_dos_firmas() {
+        ModeloLeido m = leerTexto("""
+            <uml:Model xmi:id="m">
+              <packagedElement xmi:type="uml:Interface" xmi:id="i" name="Pagable">
+                <ownedOperation xmi:id="o1" name="pagar">
+                  <ownedParameter xmi:id="p1" name="valor" type="EAJava_int" direction="in"/>
+                </ownedOperation>
+                <ownedOperation xmi:id="o2" name="pagar">
+                  <ownedParameter xmi:id="p2" name="valor" type="EAJava_String" direction="in"/>
+                </ownedOperation>
+              </packagedElement>
+              <packagedElement xmi:type="uml:Class" xmi:id="c" name="Pedido"/>
+              <packagedElement xmi:type="uml:Realization" xmi:id="r" client="c" supplier="i"/>
+            </uml:Model>
+            """);
+        assertThat(m.clases()).hasSize(1);
+        assertThat(m.clases().get(0).metodos())
+                .extracting(x -> x.parametros().get(0).tipo()).containsExactly("int", "String");
+        assertThat(m.advertencias()).anyMatch(a -> a.contains("pagar(int), pagar(string)"));
+    }
 }

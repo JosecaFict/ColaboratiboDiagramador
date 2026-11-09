@@ -83,6 +83,17 @@ describe('planDeImportacion', () => {
     expect(nombre.payload).not.toHaveProperty('defaultValue')
   })
 
+  it('los metodos se comparan por firma: una sobrecarga entra, la misma firma no (T-05)', () => {
+    const p = propuesta()
+    const metodo = (nombre: string, tipo: string) =>
+      ({ nombre, tipoRetorno: 'void', parametros: [{ nombre: 'valor', tipo }], yaExiste: false })
+    p.clases[0].metodos.push(metodo('pagar', 'int'), metodo('pagar', 'string'), metodo('pagar', 'int'))
+    const plan = planDeImportacion(revisionDe(p), estadoVacio('d'), nuevoId)
+    const pagos = plan.comandos.filter((c) => c.type === 'ADD_METHOD' && c.payload.name === 'pagar')
+    expect(pagos.map((c) => (c.payload.params as { type: string }[])[0].type)).toEqual(['int', 'string'])
+    expect(plan.avisos.some((a) => a.includes('pagar(int) ya existe'))).toBe(true)
+  })
+
   it('las clases van antes que los atributos que las usan', () => {
     const tipos = planDeImportacion(revisionDe(propuesta()), estadoVacio('d'), nuevoId).comandos.map((c) => c.type)
     expect(tipos.indexOf('ADD_ATTRIBUTE')).toBeGreaterThan(tipos.lastIndexOf('CREATE_CLASS'))
