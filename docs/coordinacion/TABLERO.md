@@ -25,7 +25,7 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | T-03b | Proyecto Android y APK | Media | Sonnet | 00 (retoma de b9) | `feat/android-movil` | integrada (`24da966`) |
 | T-03c | Voz en el asistente móvil | Media | Sonnet | 00 | `feat/voz-movil` | integrada (`0d750f6`); repetir en el teléfono el envío automático tras el silencio en T-13 |
 | T-04 | Vista IA: sincronía, marca de aplicada y voz web | Media | Sonnet | líder 99 (D-10) | `feat/ia-voz` | integrada (`f1d846c`); Codex halló 2 P2, se corrigen en T-14 |
-| T-05 | Interoperabilidad XMI con Enterprise Architect sin archivo del docente; cuenta para la nota (D-13) | Media-Alta | Opus | Claude (worktree `project-analysis-comparison`) | `feat/xmi-ea` | en revisión (`980deb3`) · `mvn test` completo en verde · falta revisión |
+| T-05 | Interoperabilidad XMI con Enterprise Architect sin archivo del docente; cuenta para la nota (D-13) | Media-Alta | Opus | Claude (worktree `project-analysis-comparison`) | `feat/xmi-ea` | integrada en `main` (`5f33c42`, D-14) · falta la revisión de Codex |
 | T-06 | Subir `main` a GitHub | Baja | líder | líder | `main` | bloqueada (falta autorización del usuario) |
 | T-07 | Evaluación conjunta del proyecto | Alta | líder + colíder | líder y colíder | `main` | terminada: D-04 y D-05 aprobadas; D-02 acordada con condiciones |
 | T-08 | README y SAD al día con el estado real | Baja | líder (redacta 00) | 00 | `docs/estado-2do-parcial` | integrada (`fef6395`); se actualizan las filas al integrar T-03c, T-09, T-10 y T-11 |
@@ -35,8 +35,8 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | T-12 | Consola del backend generado: CRUD completo para cualquier dominio | Media | Sonnet | 00 (después de T-03c) | `feat/consola-generada` | integrada (`8b63ab0`); aprobada también por Codex |
 | T-13 | Ensayo general de la demo, de punta a punta | Media | Opus | líder + usuario | `main` | pendiente: listo para ensayar (todo integrado); necesita al usuario |
 | T-14 | Vista IA: dos correcciones de T-04 (historial atrasado y doble aplicar) | Media | Sonnet | be (junto con T-10) | `feat/ia-chat-grupal` | integrada (`8213dfa`) |
-| T-15a | Editor móvil: canal de escritura, locks, espejo de Command y controlador (D-12) | Alta | Codex | Codex (Herdr `t1q`) | `feat/editor-flutter-canal` | revisada y aprobada por Claude · unida en `feat/editor-flutter-ui` |
-| T-15b | Editor móvil: pantallas (menú, paleta, hojas, gestos) (D-12) | Media | Opus | Claude (worktree `project-analysis-comparison`) | `feat/editor-flutter-ui` | aprobada por Codex en `dd05a30` (con T-15a unida) · probada en el teléfono por el usuario · lista para integrar |
+| T-15a | Editor móvil: canal de escritura, locks, espejo de Command y controlador (D-12) | Alta | Codex | Codex (Herdr `t1q`) | `feat/editor-flutter-canal` | integrada en `main` (`a5730ca`, D-14) |
+| T-15b | Editor móvil: pantallas (menú, paleta, hojas, gestos) (D-12) | Media | Opus | Claude (worktree `project-analysis-comparison`) | `feat/editor-flutter-ui` | integrada en `main` (`a5730ca`, D-14) · probada en el teléfono |
 | T-16 | Versión móvil del editor web (navegador del teléfono) | Media | — | sin asignar | `feat/editor-movil-web` (por crear) | pendiente |
-| T-17 | Login de la app Flutter: crear cuenta, sesión guardada y cerrar sesión | Media | Codex | Codex (Herdr `t1q`) | `feat/login-flutter` (desde `dd05a30`) | revisada y aprobada por Claude (`83c2601`) · falta APK y prueba en el teléfono |
-| T-18 | Mejora visual de la web: tema oscuro, menús, panel plegable y pulido (W4, W8, W10) | Media | Codex | Codex (Herdr `t1q`) | `feat/web-visual` (desde `b957c0a`) | revisada y aprobada por Claude (`8de0b84`) con 4 observaciones menores · capturas en `evidencia-t18` |
+| T-17 | Login de la app Flutter: crear cuenta, sesión guardada y cerrar sesión | Media | Codex | Codex (Herdr `t1q`) | `feat/login-flutter` (desde `dd05a30`) | integrada en `main` (`a5730ca`, D-14) · falta APK y prueba en el teléfono |
+| T-18 | Mejora visual de la web: tema oscuro, menús, panel plegable y pulido (W4, W8, W10) | Media | Codex | Codex (Herdr `t1q`) | `feat/web-visual` (desde `b957c0a`) | integrada en `main` (`6b55502`, D-14) · Codex suma el botón de Generar y el tema Grafito (otro merge) |
