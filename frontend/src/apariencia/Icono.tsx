@@ -1,4 +1,4 @@
-﻿export type NombreIcono = 'sol' | 'luna' | 'deshacer' | 'rehacer' | 'paleta' | 'decision'
+export type NombreIcono = 'sol' | 'luna' | 'deshacer' | 'rehacer' | 'paleta' | 'decision'
 export function Icono({ nombre }: { nombre: NombreIcono }) {
   const caminos: Record<NombreIcono, string> = {
     sol: 'M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4 M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',

@@ -1,4 +1,4 @@
-﻿import { useEffect, useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { guardarTema, leerTema, resolverTema, type PreferenciaTema } from './estado'
 const acceso = () => window.localStorage
 export function iniciarTema() {

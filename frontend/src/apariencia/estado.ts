@@ -1,4 +1,4 @@
-﻿import { permisosDe, type Rol } from '../auth/permisos'
+import { permisosDe, type Rol } from '../auth/permisos'
 export type Tema = 'claro' | 'oscuro'
 export type PreferenciaTema = Tema | 'sistema'
 export const CLAVE_TEMA = 'colabmodel.tema'
@@ -34,6 +34,9 @@ export interface ContextoMenu {
 }
 export function menusPara(rol: Rol | null | undefined, c: ContextoMenu): GrupoMenu[] {
   const p = permisosDe(rol)
+  // Generar el zip y exportar XMI son lecturas del modelo (ADR-022): también para Observador.
+  // Leer el archivo de importación solo propone; aplicarlo escribe por el bus (ADR-016).
+  // Por eso Importar/Desde imagen piden edición. Deshacer/rehacer también escriben (ADR-027).
   const leer = p.leer && c.conectado && c.diagrama
   const escribir = p.editarModelo && leer && c.editable
   return [

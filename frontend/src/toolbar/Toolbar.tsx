@@ -1,4 +1,4 @@
-﻿import { Icono } from '../apariencia/Icono'
+import { Icono } from '../apariencia/Icono'
 interface Props {
   disabled: boolean
   puedeGenerar: boolean

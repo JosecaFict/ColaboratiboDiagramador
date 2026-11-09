@@ -180,7 +180,7 @@ export function PanelPropiedades({
   return (
     <section className="props">
       <div className="props-cabecera">
-        <h3>Propiedades</h3>
+        <h3>{clase.name}</h3>
         <button className="tb-btn tb-icono" onClick={onCerrar} title="Cerrar">✕</button>
       </div>
 
