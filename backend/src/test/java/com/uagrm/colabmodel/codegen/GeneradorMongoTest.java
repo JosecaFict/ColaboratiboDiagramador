@@ -92,6 +92,22 @@ class GeneradorMongoTest {
                 .contains("new DefaultMongoTypeMapper(\"_tipo\", contexto)");
     }
 
+    /**
+     * Probado contra MongoDB 7 real: con dos convertidores propios
+     * BigDecimal <-> Decimal128 el precio se guardaba como TEXTO, y
+     * `sort=precio,desc` daba [2.5, 10]. Spring Data MongoDB 4.5 lo decide con
+     * la opcion `bigDecimal(DECIMAL128)`, no con convertidores.
+     */
+    @Test
+    void los_decimales_se_guardan_como_numero_y_no_como_texto() {
+        String config = tienda().archivos().get(JAVA + "config/MongoConfig.java");
+
+        assertThat(config)
+                .contains("MongoCustomConversions.create(c -> c.bigDecimal(BigDecimalRepresentation.DECIMAL128))")
+                .doesNotContain("implements Converter<BigDecimal, Decimal128>")
+                .doesNotContain("@WritingConverter");
+    }
+
     // ------------------------------------------------------ VISTA DOCUMENTAL
 
     @Test
