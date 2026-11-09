@@ -72,7 +72,7 @@ class ClienteBackend {
     if (r.statusCode < 200 || r.statusCode >= 300) {
       // El cuerpo del error del backend generado es util: dice que campo
       // fallo la validacion. Se lo pasa tal cual en vez de esconderlo.
-      throw BackendException('La API rechazo el alta (HTTP ${r.statusCode}). ${utf8.decode(r.bodyBytes)}');
+      throw BackendException('La API rechazo el alta (HTTP ${r.statusCode}). ${_motivo(r)}');
     }
     final cuerpo = jsonDecode(utf8.decode(r.bodyBytes));
     return cuerpo is Map<String, dynamic> ? cuerpo : <String, dynamic>{};
@@ -93,7 +93,7 @@ class ClienteBackend {
           'Pedímelo de nuevo para trabajar sobre la versión actual.');
     }
     if (r.statusCode < 200 || r.statusCode >= 300) {
-      throw BackendException('La API rechazó el cambio (HTTP ${r.statusCode}). ${utf8.decode(r.bodyBytes)}');
+      throw BackendException('La API rechazó el cambio (HTTP ${r.statusCode}). ${_motivo(r)}');
     }
     final cuerpo = jsonDecode(utf8.decode(r.bodyBytes));
     return cuerpo is Map<String, dynamic> ? cuerpo : <String, dynamic>{};
@@ -104,8 +104,24 @@ class ClienteBackend {
     if (r.statusCode == 404) throw BackendException(_yaNoExiste(entidad));
     if (r.statusCode < 200 || r.statusCode >= 300) {
       // Un 409 al borrar es otra fila que lo usa (una FK): el backend lo explica.
-      throw BackendException('No se pudo borrar (HTTP ${r.statusCode}). ${utf8.decode(r.bodyBytes)}');
+      throw BackendException('No se pudo borrar (HTTP ${r.statusCode}). ${_motivo(r)}');
     }
+  }
+
+  /// El motivo que da el backend generado (`{"error": ...}` o `{"message": ...}`),
+  /// no el JSON crudo. Si no es JSON, el cuerpo tal cual.
+  static String _motivo(http.Response r) {
+    final cuerpo = utf8.decode(r.bodyBytes);
+    try {
+      final j = jsonDecode(cuerpo);
+      if (j is Map) {
+        final m = j['error'] ?? j['message'] ?? j['mensaje'];
+        if (m is String && m.isNotEmpty) return m;
+      }
+    } on FormatException {
+      // no es JSON
+    }
+    return cuerpo;
   }
 
   static String _yaNoExiste(EntityDescriptor entidad) =>

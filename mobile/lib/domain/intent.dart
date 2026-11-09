@@ -520,12 +520,14 @@ class MotorDeIntenciones {
   /// Null si no se nombro ninguno ("mostrame los libros").
   String? _nombreDelRegistro(String texto, List<Token> tokens, int desde, int hasta) {
     var a = desde, b = hasta;
+    // "llamado", "nombre"... solo son relleno si despues viene el nombre: en
+    // "borrá el producto Nombre" el registro SE LLAMA "Nombre".
     while (a < b &&
         (tokens[a].signo ||
             (!tokens[a].citado &&
                 (_determinantes.contains(tokens[a].norma) ||
                     _delimitadoresDebiles.contains(tokens[a].norma) ||
-                    _antesDelNombre.contains(tokens[a].norma))))) {
+                    (_antesDelNombre.contains(tokens[a].norma) && a < b - 1))))) {
       a++;
     }
     while (b > a && (tokens[b - 1].signo || (!tokens[b - 1].citado && _esDelimitador(tokens[b - 1])))) {

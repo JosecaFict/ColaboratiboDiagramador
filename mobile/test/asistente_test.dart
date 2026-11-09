@@ -373,6 +373,14 @@ void main() {
       expect(_ultimo(c), contains('ya no existe'));
     });
 
+    test('borrar algo que otra tabla usa: el 409 se explica con el motivo del backend', () async {
+      sembrarLibros();
+      await c.enviar('borrá el libro Rayuela');
+      b.errorEnCambio = (estado: 409, cuerpo: '{"error":"Prestamo.libro todavia lo referencia","errores":{}}');
+      await c.enviar('sí');
+      expect(_ultimo(c), 'No se pudo borrar (HTTP 409). Prestamo.libro todavia lo referencia');
+    });
+
     test('cancelar con un pedido a medias lo corta y lo dice', () async {
       await c.enviar('crear libro con título Rayuela');
       await c.enviar('cancelar');

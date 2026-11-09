@@ -377,6 +377,8 @@ void main() {
         ('eliminar socio Ana', 'Ana'),
         ('dar de baja al socio Ana Pérez', 'Ana Pérez'),
         ('quitá el préstamo del 12', '12'),
+        ('borrá el libro Nombre', 'Nombre'),
+        ('borrá el socio llamado Ana', 'Ana'),
       ]) {
         final r = _es<Resuelta>(motor.interpretar(frase));
         expect(r.accion, Accion.borrar, reason: frase);
