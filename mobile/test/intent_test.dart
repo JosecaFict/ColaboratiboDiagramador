@@ -25,7 +25,8 @@ T _es<T>(Interpretacion i) {
 }
 
 String _describir(Interpretacion i) => switch (i) {
-      Resuelta r => 'Resuelta ${r.entidad.name} ${r.cuerpo} refs=${r.referencias.map((x) => '${x.campo.name}:${x.texto}')}',
+      Resuelta r =>
+        'Resuelta ${r.entidad.name} ${r.cuerpo} refs=${r.referencias.map((x) => '${x.campo.name}:${x.texto}')}',
       Incompleta x => 'Incompleta ${x.entidad.name} ${x.cuerpo} falta=${x.faltantes.map((f) => f.name)}',
       Ambigua a => 'Ambigua ${a.clave}: ${a.pregunta} ${a.opciones}',
       Rechazada r => 'Rechazada: ${r.mensaje}',
@@ -34,8 +35,14 @@ String _describir(Interpretacion i) => switch (i) {
     };
 
 const _todos = [
-  '01-uno-a-uno', '02-uno-a-muchos', '03-muchos-a-muchos', '04-herencia',
-  '05-clase-asociativa', '06-nombres-acentos', '07-reflexiva-doble', 'biblioteca',
+  '01-uno-a-uno',
+  '02-uno-a-muchos',
+  '03-muchos-a-muchos',
+  '04-herencia',
+  '05-clase-asociativa',
+  '06-nombres-acentos',
+  '07-reflexiva-doble',
+  'biblioteca',
 ];
 
 void main() {
@@ -54,8 +61,8 @@ void main() {
     });
 
     test('con todo lo obligatorio queda lista para el POST', () {
-      final r = _es<Resuelta>(motor.interpretar(
-          'Creá un libro con título Cien años de soledad, isbn 978-84-376-0494-7 y estado disponible.'));
+      final r = _es<Resuelta>(motor
+          .interpretar('Creá un libro con título Cien años de soledad, isbn 978-84-376-0494-7 y estado disponible.'));
       expect(r.metodo, 'POST');
       expect(r.ruta, '/api/libro');
       expect(r.cuerpo, {
@@ -79,8 +86,8 @@ void main() {
     });
 
     test('un literal de varias palabras y un nombre de campo de varias palabras', () {
-      final r = _es<Resuelta>(motor.interpretar(
-          'crear libro con título Rayuela, isbn 1, estado en préstamo y año de publicación 1963'));
+      final r = _es<Resuelta>(
+          motor.interpretar('crear libro con título Rayuela, isbn 1, estado en préstamo y año de publicación 1963'));
       expect(r.cuerpo['estado'], 'EN_PRESTAMO');
       expect(r.cuerpo['anioPublicacion'], 1963);
     });
@@ -92,13 +99,14 @@ void main() {
     });
 
     test('entre comillas el valor es opaco', () {
-      final r = _es<Resuelta>(motor.interpretar('crear libro con título "El autor y estado" e isbn 9 y estado disponible'));
+      final r =
+          _es<Resuelta>(motor.interpretar('crear libro con título "El autor y estado" e isbn 9 y estado disponible'));
       expect(r.cuerpo['titulo'], 'El autor y estado');
     });
 
     test('referencias dichas por nombre quedan pendientes para resolver contra P2', () {
-      final r = _es<Resuelta>(motor.interpretar(
-          'registrá un préstamo del libro Rayuela al socio Ana Pérez con fecha de préstamo hoy'));
+      final r = _es<Resuelta>(
+          motor.interpretar('registrá un préstamo del libro Rayuela al socio Ana Pérez con fecha de préstamo hoy'));
       expect(r.entidad.name, 'Prestamo');
       expect(r.cuerpo, {'fechaPrestamo': '2026-09-16'});
       expect(r.referencias.map((x) => '${x.campo.name}->${x.entidadDestino}:${x.texto}'),
@@ -231,14 +239,15 @@ void main() {
     final biblioteca = _motor('biblioteca');
 
     test('fuera de rango', () {
-      final r = _es<Rechazada>(biblioteca.interpretar(
-          'crear libro con título X, isbn 1, estado disponible y año de publicación 1200'));
+      final r = _es<Rechazada>(
+          biblioteca.interpretar('crear libro con título X, isbn 1, estado disponible y año de publicación 1200'));
       expect(r.motivos.single.campo!.name, 'anioPublicacion');
       expect(r.mensaje, 'año publicación tiene que ser al menos 1450 y como mucho 2100, y dijiste 1200');
     });
 
     test('bajo el minimo de un decimal', () {
-      final r = _es<Rechazada>(biblioteca.interpretar('crear libro con título X, isbn 1, estado disponible y precio -0,01'));
+      final r =
+          _es<Rechazada>(biblioteca.interpretar('crear libro con título X, isbn 1, estado disponible y precio -0,01'));
       expect(r.mensaje, contains('al menos 0'));
     });
 
@@ -248,8 +257,8 @@ void main() {
     });
 
     test('tipo que no encaja: se juntan todos los motivos', () {
-      final r = _es<Rechazada>(biblioteca.interpretar(
-          'crear libro con título X, isbn 1, estado disponible, año de publicación muchos y precio caro'));
+      final r = _es<Rechazada>(biblioteca
+          .interpretar('crear libro con título X, isbn 1, estado disponible, año de publicación muchos y precio caro'));
       expect(r.motivos.map((m) => m.campo!.name), ['anioPublicacion', 'precio']);
     });
 
@@ -264,28 +273,32 @@ void main() {
     });
 
     test('fecha y hora sin hora', () {
-      final r = _es<Rechazada>(biblioteca.interpretar(
-          'crear préstamo con libro X, socio Ana, fecha préstamo hoy y hora retiro mañana'));
+      final r = _es<Rechazada>(
+          biblioteca.interpretar('crear préstamo con libro X, socio Ana, fecha préstamo hoy y hora retiro mañana'));
       expect(r.mensaje, contains('lleva fecha y hora'));
     });
 
     test('el mismo campo dos veces', () {
-      final r = _es<Rechazada>(biblioteca.interpretar('crear libro con título A, isbn 1, estado disponible y título B'));
+      final r =
+          _es<Rechazada>(biblioteca.interpretar('crear libro con título A, isbn 1, estado disponible y título B'));
       expect(r.mensaje, 'Dijiste título dos veces');
     });
 
     test('pedido: decimal, fecha y hora', () {
       final motor = _motor('02-uno-a-muchos');
-      final ok = _es<Resuelta>(motor.interpretar('crear pedido para el cliente Juan con total 1.500,50 y fecha hoy a las 10'));
+      final ok =
+          _es<Resuelta>(motor.interpretar('crear pedido para el cliente Juan con total 1.500,50 y fecha hoy a las 10'));
       expect(ok.cuerpo, {'total': '1500.5', 'fecha': '2026-09-16T10:00:00'});
       expect(ok.referencias.single.texto, 'Juan');
 
-      final mal = _es<Rechazada>(motor.interpretar('crear pedido para el cliente Juan con total abc y fecha 2026-13-01 a las 10'));
+      final mal = _es<Rechazada>(
+          motor.interpretar('crear pedido para el cliente Juan con total abc y fecha 2026-13-01 a las 10'));
       expect(mal.motivos.map((m) => m.campo!.name), ['total', 'fecha']);
     });
 
     test('un entero que no es entero', () {
-      final r = _es<Rechazada>(_motor('06-nombres-acentos').interpretar('crear año académico con descripción X y orden 1,5'));
+      final r =
+          _es<Rechazada>(_motor('06-nombres-acentos').interpretar('crear año académico con descripción X y orden 1,5'));
       expect(r.mensaje, 'orden es un número entero y «1,5» no lo es');
     });
   });
@@ -305,9 +318,9 @@ void main() {
     });
 
     test('clase asociativa con dos referencias por delimitadores debiles', () {
-      final r = _es<Resuelta>(_motor('05-clase-asociativa').interpretar(
-          'registrá una inscripción del estudiante 2020-01 a la materia INF-110 '
-          'con fecha 1 de marzo de 2026 y nota 85,5'));
+      final r = _es<Resuelta>(_motor('05-clase-asociativa')
+          .interpretar('registrá una inscripción del estudiante 2020-01 a la materia INF-110 '
+              'con fecha 1 de marzo de 2026 y nota 85,5'));
       expect(r.entidad.name, 'Inscripcion');
       expect(r.cuerpo, {'fecha': '2026-03-01', 'nota': '85.5'});
       expect(r.referencias.map((x) => '${x.campo.name}:${x.texto}'), ['estudianteId:2020-01', 'materiaId:INF-110']);
@@ -346,14 +359,80 @@ void main() {
 
   // ================================================================== ALCANCE
 
-  group('alcance: solo crear y listar', () {
+  group('ver, actualizar y borrar (T-19)', () {
     final motor = _motor('biblioteca');
 
-    test('actualizar y borrar se reconocen para decir que no estan', () {
-      for (final frase in ['borrá el libro Rayuela', 'eliminar socio Ana', 'cambiá el título del libro',
-        'dar de baja al socio Ana', 'actualizar préstamo']) {
-        expect(_es<FueraDeAlcance>(motor.interpretar(frase)).motivo, contains('solo creo y listo'), reason: frase);
+    test('listar sin nombre lista; con nombre muestra ese registro', () {
+      final todos = _es<Resuelta>(motor.interpretar('mostrame los libros'));
+      expect(todos.accion, Accion.listar);
+      final uno = _es<Resuelta>(motor.interpretar('mostrame el libro Rayuela'));
+      expect(uno.accion, Accion.ver);
+      expect(uno.busqueda, 'Rayuela');
+      expect(_es<Resuelta>(motor.interpretar('buscar el socio llamado Ana Pérez')).busqueda, 'Ana Pérez');
+    });
+
+    test('borrar nombra el registro, con cualquiera de sus verbos', () {
+      for (final (frase, nombre) in [
+        ('borrá el libro Rayuela', 'Rayuela'),
+        ('eliminar socio Ana', 'Ana'),
+        ('dar de baja al socio Ana Pérez', 'Ana Pérez'),
+        ('quitá el préstamo del 12', '12'),
+      ]) {
+        final r = _es<Resuelta>(motor.interpretar(frase));
+        expect(r.accion, Accion.borrar, reason: frase);
+        expect(r.busqueda, nombre, reason: frase);
+        expect(r.metodo, 'DELETE');
       }
+    });
+
+    test('borrar sin decir cual pregunta, no adivina', () {
+      expect(_es<NoEntendida>(motor.interpretar('borrar un libro')).motivo, contains('¿Qué libro querés borrar?'));
+    });
+
+    test('«cambiá el precio del libro Rayuela a 50»: campo antes de la entidad, valor despues de «a»', () {
+      final r = _es<Resuelta>(motor.interpretar('cambiá el precio del libro Rayuela a 50'));
+      expect(r.accion, Accion.actualizar);
+      expect(r.metodo, 'PATCH');
+      expect(r.busqueda, 'Rayuela');
+      expect(r.cuerpo, {'precio': '50'}, reason: 'los decimales viajan como texto, igual que al crear');
+    });
+
+    test('«modificar socio Ana, email …»: los cambios se leen como al crear, sin pedir obligatorios', () {
+      final r = _es<Resuelta>(motor.interpretar('modificar socio Ana, email ana@correo.com'));
+      expect(r.accion, Accion.actualizar);
+      expect(r.busqueda, 'Ana');
+      expect(r.cuerpo, {'email': 'ana@correo.com'});
+
+      final dos = _es<Resuelta>(motor.interpretar('actualizar el libro Rayuela con precio 50 y estado en préstamo'));
+      expect(dos.busqueda, 'Rayuela');
+      expect(dos.cuerpo, containsPair('precio', '50'));
+      expect(dos.cuerpo.keys, contains('estado'));
+    });
+
+    test('un valor invalido al cambiar se rechaza con motivo', () {
+      final r = _es<Rechazada>(motor.interpretar('cambiá el precio del libro Rayuela a mucho'));
+      expect(r.motivos.single.campo!.name, 'precio');
+    });
+
+    test('cambiar sin decir que ni a cuanto pregunta', () {
+      expect(_es<NoEntendida>(motor.interpretar('modificar el socio Ana')).motivo, contains('¿Qué querés cambiar'));
+      expect(
+          _es<NoEntendida>(motor.interpretar('cambiá el precio del libro Rayuela')).motivo, contains('¿A qué valor'));
+    });
+
+    test('si la API no permite borrar o cambiar esa entidad, se dice y no se intenta', () {
+      final json = _json('biblioteca');
+      for (final e in json['entities'] as List) {
+        if (e['name'] == 'Socio') e['actions'] = ['list', 'get', 'create'];
+      }
+      final soloAlta = MotorDeIntenciones(AppManifest.fromJson(json), reloj: () => DateTime(2026, 9, 16, 10));
+      expect(_es<Rechazada>(soloAlta.interpretar('borrá el socio Ana')).mensaje, contains('no permite borrar socio'));
+      expect(_es<Rechazada>(soloAlta.interpretar('modificar socio Ana, email a@b.c')).mensaje,
+          contains('no permite cambiar socio'));
+    });
+
+    test('«cancelar» ya no es borrar: lo atiende la conversacion', () {
+      _es<NoEntendida>(motor.interpretar('cancelar'));
     });
 
     test('lo que no es un pedido', () {

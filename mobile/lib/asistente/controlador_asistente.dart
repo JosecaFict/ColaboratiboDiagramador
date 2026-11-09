@@ -57,10 +57,14 @@ class ControladorAsistente extends ChangeNotifier {
   static const _afirmaciones = {'si', 'dale', 'confirmo', 'confirmar', 'ok', 'okey', 'claro', 'crealo', 'hacelo', 'listo'};
   static const _negaciones = {'no', 'cancelar', 'cancela', 'cancelalo', 'mejor no', 'no gracias'};
 
+  /// Cortan lo que este pendiente (una pregunta, un pedido a medias). No son
+  /// un verbo de borrar: «cancelar» a secas no borra nada (T-19).
+  static const _cancelaciones = {'cancelar', 'cancela', 'cancelalo', 'olvidalo', 'dejalo', 'nada', 'mejor no'};
+
   ControladorAsistente(this.cliente, this.manifiesto,
       {DateTime Function()? reloj, this.confirmarAntesDeCrear = true})
       : _motor = MotorDeIntenciones(manifiesto, reloj: reloj) {
-    _decir('Conectado a ${manifiesto.app}. Decime qué necesitás: puedo crear y listar '
+    _decir('Conectado a ${manifiesto.app}. Decime qué necesitás: puedo crear, listar, ver, cambiar y borrar '
         '${_nombresCreables()}.');
   }
 
@@ -96,6 +100,14 @@ class ControladorAsistente extends ChangeNotifier {
           .toList();
       if (alElegir != null && tocada.length == 1) {
         await _elegir(tocada.single, alElegir);
+        return;
+      }
+      if (_cancelaciones.contains(normalizar(texto))) {
+        final habiaAlgo = alElegir != null || _incompleta != null;
+        _cerrarPregunta();
+        _incompleta = null;
+        _aclaracionesPendientes = const {};
+        _decir(habiaAlgo ? 'Cancelado: no hice nada.' : 'No había nada pendiente para cancelar.');
         return;
       }
       _cerrarPregunta();
@@ -191,27 +203,35 @@ class ControladorAsistente extends ChangeNotifier {
   // --------------------------------------------------------------- ejecutar
 
   Future<void> _ejecutar(Resuelta r) async {
-    if (r.accion != Accion.listar && confirmarAntesDeCrear) {
-      _preguntar('Voy a crear ${r.entidad.label.toLowerCase()} con ${_lectura(r)}. ¿Lo creo?',
-          [Opcion('si', 'Sí, crear'), Opcion('no', 'No')], (o) async {
-        if (o.valor == 'si') {
-          await _ejecutarSinPreguntar(r);
-        } else {
-          _decir('No creé nada. Decime el pedido de nuevo si querés corregir algo.');
+    switch (r.accion) {
+      case Accion.crear:
+        if (!confirmarAntesDeCrear) {
+          await _protegido(() => _crear(r, Map<String, dynamic>.from(r.cuerpo), 0));
+          return;
         }
-      });
-      return;
+        _preguntar('Voy a crear ${r.entidad.label.toLowerCase()} con ${_lectura(r)}. ¿Lo creo?',
+            [Opcion('si', 'Sí, crear'), Opcion('no', 'No')], (o) async {
+          if (o.valor == 'si') {
+            await _protegido(() => _crear(r, Map<String, dynamic>.from(r.cuerpo), 0));
+          } else {
+            _decir('No creé nada. Decime el pedido de nuevo si querés corregir algo.');
+          }
+        });
+      case Accion.listar:
+        await _protegido(() => _listar(r.entidad));
+      case Accion.ver:
+        await _protegido(() => _ver(r));
+      case Accion.borrar:
+        await _protegido(() => _elegirRegistro(r, (fila) => _confirmarBorrado(r.entidad, fila)));
+      case Accion.actualizar:
+        await _protegido(() => _elegirRegistro(r, (fila) => _cambiar(r, fila)));
     }
-    await _ejecutarSinPreguntar(r);
   }
 
-  Future<void> _ejecutarSinPreguntar(Resuelta r) async {
+  /// Los errores de red o del backend se dicen; no rompen la conversacion.
+  Future<void> _protegido(Future<void> Function() accion) async {
     try {
-      if (r.accion == Accion.listar) {
-        await _listar(r.entidad);
-      } else {
-        await _crear(r, Map<String, dynamic>.from(r.cuerpo), 0);
-      }
+      await accion();
     } on BackendException catch (e) {
       _decir(e.mensaje);
     } on TimeoutException {
@@ -234,9 +254,109 @@ class ControladorAsistente extends ChangeNotifier {
         '${resto > 0 ? '\n… y $resto más.' : ''}');
   }
 
-  Future<void> _crear(Resuelta r, Map<String, dynamic> cuerpo, int desde) async {
-    for (var k = desde; k < r.referencias.length; k++) {
-      final ref = r.referencias[k];
+  /// «mostrame el libro Rayuela»: el registro con todos sus datos, o los que
+  /// coinciden si son varios.
+  Future<void> _ver(Resuelta r) async {
+    final e = r.entidad;
+    final candidatos = _buscar(await cliente.listar(manifiesto, e), r.busqueda ?? '');
+    if (candidatos.isEmpty) {
+      _decir('No encontré ${e.label.toLowerCase()} «${r.busqueda}».');
+      return;
+    }
+    final nombres = await _nombresDeReferencias(e);
+    if (candidatos.length == 1) {
+      _decir('${e.label}: ${_resumen(e, candidatos.single, nombres, maximo: 1000)}.');
+      return;
+    }
+    final lineas = candidatos.take(maxFilas).map((f) => '• ${_resumen(e, f, nombres)}');
+    _decir('${e.label} que coinciden con «${r.busqueda}» (${candidatos.length}):\n${lineas.join('\n')}');
+  }
+
+  /// El registro nombrado («el socio Ana»): si coinciden varios se pregunta
+  /// cual; si ninguno, se dice. Recien con UNO se sigue.
+  Future<void> _elegirRegistro(Resuelta r, Future<void> Function(Map<String, dynamic>) continuar) async {
+    final e = r.entidad;
+    final candidatos = _buscar(await cliente.listar(manifiesto, e), r.busqueda ?? '');
+    if (candidatos.isEmpty) {
+      _decir('No encontré ${e.label.toLowerCase()} «${r.busqueda}». No hice nada.');
+      return;
+    }
+    if (candidatos.length == 1) {
+      await continuar(candidatos.single);
+      return;
+    }
+    final nombres = await _nombresDeReferencias(e);
+    final visibles = candidatos.take(maxFilas).toList();
+    _preguntar(
+        'Hay ${candidatos.length} ${e.label.toLowerCase()} que coinciden con «${r.busqueda}». ¿Cuál?',
+        [for (final c in visibles) Opcion('${c['id']}', _resumen(e, c, nombres))],
+        (o) => _protegido(() => continuar(visibles.firstWhere((c) => '${c['id']}' == o.valor))));
+  }
+
+  /// Borrar SIEMPRE se confirma (M3): no se deshace y por voz un nombre se
+  /// puede oir mal.
+  Future<void> _confirmarBorrado(EntityDescriptor e, Map<String, dynamic> fila) async {
+    final quien = _resumen(e, fila, await _nombresDeReferencias(e));
+    _preguntar('¿Borro ${e.label.toLowerCase()} «$quien»? No se puede deshacer. Decí sí o no.',
+        [Opcion('si', 'Sí, borrar'), Opcion('no', 'No')], (o) async {
+      if (o.valor != 'si') {
+        _decir('No borré nada.');
+        return;
+      }
+      await _protegido(() async {
+        await cliente.eliminar(manifiesto, e, '${fila['id']}');
+        _decir('Listo, borré ${e.label.toLowerCase()} «$quien».');
+      });
+    });
+  }
+
+  /// PATCH con solo lo que cambia y la `version` leida: si otro escribio en el
+  /// medio, el backend responde 409 y se dice en vez de pisarle el cambio.
+  Future<void> _cambiar(Resuelta r, Map<String, dynamic> fila) async {
+    final e = r.entidad;
+    final cambios = Map<String, dynamic>.from(r.cuerpo);
+    await _conReferencias(r.referencias, cambios, 0, () async {
+      final nombres = await _nombresDeReferencias(e);
+      final quien = _resumen(e, fila, nombres);
+      Future<void> aplicar() => _protegido(() async {
+            final enviado = {...cambios, if (fila['version'] != null) 'version': fila['version']};
+            final nuevo = await cliente.actualizar(manifiesto, e, '${fila['id']}', enviado);
+            final despues = nuevo.isEmpty ? {...fila, ...cambios} : nuevo;
+            _decir('Listo, actualicé ${e.label.toLowerCase()}: '
+                '${_resumen(e, despues, await _nombresDeReferencias(e))}.');
+          });
+      if (!confirmarAntesDeCrear) {
+        await aplicar();
+        return;
+      }
+      _preguntar(
+          'Voy a cambiar en ${e.label.toLowerCase()} «$quien»: ${_lecturaDeCambios(e, cambios, nombres)}. '
+          '¿Lo cambio?',
+          [Opcion('si', 'Sí, cambiar'), Opcion('no', 'No')], (o) async {
+        if (o.valor == 'si') {
+          await aplicar();
+        } else {
+          _decir('No cambié nada.');
+        }
+      });
+    }, sinHacer: 'No cambié nada.');
+  }
+
+  Future<void> _crear(Resuelta r, Map<String, dynamic> cuerpo, int desde) =>
+      _conReferencias(r.referencias, cuerpo, desde, () async {
+        final creado = await cliente.crear(manifiesto, r.entidad, cuerpo);
+        final nombres = await _nombresDeReferencias(r.entidad);
+        _decir('Listo, creé ${r.entidad.label.toLowerCase()}: '
+            '${_resumen(r.entidad, creado.isEmpty ? cuerpo : creado, nombres)}.');
+      }, sinHacer: 'No creé nada.');
+
+  /// Resuelve las referencias dichas por nombre («al socio Ana») a su id, en
+  /// orden; si una tiene varios candidatos se pregunta y se sigue desde ahi.
+  Future<void> _conReferencias(List<ReferenciaPendiente> refs, Map<String, dynamic> cuerpo, int desde,
+      Future<void> Function() alTerminar,
+      {required String sinHacer}) async {
+    for (var k = desde; k < refs.length; k++) {
+      final ref = refs[k];
       final destino = _entidad(ref.entidadDestino);
       if (destino == null) {
         _decir('El manifiesto no tiene la entidad ${ref.entidadDestino}.');
@@ -244,7 +364,7 @@ class ControladorAsistente extends ChangeNotifier {
       }
       final candidatos = _buscar(await cliente.listar(manifiesto, destino), ref.texto);
       if (candidatos.isEmpty) {
-        _decir('No encontré ${destino.label.toLowerCase()} «${ref.texto}». No creé nada.');
+        _decir('No encontré ${destino.label.toLowerCase()} «${ref.texto}». $sinHacer');
         return;
       }
       if (candidatos.length > 1) {
@@ -253,26 +373,16 @@ class ControladorAsistente extends ChangeNotifier {
             .toList();
         _preguntar(
             'Hay ${candidatos.length} ${destino.label.toLowerCase()} que coinciden con «${ref.texto}». ¿Cuál?',
-            opciones, (o) async {
-          try {
-            cuerpo[ref.campo.name] = o.valor;
-            await _crear(r, cuerpo, k + 1);
-          } on BackendException catch (e) {
-            _decir(e.mensaje);
-          } on TimeoutException {
-            _decir('El backend no respondió a tiempo. Revisá que esté arriba y la red.');
-          } on Exception catch (e) {
-            _decir('No pude hablar con el backend: $e');
-          }
-        });
+            opciones,
+            (o) => _protegido(() async {
+                  cuerpo[ref.campo.name] = o.valor;
+                  await _conReferencias(refs, cuerpo, k + 1, alTerminar, sinHacer: sinHacer);
+                }));
         return;
       }
       cuerpo[ref.campo.name] = '${candidatos.single['id']}';
     }
-    final creado = await cliente.crear(manifiesto, r.entidad, cuerpo);
-    final nombres = await _nombresDeReferencias(r.entidad);
-    _decir('Listo, creé ${r.entidad.label.toLowerCase()}: '
-        '${_resumen(r.entidad, creado.isEmpty ? cuerpo : creado, nombres)}.');
+    await alTerminar();
   }
 
   // ---------------------------------------------------------------- ayudas
@@ -283,6 +393,19 @@ class ControladorAsistente extends ChangeNotifier {
     if (valorDeOpcion == 'si') return _afirmaciones.contains(d);
     if (valorDeOpcion == 'no') return _negaciones.contains(d);
     return false;
+  }
+
+  /// Lo que se va a cambiar, con las referencias ya resueltas por nombre.
+  String _lecturaDeCambios(EntityDescriptor e, Map<String, dynamic> cambios,
+      Map<String, Map<String, String>> nombres) {
+    final partes = <String>[];
+    for (final c in e.fields) {
+      if (!cambios.containsKey(c.name)) continue;
+      final v = cambios[c.name];
+      final mostrado = c.type == FieldType.reference ? (nombres[c.name]?['$v'] ?? '$v') : '$v';
+      partes.add('${c.label.toLowerCase()} → $mostrado');
+    }
+    return enumerar(partes, conjuncion: 'y');
   }
 
   /// Lo que se va a crear, leido como se dijo: «nombre Carla Rojas, socio «Ana»».
@@ -335,7 +458,8 @@ class ControladorAsistente extends ChangeNotifier {
   /// "campo: valor · campo: valor" con los primeros campos con dato. Las
   /// referencias se muestran por nombre (no por uuid) si se pudo resolver.
   String _resumen(
-      EntityDescriptor e, Map<String, dynamic> fila, Map<String, Map<String, String>> nombres) {
+      EntityDescriptor e, Map<String, dynamic> fila, Map<String, Map<String, String>> nombres,
+      {int maximo = 4}) {
     final partes = <String>[];
     for (final c in e.fields) {
       final v = fila[c.name];
@@ -346,7 +470,7 @@ class ControladorAsistente extends ChangeNotifier {
       } else {
         partes.add('${c.label}: $v');
       }
-      if (partes.length == 4) break;
+      if (partes.length == maximo) break;
     }
     return partes.isEmpty ? '${fila['id'] ?? e.label}' : partes.join(' · ');
   }

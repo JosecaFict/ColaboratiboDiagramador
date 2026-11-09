@@ -31,12 +31,9 @@ class ClienteBackend {
 
   /// El contrato P2 -> P3 (ADR-011). Es lo primero que hace la app.
   Future<AppManifest> cargarManifiesto() async {
-    final r = await _http
-        .get(Uri.parse('$host/app-manifest.json'))
-        .timeout(const Duration(seconds: 10));
+    final r = await _http.get(Uri.parse('$host/app-manifest.json')).timeout(const Duration(seconds: 10));
     if (r.statusCode != 200) {
-      throw BackendException(
-          'El servidor respondio ${r.statusCode} al pedir app-manifest.json. '
+      throw BackendException('El servidor respondio ${r.statusCode} al pedir app-manifest.json. '
           'Revisa que sea un backend generado por ColabModel y que este arriba.');
     }
     try {
@@ -56,8 +53,7 @@ class ClienteBackend {
     return Uri.parse('$host${entidad.path}$extra');
   }
 
-  Future<List<Map<String, dynamic>>> listar(
-      AppManifest manifiesto, EntityDescriptor entidad) async {
+  Future<List<Map<String, dynamic>>> listar(AppManifest manifiesto, EntityDescriptor entidad) async {
     final r = await _http.get(_uri(manifiesto, entidad)).timeout(const Duration(seconds: 10));
     if (r.statusCode != 200) {
       throw BackendException('No se pudo listar ${entidad.label}: HTTP ${r.statusCode}');
@@ -67,31 +63,53 @@ class ClienteBackend {
     return cuerpo.cast<Map<String, dynamic>>();
   }
 
-  Future<Map<String, dynamic>> crear(AppManifest manifiesto, EntityDescriptor entidad,
-      Map<String, dynamic> datos) async {
+  Future<Map<String, dynamic>> crear(
+      AppManifest manifiesto, EntityDescriptor entidad, Map<String, dynamic> datos) async {
     final r = await _http
         .post(_uri(manifiesto, entidad),
-            headers: {'Content-Type': 'application/json; charset=utf-8'},
-            body: utf8.encode(jsonEncode(datos)))
+            headers: {'Content-Type': 'application/json; charset=utf-8'}, body: utf8.encode(jsonEncode(datos)))
         .timeout(const Duration(seconds: 15));
     if (r.statusCode < 200 || r.statusCode >= 300) {
       // El cuerpo del error del backend generado es util: dice que campo
       // fallo la validacion. Se lo pasa tal cual en vez de esconderlo.
-      throw BackendException(
-          'La API rechazo el alta (HTTP ${r.statusCode}). ${utf8.decode(r.bodyBytes)}');
+      throw BackendException('La API rechazo el alta (HTTP ${r.statusCode}). ${utf8.decode(r.bodyBytes)}');
+    }
+    final cuerpo = jsonDecode(utf8.decode(r.bodyBytes));
+    return cuerpo is Map<String, dynamic> ? cuerpo : <String, dynamic>{};
+  }
+
+  /// Cambio parcial (PATCH): solo los campos que cambian. Si `cambios` trae la
+  /// `version` que se leyo, el backend generado devuelve 409 cuando otro
+  /// escribio en el medio (bloqueo optimista), en vez de pisarle el cambio.
+  Future<Map<String, dynamic>> actualizar(
+      AppManifest manifiesto, EntityDescriptor entidad, String id, Map<String, dynamic> cambios) async {
+    final r = await _http
+        .patch(_uri(manifiesto, entidad, '/$id'),
+            headers: {'Content-Type': 'application/json; charset=utf-8'}, body: utf8.encode(jsonEncode(cambios)))
+        .timeout(const Duration(seconds: 15));
+    if (r.statusCode == 404) throw BackendException(_yaNoExiste(entidad));
+    if (r.statusCode == 409) {
+      throw BackendException('Alguien cambió ese ${entidad.label.toLowerCase()} mientras tanto: no pisé su cambio. '
+          'Pedímelo de nuevo para trabajar sobre la versión actual.');
+    }
+    if (r.statusCode < 200 || r.statusCode >= 300) {
+      throw BackendException('La API rechazó el cambio (HTTP ${r.statusCode}). ${utf8.decode(r.bodyBytes)}');
     }
     final cuerpo = jsonDecode(utf8.decode(r.bodyBytes));
     return cuerpo is Map<String, dynamic> ? cuerpo : <String, dynamic>{};
   }
 
   Future<void> eliminar(AppManifest manifiesto, EntityDescriptor entidad, String id) async {
-    final r = await _http
-        .delete(_uri(manifiesto, entidad, '/$id'))
-        .timeout(const Duration(seconds: 10));
+    final r = await _http.delete(_uri(manifiesto, entidad, '/$id')).timeout(const Duration(seconds: 10));
+    if (r.statusCode == 404) throw BackendException(_yaNoExiste(entidad));
     if (r.statusCode < 200 || r.statusCode >= 300) {
-      throw BackendException('No se pudo eliminar: HTTP ${r.statusCode}');
+      // Un 409 al borrar es otra fila que lo usa (una FK): el backend lo explica.
+      throw BackendException('No se pudo borrar (HTTP ${r.statusCode}). ${utf8.decode(r.bodyBytes)}');
     }
   }
+
+  static String _yaNoExiste(EntityDescriptor entidad) =>
+      'Ese ${entidad.label.toLowerCase()} ya no existe: quizás alguien lo borró recién.';
 
   void cerrar() => _http.close();
 }
