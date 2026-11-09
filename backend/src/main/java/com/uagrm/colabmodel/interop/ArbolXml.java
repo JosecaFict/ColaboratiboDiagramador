@@ -71,10 +71,19 @@ final class ArbolXml {
             return atr("xmi:idref");
         }
 
-        /** El tipo del elemento: el de `xmi:type` si lo tiene, si no su nombre local. */
+        private String clase;
+
+        /**
+         * El tipo del elemento: el de `xmi:type` si lo tiene, si no su nombre local.
+         * Se calcula una vez: el lector lo pregunta varias veces por nodo y el
+         * `xmi:type` no cambia despues de leer el archivo.
+         */
         String clase() {
-            String t = atr("xmi:type");
-            return t != null ? local(t) : local;
+            if (clase == null) {
+                String t = atr("xmi:type");
+                clase = t != null ? local(t) : local;
+            }
+            return clase;
         }
 
         boolean es(String... clases) {
