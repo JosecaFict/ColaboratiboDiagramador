@@ -53,6 +53,34 @@ public class ServicioDeImportacion {
         return cruzarConElDiagrama(diagramId, nombreArchivo, leido);
     }
 
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /**
+     * Un metodo "ya existe" si coincide la FIRMA (nombre + tipos de los
+     * parametros), como en CommandApplier: pagar(String) no es el pagar(int)
+     * que ya estaba, es una sobrecarga y tiene que poder entrar (T-05).
+     */
+    static String firma(UmlMethod m) {
+        List<String> tipos = new ArrayList<>();
+        try {
+            for (var p : JSON.readTree(m.getParams() == null ? "[]" : m.getParams())) {
+                tipos.add(p.path("type").asText("string"));
+            }
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            // Una fila corrupta cuenta como sin parametros, igual que en CommandApplier.
+        }
+        return firma(m.getName(), tipos);
+    }
+
+    static String firma(ModeloLeido.MetodoLeido m) {
+        return firma(m.nombre(), m.parametros().stream().map(ModeloLeido.ParametroLeido::tipo).toList());
+    }
+
+    private static String firma(String nombre, List<String> tipos) {
+        return nombre.toLowerCase(Locale.ROOT) + "(" + tipos.stream()
+                .map(t -> t == null ? "string" : t.toLowerCase(Locale.ROOT)).collect(Collectors.joining(", ")) + ")";
+    }
+
     PropuestaDeImportacion cruzarConElDiagrama(UUID diagramId, String fuente, ModeloLeido leido) {
         List<UmlClass> existentes = classes.findByDiagramIdAndDeletedAtIsNullOrderByNameAsc(diagramId);
         Map<String, UmlClass> existentePorNombre = existentes.stream()
@@ -66,8 +94,7 @@ public class ServicioDeImportacion {
                         .add(a.getName().toLowerCase(Locale.ROOT));
             }
             for (UmlMethod m : methods.findByClassIdInOrderByOrdinalAsc(ids)) {
-                metodosExistentes.computeIfAbsent(m.getClassId(), k -> new HashSet<>())
-                        .add(m.getName().toLowerCase(Locale.ROOT));
+                metodosExistentes.computeIfAbsent(m.getClassId(), k -> new HashSet<>()).add(firma(m));
             }
         }
 
@@ -112,7 +139,7 @@ public class ServicioDeImportacion {
             List<PropuestaDeImportacion.MetodoPropuesto> metodosPropuestos = new ArrayList<>();
             for (ModeloLeido.MetodoLeido m : c.metodos()) {
                 metodosPropuestos.add(new PropuestaDeImportacion.MetodoPropuesto(m.nombre(), m.tipoRetorno(),
-                        m.parametros(), yaTieneMetodo.contains(m.nombre().toLowerCase(Locale.ROOT))));
+                        m.parametros(), yaTieneMetodo.contains(firma(m))));
             }
             clases.add(new PropuestaDeImportacion.ClasePropuesta(c.clave(), figura.getId(), c.nombre(),
                     c.estereotipo(), c.abstracta(), existe ? figura.getId() : null, List.copyOf(atributos),
