@@ -79,4 +79,28 @@ void main() {
     expect(resuelta.busqueda, 'Viaje a la luna');
     expect(resuelta.cuerpo, {'titulo': 'Regreso'});
   });
+
+  test('P2 residual: con «a» y «por» validos no se elige otro registro sin preguntar', () async {
+    final b = BackendFalso('biblioteca');
+    b.sembrar('/api/libro', {'titulo': 'Viaje', 'version': 1});
+    b.sembrar('/api/libro', {'titulo': 'Viaje a la luna', 'version': 2});
+    const frase = 'cambia el titulo del libro Viaje a la luna por Regreso';
+    final i = MotorDeIntenciones(b.manifiesto).interpretar(frase);
+    expect(i, isA<Ambigua>(), reason: 'los cortes «a» y «por» dejan nombres y valores validos');
+    final c = ControladorAsistente(b.clienteBackend(), b.manifiesto, confirmarAntesDeCrear: false);
+    await c.enviar(frase);
+    expect(b.parches, isEmpty, reason: 'no cambia el libro Viaje sin resolver la ambiguedad');
+
+    final elegido = MotorDeIntenciones(b.manifiesto)
+        .interpretar(frase, aclaraciones: {'corte': (i as Ambigua).opciones.last.valor}) as Resuelta;
+    expect(elegido.busqueda, 'Viaje a la luna');
+    expect(elegido.cuerpo, {'titulo': 'Regreso'});
+  });
+
+  test('P2 residual: «por» solo sigue separando, y «en» solo vale si no hay otro', () {
+    final motor = MotorDeIntenciones(BackendFalso('biblioteca').manifiesto);
+    final r = motor.interpretar('cambia el titulo del libro Rayuela por El amor en los tiempos') as Resuelta;
+    expect(r.busqueda, 'Rayuela');
+    expect(r.cuerpo, {'titulo': 'El amor en los tiempos'});
+  });
 }

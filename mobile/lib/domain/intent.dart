@@ -595,9 +595,10 @@ class MotorDeIntenciones {
       campo = campos.candidatos.firstWhere((c) => c.name == aclaraciones[clave],
           orElse: () => campos.candidatos.first);
 
-      // "a" (o "por", "en") separa el registro del valor nuevo. Vale un corte
-      // que deja nombre y un valor valido; "a" manda sobre "por" y "en", que
-      // tambien aparecen dentro de un titulo. Si aun quedan varios, se pregunta.
+      // "a" o "por" separan el registro del valor nuevo ("cambiar X a Y", "X por
+      // Y"); "en" solo si ninguno de esos dos sirve, porque suele ser parte de
+      // un titulo. Vale un corte que deja nombre y un valor valido. Si quedan
+      // varios ("Viaje a la luna por Regreso"), se pregunta: no se adivina.
       bool sirve(int k) {
         if (_nombreDelRegistro(texto, tokens, ents.hasta, k) == null) return false;
         final r = _recortar(tokens, k + 1, tokens.length, campo);
@@ -609,8 +610,8 @@ class MotorDeIntenciones {
           if (!tokens[k].citado && const {'a', 'por', 'en'}.contains(tokens[k].norma)) k,
       ];
       var validos = separadores.where(sirve).toList();
-      if (validos.any((k) => tokens[k].norma == 'a')) {
-        validos = validos.where((k) => tokens[k].norma == 'a').toList();
+      if (validos.any((k) => tokens[k].norma != 'en')) {
+        validos = validos.where((k) => tokens[k].norma != 'en').toList();
       }
       var corte = validos.isNotEmpty ? validos.last : (separadores.isEmpty ? -1 : separadores.last);
       if (validos.length > 1) {
