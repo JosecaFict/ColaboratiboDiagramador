@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 
 import 'asistente/pantalla_asistente.dart';
-import 'visor/pantallas_visor.dart';
+import 'editor/controlador_editor.dart';
+import 'editor/pantallas/entrada.dart';
+import 'sesion/entrada_sesion.dart';
 
-void main() => runApp(const ColabModelApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  // El editor (D-12) se instala aca para que el visor no dependa del canal.
+  fabricaDeEditor = crearEditor;
+  runApp(const ColabModelApp());
+}
 
 class ColabModelApp extends StatelessWidget {
   const ColabModelApp({super.key});
@@ -12,14 +19,16 @@ class ColabModelApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ColabModel Assistant',
-      theme: ThemeData(colorSchemeSeed: const Color(0xFF1D4ED8), useMaterial3: true),
+      theme: ThemeData(
+          colorSchemeSeed: const Color(0xFF1D4ED8), useMaterial3: true),
       home: const PantallaInicio(),
     );
   }
 }
 
-/// Pantalla inicial: el Asistente (contra el backend generado) o el visor en
-/// vivo (contra la herramienta, solo lectura, ADR-036).
+/// Pantalla inicial: el Asistente (contra el backend generado) o los diagramas
+/// en vivo de la herramienta: los ve cualquiera y los edita un Editor o el
+/// Propietario (ADR-036, enmendado por D-12).
 class PantallaInicio extends StatelessWidget {
   const PantallaInicio({super.key});
 
@@ -36,7 +45,8 @@ class PantallaInicio extends StatelessWidget {
             children: [
               FilledButton.icon(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const PantallaAsistente()),
+                  MaterialPageRoute<void>(
+                      builder: (_) => const PantallaAsistente()),
                 ),
                 icon: const Icon(Icons.chat_bubble_outline),
                 label: const Text('Asistente'),
@@ -44,10 +54,11 @@ class PantallaInicio extends StatelessWidget {
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const PantallaLoginVisor()),
+                  MaterialPageRoute<void>(
+                      builder: (_) => const EntradaSesion()),
                 ),
                 icon: const Icon(Icons.visibility_outlined),
-                label: const Text('Ver diagrama en vivo'),
+                label: const Text('Diagramas en vivo'),
               ),
             ],
           ),

@@ -8,6 +8,7 @@
          enumerar en un network_security_config. Revisar si algun dia se despliega con TLS. -->
     <application
         android:label="ColabModel"
+        android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
