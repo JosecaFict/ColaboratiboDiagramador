@@ -7,166 +7,80 @@ import 'cliente_herramienta.dart';
 import 'controlador_visor.dart';
 import 'dibujo_clases.dart';
 
-/// Paso 1: direccion de la herramienta + login (`POST /api/v1/auth/login`).
-class PantallaLoginVisor extends StatefulWidget {
-  const PantallaLoginVisor({super.key});
-
-  @override
-  State<PantallaLoginVisor> createState() => _PantallaLoginVisorState();
-}
-
-class _PantallaLoginVisorState extends State<PantallaLoginVisor> {
-  final _almacen = AlmacenLocal();
-  final _host = TextEditingController();
-  final _email = TextEditingController();
-  final _clave = TextEditingController();
-  bool _entrando = false;
-  String? _error;
-  ({String id, String nombre})? _ultimo;
-
-  @override
-  void initState() {
-    super.initState();
-    _recordar();
-  }
-
-  Future<void> _recordar() async {
-    final c = await _almacen.leerConexion();
-    final u = await _almacen.leerUltimo();
-    if (!mounted) return;
-    setState(() {
-      _host.text = c.host;
-      _email.text = c.email;
-      _ultimo = u;
-    });
-  }
-
-  Future<void> _entrar() async {
-    setState(() {
-      _entrando = true;
-      _error = null;
-    });
-    final cliente = ClienteHerramienta(_host.text);
-    try {
-      final sesion = await cliente.iniciarSesion(_email.text, _clave.text);
-      await _almacen.guardarConexion(_host.text.trim(), _email.text.trim());
-      if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => PantallaProyectos(cliente: cliente, almacen: _almacen, nombre: sesion.nombre),
-      ));
-    } on HerramientaException catch (e) {
-      if (mounted) setState(() => _error = e.mensaje);
-    } finally {
-      if (mounted) setState(() => _entrando = false);
-    }
-  }
-
-  void _abrirUltimoSinRed() {
-    final u = _ultimo!;
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => PantallaVisor(
-        cliente: ClienteHerramienta(_host.text), // sin token: solo lo guardado
-        almacen: _almacen,
-        diagramId: u.id,
-        titulo: u.nombre,
-      ),
-    ));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Diagramas en vivo')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text('Entra con tu cuenta de la herramienta. El visor solo mira: no modifica nada.'),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _host,
-            keyboardType: TextInputType.url,
-            decoration: const InputDecoration(
-              labelText: 'Direccion de la herramienta',
-              hintText: '192.168.0.10:8080',
-              helperText: 'La IP de la maquina, no localhost',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _clave,
-            obscureText: true,
-            onSubmitted: (_) => _entrando ? null : _entrar(),
-            decoration: const InputDecoration(labelText: 'Contrasena', border: OutlineInputBorder()),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ],
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _entrando ? null : _entrar,
-            child: _entrando
-                ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Entrar'),
-          ),
-          if (_ultimo != null) ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _abrirUltimoSinRed,
-              icon: const Icon(Icons.cloud_off),
-              label: Text('Ver "${_ultimo!.nombre}" guardado (sin conexion)'),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// Paso 2: proyectos y, dentro de cada uno, sus diagramas.
 class PantallaProyectos extends StatefulWidget {
   final ClienteHerramienta cliente;
   final AlmacenLocal almacen;
   final String nombre;
-  const PantallaProyectos({super.key, required this.cliente, required this.almacen, required this.nombre});
+  final VoidCallback? alCerrarSesion;
+  final List<ProyectoResumen>? proyectosIniciales;
+  const PantallaProyectos(
+      {super.key,
+      required this.cliente,
+      required this.almacen,
+      required this.nombre,
+      this.alCerrarSesion,
+      this.proyectosIniciales});
 
   @override
   State<PantallaProyectos> createState() => _PantallaProyectosState();
 }
 
 class _PantallaProyectosState extends State<PantallaProyectos> {
-  late Future<List<ProyectoResumen>> _proyectos = widget.cliente.proyectos();
+  late Future<List<ProyectoResumen>> _proyectos =
+      widget.proyectosIniciales == null
+          ? widget.cliente.proyectos()
+          : Future.value(widget.proyectosIniciales);
 
-  void _recargar() => setState(() => _proyectos = widget.cliente.proyectos());
+  void _recargar() {
+    final siguiente = widget.cliente.proyectos();
+    // Un 401 puede retirar esta ruta antes del próximo cuadro del FutureBuilder.
+    siguiente.ignore();
+    setState(() {
+      _proyectos = siguiente;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Proyectos de ${widget.nombre}')),
+      appBar: AppBar(title: const Text('Mis proyectos'), actions: [
+        IconButton(
+            tooltip: 'Actualizar proyectos',
+            icon: const Icon(Icons.refresh),
+            onPressed: _recargar),
+        if (widget.alCerrarSesion != null)
+          IconButton(
+              tooltip: 'Cerrar sesión',
+              icon: const Icon(Icons.logout),
+              onPressed: widget.alCerrarSesion)
+      ]),
       body: FutureBuilder<List<ProyectoResumen>>(
         future: _proyectos,
         builder: (context, s) {
-          if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-          if (s.hasError) return _Falla(mensaje: '${s.error}', alReintentar: _recargar);
+          if (s.connectionState != ConnectionState.done)
+            return const Center(child: CircularProgressIndicator());
+          if (s.hasError)
+            return _Falla(mensaje: '${s.error}', alReintentar: _recargar);
           final lista = s.data!;
-          if (lista.isEmpty) return const Center(child: Text('Todavia no tenes proyectos.'));
+          if (lista.isEmpty)
+            return const Center(child: Text('Todavia no tenes proyectos.'));
           return ListView(
             children: [
               for (final p in lista)
                 ListTile(
                   leading: const Icon(Icons.folder_outlined),
                   title: Text(p.nombre),
-                  subtitle: Text('${p.cantidadDiagramas} diagramas · ${p.miRol ?? ''}'),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  subtitle: Text(
+                      '${p.cantidadDiagramas} diagramas · ${p.miRol ?? ''}'),
+                  onTap: () =>
+                      Navigator.of(context).push(MaterialPageRoute<void>(
                     builder: (_) => PantallaDiagramas(
-                        cliente: widget.cliente, almacen: widget.almacen, proyecto: p, nombreUsuario: widget.nombre),
+                        cliente: widget.cliente,
+                        almacen: widget.almacen,
+                        proyecto: p,
+                        nombreUsuario: widget.nombre,
+                        alCerrarSesion: widget.alCerrarSesion),
                   )),
                 ),
             ],
@@ -181,10 +95,17 @@ class PantallaDiagramas extends StatelessWidget {
   final ClienteHerramienta cliente;
   final AlmacenLocal almacen;
   final ProyectoResumen proyecto;
+
   /// Para el lock del editor («La está editando Ana»).
   final String nombreUsuario;
+  final VoidCallback? alCerrarSesion;
   const PantallaDiagramas(
-      {super.key, required this.cliente, required this.almacen, required this.proyecto, this.nombreUsuario = ''});
+      {super.key,
+      required this.cliente,
+      required this.almacen,
+      required this.proyecto,
+      this.nombreUsuario = '',
+      this.alCerrarSesion});
 
   @override
   Widget build(BuildContext context) {
@@ -193,10 +114,13 @@ class PantallaDiagramas extends StatelessWidget {
       body: FutureBuilder<List<DiagramaResumen>>(
         future: cliente.diagramasDe(proyecto.id),
         builder: (context, s) {
-          if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (s.connectionState != ConnectionState.done)
+            return const Center(child: CircularProgressIndicator());
           if (s.hasError) return _Falla(mensaje: '${s.error}');
           final lista = s.data!;
-          if (lista.isEmpty) return const Center(child: Text('Este proyecto no tiene diagramas.'));
+          if (lista.isEmpty)
+            return const Center(
+                child: Text('Este proyecto no tiene diagramas.'));
           return ListView(
             children: [
               for (final d in lista)
@@ -205,28 +129,35 @@ class PantallaDiagramas extends StatelessWidget {
                   title: Text(d.nombre),
                   subtitle: Text('operacion ${d.currentSeq}'),
                   // Editar: solo Modelador o Propietario, y solo si el editor esta instalado (T-15).
-                  trailing: fabricaDeEditor != null && rolPuedeEditar(proyecto.miRol)
-                      ? IconButton(
-                          tooltip: 'Editar diagrama',
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                            builder: (_) => PantallaEditor(
-                              titulo: d.nombre,
-                              editor: fabricaDeEditor!(
-                                cliente: cliente,
-                                diagramId: d.id,
-                                rol: proyecto.miRol,
-                                nombreUsuario: nombreUsuario,
-                              ),
-                            ),
-                          )),
-                        )
-                      : null,
+                  trailing:
+                      fabricaDeEditor != null && rolPuedeEditar(proyecto.miRol)
+                          ? IconButton(
+                              tooltip: 'Editar diagrama',
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: () => Navigator.of(context)
+                                  .push(MaterialPageRoute<void>(
+                                builder: (_) => PantallaEditor(
+                                  titulo: d.nombre,
+                                  alCerrarSesion: alCerrarSesion,
+                                  editor: fabricaDeEditor!(
+                                    cliente: cliente,
+                                    diagramId: d.id,
+                                    rol: proyecto.miRol,
+                                    nombreUsuario: nombreUsuario,
+                                  ),
+                                ),
+                              )),
+                            )
+                          : null,
                   onTap: () async {
                     await almacen.guardarUltimo(d.id, d.nombre);
                     if (!context.mounted) return;
                     await Navigator.of(context).push(MaterialPageRoute<void>(
-                      builder: (_) => PantallaVisor(cliente: cliente, almacen: almacen, diagramId: d.id, titulo: d.nombre),
+                      builder: (_) => PantallaVisor(
+                          cliente: cliente,
+                          almacen: almacen,
+                          diagramId: d.id,
+                          titulo: d.nombre),
                     ));
                   },
                 ),
@@ -315,7 +246,8 @@ class _PantallaVisorState extends State<PantallaVisor> {
           body: Column(
             children: [
               if (_c.sinConexion) _Aviso(texto: _textoSinConexion()),
-              if (_c.presentes.isNotEmpty) _Presentes(nombres: [for (final p in _c.presentes) p.userName]),
+              if (_c.presentes.isNotEmpty)
+                _Presentes(nombres: [for (final p in _c.presentes) p.userName]),
               Expanded(child: _cuerpo(context, modelo)),
             ],
           ),
@@ -337,7 +269,9 @@ class _PantallaVisorState extends State<PantallaVisor> {
       return const Center(child: CircularProgressIndicator());
     }
     if (modelo.classes.isEmpty) {
-      return const Center(child: Text('El diagrama esta vacio. Cuando alguien dibuje algo, aparece aca.'));
+      return const Center(
+          child: Text(
+              'El diagrama esta vacio. Cuando alguien dibuje algo, aparece aca.'));
     }
     final limites = limitesDe(modelo);
     final seleccionados = <String>{
@@ -398,7 +332,8 @@ class _Presentes extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Wrap(spacing: 6, children: [
           const Icon(Icons.people_outline, size: 16),
-          for (final n in nombres) Chip(label: Text(n), visualDensity: VisualDensity.compact),
+          for (final n in nombres)
+            Chip(label: Text(n), visualDensity: VisualDensity.compact),
         ]),
       );
 }
@@ -416,7 +351,8 @@ class _Falla extends StatelessWidget {
             Text(mensaje, textAlign: TextAlign.center),
             if (alReintentar != null) ...[
               const SizedBox(height: 12),
-              OutlinedButton(onPressed: alReintentar, child: const Text('Reintentar')),
+              OutlinedButton(
+                  onPressed: alReintentar, child: const Text('Reintentar')),
             ],
           ]),
         ),

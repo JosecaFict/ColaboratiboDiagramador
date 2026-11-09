@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'asistente/pantalla_asistente.dart';
 import 'editor/controlador_editor.dart';
 import 'editor/pantallas/entrada.dart';
-import 'visor/pantallas_visor.dart';
+import 'sesion/entrada_sesion.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   // El editor (D-12) se instala aca para que el visor no dependa del canal.
   fabricaDeEditor = crearEditor;
   runApp(const ColabModelApp());
@@ -18,7 +19,8 @@ class ColabModelApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ColabModel Assistant',
-      theme: ThemeData(colorSchemeSeed: const Color(0xFF1D4ED8), useMaterial3: true),
+      theme: ThemeData(
+          colorSchemeSeed: const Color(0xFF1D4ED8), useMaterial3: true),
       home: const PantallaInicio(),
     );
   }
@@ -43,7 +45,8 @@ class PantallaInicio extends StatelessWidget {
             children: [
               FilledButton.icon(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const PantallaAsistente()),
+                  MaterialPageRoute<void>(
+                      builder: (_) => const PantallaAsistente()),
                 ),
                 icon: const Icon(Icons.chat_bubble_outline),
                 label: const Text('Asistente'),
@@ -51,7 +54,8 @@ class PantallaInicio extends StatelessWidget {
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const PantallaLoginVisor()),
+                  MaterialPageRoute<void>(
+                      builder: (_) => const EntradaSesion()),
                 ),
                 icon: const Icon(Icons.visibility_outlined),
                 label: const Text('Diagramas en vivo'),

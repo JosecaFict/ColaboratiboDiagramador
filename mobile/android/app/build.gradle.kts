@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.uagrm.colabmodel.colabmodel_app"
-    compileSdk = maxOf(37, flutter.compileSdkVersion)
+    compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

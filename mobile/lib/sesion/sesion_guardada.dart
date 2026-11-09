@@ -43,6 +43,10 @@ class SesionGuardada {
 }
 
 String? validarDireccion(String texto) {
+  if (texto.contains('://') &&
+      !texto.trim().startsWith('http://') &&
+      !texto.trim().startsWith('https://'))
+    return 'Usá una dirección http o https.';
   final u = Uri.tryParse(ClienteHerramienta.normalizarHost(texto));
   if (u == null ||
       !['http', 'https'].contains(u.scheme) ||

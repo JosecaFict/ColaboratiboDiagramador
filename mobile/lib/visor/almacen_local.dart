@@ -6,7 +6,7 @@ import 'modelo.dart';
 
 /// Ultimo snapshot de cada diagrama, guardado en el telefono para poder
 /// mostrarlo sin red. Solo se guarda el diagrama (nunca la contrasena ni el
-/// token): el token vive en memoria y se pide de nuevo al abrir la app.
+/// token): la sesión se guarda aparte en el almacenamiento seguro del sistema.
 class AlmacenLocal {
   static const _prefijo = 'visor.snapshot.';
   static const _claveHost = 'visor.host';

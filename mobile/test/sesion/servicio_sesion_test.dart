@@ -63,6 +63,29 @@ Future<void> bombear() async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('un 401 tardío de la cuenta anterior no borra una sesión nueva',
+      () async {
+    final vieja = Completer<http.Response>();
+    final m = MemoriaSesion()..contenido = datos.serializar();
+    final s = servicio(m, (r) async {
+      if (r.url.path.endsWith('/diagrams/d')) return vieja.future;
+      if (r.url.path.endsWith('/login')) return respuesta(token('NUEVA'));
+      if (r.url.path.endsWith('/logout')) return http.Response('', 204);
+      return respuesta([]);
+    });
+    addTearDown(s.dispose);
+    await s.restaurar();
+    final resultado = expectLater(
+        s.cliente!.snapshot('d'), throwsA(isA<HerramientaException>()));
+    await s.cerrarSesion();
+    await s.entrar('h:8080', 'a@b.com', 'secreto123');
+    vieja.complete(respuesta({}, 401));
+    await resultado;
+    await bombear();
+    expect(s.estado, EstadoSesion.activa);
+    expect(s.datos!.token, 'NUEVA');
+    expect(SesionGuardada.leer(m.contenido!).token, 'NUEVA');
+  });
   test(
       'entra y persiste dirección, token, identidad y nombre; jamás contraseña',
       () async {

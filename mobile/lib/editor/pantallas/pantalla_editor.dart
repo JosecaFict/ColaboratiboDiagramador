@@ -23,8 +23,9 @@ class PantallaEditor extends StatefulWidget {
 
   /// Si la pantalla cierra el editor al salir (en las pruebas, no).
   final bool cerrarAlSalir;
+  final VoidCallback? alCerrarSesion;
 
-  const PantallaEditor({super.key, required this.editor, required this.titulo, this.cerrarAlSalir = true});
+  const PantallaEditor({super.key, required this.editor, required this.titulo, this.cerrarAlSalir = true, this.alCerrarSesion});
 
   @override
   State<PantallaEditor> createState() => _PantallaEditorState();
@@ -175,7 +176,7 @@ class _PantallaEditorState extends State<PantallaEditor> {
             ],
           ),
           drawer: _Menu(
-            titulo: widget.titulo,
+            titulo: widget.titulo, alCerrarSesion: widget.alCerrarSesion,
             puedeEditar: _e.puedeEditar,
             conectado: _e.conectado,
             alAbrirPaleta: () {
@@ -359,13 +360,14 @@ class _Menu extends StatelessWidget {
   final bool conectado;
   final VoidCallback alAbrirPaleta;
   final VoidCallback alEncuadrar;
+  final VoidCallback? alCerrarSesion;
 
   const _Menu({
     required this.titulo,
     required this.puedeEditar,
     required this.conectado,
     required this.alAbrirPaleta,
-    required this.alEncuadrar,
+    required this.alEncuadrar, this.alCerrarSesion,
   });
 
   @override
@@ -390,6 +392,9 @@ class _Menu extends StatelessWidget {
                 title: const Text('Ver todo el diagrama'),
                 onTap: alEncuadrar),
             const _Seccion('Proyecto'),
+            if (alCerrarSesion != null)
+              ListTile(leading: const Icon(Icons.logout), title: const Text('Cerrar sesión'),
+                onTap: () { Navigator.of(context).pop(); alCerrarSesion!(); }),
             ListTile(
               leading: const Icon(Icons.arrow_back),
               title: const Text('Volver a los diagramas'),

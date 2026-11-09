@@ -187,7 +187,7 @@ class ClienteHerramienta {
       // cuerpo que no es JSON: se informa solo el codigo
     }
     if (r.statusCode == 401 && !conToken) {
-      throw HerramientaException('El email o la contrasena no son correctos',
+      throw HerramientaException('El email o la contraseña no son correctos',
           estado: 401);
     }
     if (r.statusCode == 401) {
