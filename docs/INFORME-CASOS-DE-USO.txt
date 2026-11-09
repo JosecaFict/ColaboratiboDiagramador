@@ -1,0 +1,346 @@
+INFORME · CASOS DE USO Y TRABAJO REALIZADO
+ColabModel · 2do parcial · 08/11/2026
+=====================================================================
+
+Contenido
+  1. Resumen
+  2. Comparación: la lista del docente contra lo que tenemos
+  3. Lo que tenemos y la lista del docente no pide
+  4. Nuestro catálogo completo (24 casos)
+  5. Informe de lo que hice
+  6. Pendientes y riesgos
+
+Cómo leer los estados
+  [HECHO]    funciona
+  [PARCIAL]  existe una parte, o existe pero no en main
+  [FALTA]    no existe
+  "main" = rama main de GitHub, commit db10191 «ColabModel · 2do parcial».
+  "pendientes-rapidos" = rama local feat/pendientes-rapidos, commit f14920c
+  (todavía no está en GitHub ni en main).
+
+
+=====================================================================
+1. RESUMEN
+=====================================================================
+
+Lista del docente: 25 casos de uso (numerados del CU-01 al CU-26; no
+tiene CU-07).
+
+                         Solo con main    Con main + pendientes-rapidos
+  [HECHO]                     12                    15
+  [PARCIAL]                    8                     5
+  [FALTA]                      5                     5
+  Total                       25                    25
+
+Nuestro catálogo (docs/CASOS-DE-USO.md, rama local docs/casos-de-uso):
+24 casos de uso. 23 funcionan en main y 1 (CU-24) está en la rama
+feature/asistente-ia, que todavía no está unida a main.
+
+Los números de los casos NO coinciden entre las dos listas: cada una
+numera a su manera. La tabla de la sección 2 dice cuál es cuál.
+
+
+=====================================================================
+2. COMPARACIÓN: LISTA DEL DOCENTE CONTRA LO QUE TENEMOS
+=====================================================================
+
+Columnas: caso del docente | nuestro caso equivalente | estado | detalle
+
+---------------------------------------------------------------------
+Módulo 1 · Seguridad y acceso
+---------------------------------------------------------------------
+CU-01 Iniciar sesión
+  Nuestro: CU-02          Estado: [HECHO]
+  Login con email y clave; el servidor entrega un token JWT.
+
+CU-02 Cerrar sesión
+  Nuestro: CU-02          Estado: [HECHO] en pendientes-rapidos
+                                  ([PARCIAL] en main)
+  En main el botón solo borraba el token del navegador y una copia seguía
+  sirviendo hasta 8 horas. En pendientes-rapidos el servidor invalida el
+  token al cerrar sesión (API y WebSocket).
+
+CU-03 Recuperar contraseña
+  Nuestro: —              Estado: [FALTA]
+  El servidor solo tiene registro e inicio de sesión.
+
+CU-04 Emitir un código de recuperación desde la consola
+  Nuestro: —              Estado: [FALTA]
+
+---------------------------------------------------------------------
+Módulo 2 · Proyectos y colaboración
+---------------------------------------------------------------------
+CU-05 Crear un proyecto
+  Nuestro: CU-06          Estado: [HECHO]
+  Quien lo crea queda como propietario.
+
+CU-06 Abrir un proyecto
+  Nuestro: CU-06 / CU-03  Estado: [HECHO]
+  Abre el editor con los permisos de su rol (propietario, modelador u
+  observador).
+
+---------------------------------------------------------------------
+Módulo 3 · Edición del diagrama
+---------------------------------------------------------------------
+CU-08 Editar el diagrama en tiempo real
+  Nuestro: CU-01          Estado: [HECHO]
+  Varios editores a la vez; los cambios llegan a todos sin recargar y un
+  bloqueo por clase evita que dos personas se pisen.
+
+CU-10 Importar y exportar XMI
+  Nuestro: CU-08 + CU-10  Estado: [HECHO]
+  En los dos sentidos con Enterprise Architect (XMI 2.1).
+
+CU-11 Editar el diagrama por voz
+  Nuestro: CU-21 + CU-20  Estado: [HECHO]
+  Se dicta el pedido en la web (Chrome o Edge), la IA lo convierte en
+  cambios y una persona los revisa y aplica.
+
+CU-14 Consultar el historial de cambios
+  Nuestro: CU-14 a CU-16  Estado: [HECHO] en pendientes-rapidos
+                                  ([PARCIAL] en main)
+  Las versiones ya mostraban quién y cuándo, y permiten volver atrás. En
+  main el historial de operaciones mostraba solo número, tipo y origen;
+  en pendientes-rapidos muestra también el autor y la hora.
+
+---------------------------------------------------------------------
+Módulo 4 · Asistencia inteligente
+---------------------------------------------------------------------
+CU-09 Importar un diagrama desde una foto
+  Nuestro: CU-09          Estado: [HECHO]
+  Detecta cajas, líneas y relaciones; el usuario confirma la propuesta.
+
+CU-12 Consultar la guía del proyecto (respuestas con cita del documento)
+  Nuestro: —              Estado: [FALTA]
+  No hay búsqueda sobre la documentación del proyecto.
+
+CU-17 Revisar el modelado (problemas por gravedad, elemento y regla)
+  Nuestro: CU-19 / CU-24  Estado: [PARCIAL]
+  En main, el modo «Revisar» de la IA responde con texto libre. En la rama
+  feature/asistente-ia hay hallazgos con gravedad y el elemento señalado,
+  pero todavía sin el código de la regla.
+
+---------------------------------------------------------------------
+Módulo 5 · Generación de código
+---------------------------------------------------------------------
+CU-13 Generar el backend Spring Boot
+  Nuestro: CU-05          Estado: [HECHO]
+  Genera 5 capas (la lista pide 4: suma el DTO) y sale listo para
+  producción: PATCH, paginación, errores con un solo formato, versión,
+  perfiles dev y prod, Docker y pruebas.
+
+CU-18 Arreglar lo que impide generar
+  Nuestro: CU-24          Estado: [PARCIAL]
+  Existe en la rama feature/asistente-ia (arreglos directos que se aplican
+  juntos), pero no está en main.
+
+CU-19 Ver el diagrama de comunicación del backend generado
+  Nuestro: —              Estado: [FALTA]
+  No se genera, ni en pantalla ni en XMI.
+
+CU-26 Elegir el motor de base de datos al generar
+  Nuestro: CU-05 + CU-13  Estado: [PARCIAL]
+  PostgreSQL y MongoDB: sí. Cassandra: no existe.
+
+---------------------------------------------------------------------
+Módulo 6 · Monitoreo, trazabilidad y análisis
+---------------------------------------------------------------------
+CU-15 Dictar una orden al asistente móvil
+  Nuestro: CU-23          Estado: [HECHO] en pendientes-rapidos
+                                  ([PARCIAL] en main)
+  La app interpreta la orden contra el manifiesto del backend generado.
+  En main la enviaba sin repetirla. En pendientes-rapidos la repite («Voy a
+  crear socio con nombre Carla Rojas. ¿Lo creo?») y espera un «sí».
+
+CU-16 Registrar sin conexión y sincronizar al volver
+  Nuestro: —              Estado: [FALTA]
+  Las librerías para eso están comentadas en el móvil como «Fase 4», y el
+  backend generado no tiene clave de idempotencia.
+
+---------------------------------------------------------------------
+Módulo 7 · Control de versiones
+---------------------------------------------------------------------
+CU-20 Crear un punto de control
+  Nuestro: CU-14          Estado: [HECHO]
+  «Guardar versión», con nombre y mensaje.
+
+CU-21 Restaurar una versión anterior
+  Nuestro: CU-16          Estado: [HECHO]
+  Diferencia: además del propietario, también puede restaurar el
+  modelador.
+
+CU-22 Consultar y comparar una versión guardada
+  Nuestro: CU-15          Estado: [HECHO]
+  Compara dos versiones, o una versión con el diagrama actual, sin tocar
+  el diagrama.
+
+---------------------------------------------------------------------
+Módulo 8 · Modo IA
+---------------------------------------------------------------------
+CU-23 Conversar con el Modo IA para editar el diagrama
+  Nuestro: CU-20          Estado: [HECHO]
+  Diferencia de diseño: nuestro chat es compartido por todo el equipo,
+  no un hilo privado de cada uno.
+
+CU-24 Revisar el diagrama con la IA y aceptar correcciones
+  Nuestro: CU-19 / CU-24  Estado: [PARCIAL]
+  En main, «Revisar» da texto y «Modificar» da cambios aceptables. Las
+  correcciones con motivo y arreglo directo están en feature/asistente-ia.
+
+CU-25 Compartir una respuesta de la IA en el tablón
+  Nuestro: CU-19          Estado: [PARCIAL]
+  Por diseño, todo el chat ya lo ve el equipo en vivo; no hay una acción
+  de «publicar» ni un tablón aparte.
+
+
+Resumen por estado (con pendientes-rapidos)
+  [HECHO]   (15): CU-01, 02, 05, 06, 08, 09, 10, 11, 13, 14, 15, 20, 21,
+                  22, 23
+  [PARCIAL] (5):  CU-17, 18, 24, 25, 26
+  [FALTA]   (5):  CU-03, 04, 12, 16, 19
+
+
+=====================================================================
+3. LO QUE TENEMOS Y LA LISTA DEL DOCENTE NO PIDE
+=====================================================================
+
+  - Registrarse (crear cuenta) y gestionar el perfil
+  - Gestionar miembros y roles (propietario, modelador, observador)
+  - Gestionar diagramas (crear, renombrar, borrar)
+  - Deshacer y rehacer
+  - Importar desde un script SQL
+  - Vista Lógica: tablas derivadas y resolución de ambigüedades
+  - Vista Física: verificar y confirmar el esquema en PostgreSQL
+  - Vista Documental: cómo queda el modelo en MongoDB
+  - Ramas y fusión de versiones
+  - Configurar la IA del proyecto (estilo mentor, senior o revisor)
+  - Chat de IA grupal en vivo, que recuerda quién preguntó qué
+  - Ver el diagrama en vivo desde el teléfono
+
+
+=====================================================================
+4. NUESTRO CATÁLOGO COMPLETO (24 CASOS)
+=====================================================================
+
+Gestión
+  CU-02  Registrarse, iniciar sesión y gestionar el perfil
+  CU-06  Gestionar proyectos, miembros y roles
+  CU-03  Gestionar diagramas
+
+Modelado
+  CU-01  Modelar el diagrama de clases en colaboración
+  CU-07  Deshacer y rehacer
+  CU-08  Importar un modelo desde SQL o XMI
+  CU-09  Leer un diagrama desde una imagen
+  CU-10  Exportar a XMI
+
+Del modelo a la base de datos
+  CU-04  Derivar el modelo lógico y resolver ambigüedades
+  CU-11  Verificar y confirmar el esquema físico
+  CU-12  Ver la Vista Documental (NoSQL)
+  CU-05  Generar el backend Spring Boot con PostgreSQL
+  CU-13  Generar el backend Spring Boot con MongoDB
+
+Versiones
+  CU-14  Registrar una versión del diagrama
+  CU-15  Comparar versiones
+  CU-16  Restaurar una versión
+  CU-17  Crear una rama y fusionarla
+
+Inteligencia artificial
+  CU-18  Configurar la IA del proyecto
+  CU-19  Consultar y revisar el modelo con la IA en el chat del equipo
+  CU-20  Diseñar o modificar con la IA y aplicar la propuesta
+  CU-21  Dictar un pedido a la IA por voz
+  CU-24  Revisar si el modelo está listo para generar
+         (proyectado: está en la rama feature/asistente-ia)
+
+Aplicación móvil
+  CU-22  Ver el diagrama en vivo desde el teléfono
+  CU-23  Operar el backend generado desde el teléfono, por texto o voz
+
+La numeración no va en orden dentro de cada grupo porque CU-01, 04, 05 y
+06 conservan el número que ya tenían en la versión anterior del documento.
+
+
+=====================================================================
+5. INFORME DE LO QUE HICE
+=====================================================================
+
+5.1 Análisis y comparación con colabmodel
+  - Comparé este proyecto con la carpeta colabmodel. Es la misma base más
+    una capa de IA local con Ollama (4 modos, historial compartido, vista
+    IA).
+  - Analicé los puntos del 2do parcial: qué había, qué faltaba y qué era
+    más pesado.
+
+5.2 Generalización de la IA          commit 21bf16c · en main
+  - Quité las reglas fijas del ejemplo de la biblioteca (ISBN, autores,
+    préstamos) para que la IA sirva con cualquier dominio.
+  - El modelo ahora marca qué clases son históricas, se respetan sus
+    nombres de relación y se puede diseñar una sola clase.
+  - Pruebas con tienda, clínica, ventas y cursos.
+
+5.3 Tarea A: generador listo para producción y variante MongoDB
+                                     commit 7701576 · integrado en main
+  - Backend generado: PATCH, paginación con X-Total-Count, 201 con
+    Location, errores con un solo formato, versión y auditoría, perfiles
+    dev y prod, Actuator, Docker y pruebas MockMvc.
+  - Variante MongoDB con las mismas rutas, DTO y manifiesto que PostgreSQL,
+    y la Vista Documental.
+  - Arreglé un error que ya estaba en main: listar la clase abstracta de
+    una herencia daba 500.
+  - Probado contra un backend real en PostgreSQL y en MongoDB.
+  - Después, la revisión siguió con Codex en otra rama, por pedido del
+    coordinador.
+
+5.4 Prueba de MongoDB en ejecución
+  - Encontré un error: los decimales (por ejemplo, el precio) se guardan
+    como texto y se ordenan mal. Probé el arreglo y se lo pasé al
+    coordinador para Codex.
+  - Ese arreglo no había llegado a main. Lo apliqué en la rama local
+    fix/mongo-decimales (commit 9db1850), con su prueba, y lo verifiqué
+    contra MongoDB 7 real: el precio queda como Decimal128 y se ordena
+    como número ([100.75, 10, 9, 2.5]).
+
+5.5 Documento de casos de uso       commit 135bfb7 · rama local docs/casos-de-uso
+  - docs/CASOS-DE-USO.md pasó de 4 a 24 casos, con una ficha por caso.
+  - Abrí el PR #1 y, a tu pedido, lo cerré y borré la rama de GitHub.
+    El commit sigue solo en tu PC.
+
+5.6 Comparación con la lista del docente
+  - Clasifiqué los 25 casos de la lista contra el código de main y de
+    feature/asistente-ia (sección 2 de este informe).
+
+5.7 Pendientes rápidos             commit f14920c · rama local feat/pendientes-rapidos
+  - Cerrar sesión invalida el token en el servidor (migración V10).
+  - El historial de operaciones muestra autor y hora.
+  - El asistente móvil repite la orden y espera un «sí» antes de crear.
+  - Pruebas: backend 1109 (0 fallas), frontend 324, móvil 169.
+  - Actualicé el paso 6.4 del guion de la demo.
+
+
+=====================================================================
+6. PENDIENTES Y RIESGOS
+=====================================================================
+
+  1. El error de los decimales en MongoDB sigue en main, pero ya está
+     arreglado en la rama local fix/mongo-decimales (commit 9db1850):
+     el precio se guarda como Decimal128 y se ordena como número.
+     Verificado contra MongoDB 7 real. Falta unirlo a main.
+
+  2. Tres ramas locales sin subir: docs/casos-de-uso (135bfb7),
+     feat/pendientes-rapidos (f14920c) y fix/mongo-decimales (9db1850).
+
+  3. feat/pendientes-rapidos agrega la migración V10. Si otra rama también
+     agrega una V10, chocan al unirlas y hay que renumerar una.
+
+  4. Los cambios de pendientes-rapidos pasaron todas las pruebas
+     automáticas, pero no los vi en la app en ejecución.
+
+  5. Para cubrir la lista del docente faltan, de menor a mayor esfuerzo:
+       Medio:  unir feature/asistente-ia (cubre casi todo CU-17, 18 y 24),
+               recuperar contraseña con código por consola (CU-03 y 04),
+               guía del proyecto con citas (CU-12).
+       Grande: Cassandra (CU-26), diagrama de comunicación (CU-19) y modo
+               sin conexión con idempotencia (CU-16).
