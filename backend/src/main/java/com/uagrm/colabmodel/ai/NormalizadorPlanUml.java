@@ -183,6 +183,8 @@ final class NormalizadorPlanUml {
         int referenciasDuplicadasRetiradas = retirarReferenciasDuplicadas(plan);
 
         CorrectorEstructuralPlan.corregir(plan, requisito);
+        // Despues de todos los ajustes de multiplicidad: es la que llega al esquema.
+        int agregacionesObligatorias = agregacionesConFkObligatoriaAAsociacion(plan);
         int secundariosRecortados = recortarAtributosSecundarios(plan, requisito);
 
         // Sin auditoria del modelo igual se informa lo que hizo el backend (Diego).
@@ -219,6 +221,15 @@ final class NormalizadorPlanUml {
             }
             audit.add("El backend sustituyo " + relacionesAjustadas
                     + " relacion(es) de ciclo de vida por ASSOCIATION para preservar entidades historicas.");
+            }
+            if (agregacionesObligatorias > 0) {
+                for (int i = audit.size() - 1; i >= 0; i--) {
+                    String punto = normal(audit.get(i).asText());
+                    if (punto.contains("agregacion") || punto.contains("aggregation")) audit.remove(i);
+                }
+                audit.add("El backend sustituyo " + agregacionesObligatorias
+                        + " agregacion(es) por ASSOCIATION: la parte exige su todo, asi que borrar el todo "
+                        + "queda restringido y la agregacion no aportaba nada al esquema.");
             }
             if (identidadesAgregadas > 0) audit.add("El backend agrego identidad UUID a "
                     + identidadesAgregadas + " clase(s) que no tenian clave primaria.");
@@ -265,6 +276,30 @@ final class NormalizadorPlanUml {
     private static boolean tienePk(ObjectNode clase) {
         for (JsonNode a : clase.path("attributes")) if (a.path("pk").asBoolean(false)) return true;
         return false;
+    }
+
+    /**
+     * Una agregacion se distingue de una asociacion solo por el SET NULL al borrar el todo
+     * (DerivadorLogico.reglaDeBorrado). Si la FK que genera es obligatoria eso es imposible,
+     * queda RESTRICT igual que una asociacion, y el generador avisaria de un falso problema.
+     * Mismo criterio de FK que el derivador: la lleva el lado "muchos"; en 1:1, el destino.
+     */
+    private static int agregacionesConFkObligatoriaAAsociacion(ObjectNode plan) {
+        int cambios = 0;
+        for (JsonNode nodo : plan.path("relations")) {
+            if (!"AGGREGATION".equals(nodo.path("kind").asText())) continue;
+            String ms = nodo.path("sourceMultiplicity").asText("").trim();
+            String mt = nodo.path("targetMultiplicity").asText("").trim();
+            if (ms.isEmpty() || mt.isEmpty()) continue;
+            boolean origenMuchos = ms.contains("*"), destinoMuchos = mt.contains("*");
+            if (origenMuchos && destinoMuchos) continue;
+            boolean fkEnDestino = destinoMuchos || !origenMuchos;
+            if ((fkEnDestino ? ms : mt).startsWith("1")) {
+                ((ObjectNode) nodo).put("kind", "ASSOCIATION");
+                cambios++;
+            }
+        }
+        return cambios;
     }
 
     /** Composicion o agregacion: el origen es el todo y el destino la parte (Diego). */

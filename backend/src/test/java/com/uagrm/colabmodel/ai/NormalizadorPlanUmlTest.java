@@ -783,6 +783,31 @@ class NormalizadorPlanUmlTest {
         assertThat(NormalizadorPlanUml.normalizar(n, req).comandos().getFirst().parametros().path("relations")).hasSize(2);
     }
 
+    @Test
+    void agregacion_con_fk_obligatoria_pasa_a_asociacion_y_la_opcional_se_conserva() {
+        ObjectNode plan = J.objectNode();
+        var clases = plan.putArray("classes");
+        clase(clases.addObject(), "Producto", "nombre");
+        clase(clases.addObject(), "Inventario", "cantidadDisponible");
+        clase(clases.addObject(), "Equipo", "nombreEquipo");
+        clase(clases.addObject(), "Jugador", "nombreJugador");
+        var relaciones = plan.putArray("relations");
+        relacion(relaciones.addObject(), "Producto", "Inventario", "AGGREGATION");
+        ObjectNode opcional = relaciones.addObject();
+        relacion(opcional, "Equipo", "Jugador", "AGGREGATION");
+        opcional.put("sourceMultiplicity", "0..1");
+        plan.putArray("audit").add("Se usa agregacion entre Producto e Inventario");
+
+        var resultado = NormalizadorPlanUml.normalizar(new RespuestaIA(
+                List.of(new ComandoPropuestoIA(EsquemaPlanUml.NOMBRE, plan)), "")).comandos().getFirst().parametros();
+
+        assertThat(resultado.path("relations").get(0).path("kind").asText()).isEqualTo("ASSOCIATION");
+        assertThat(resultado.path("relations").get(1).path("kind").asText()).isEqualTo("AGGREGATION");
+        assertThat(resultado.path("audit").toString())
+                .contains("1 agregacion(es) por ASSOCIATION")
+                .doesNotContain("Se usa agregacion");
+    }
+
     private static void relacion(ObjectNode relacion, String source, String target, String kind) {
         relacion.put("source", source).put("target", target).put("kind", kind)
                 .put("sourceMultiplicity", "1").put("targetMultiplicity", "0..*");

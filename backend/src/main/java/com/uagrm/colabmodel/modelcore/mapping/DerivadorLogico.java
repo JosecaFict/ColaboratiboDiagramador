@@ -653,8 +653,9 @@ public final class DerivadorLogico {
             case AGGREGATION -> {
                 if (nullable) yield "SET NULL";
                 advertencias.add("La agregacion " + origen.getName() + " - " + destino.getName()
-                        + " tiene la FK obligatoria, asi que no puede ser SET NULL: queda RESTRICT."
-                        + " Si la parte deberia sobrevivir, poné el extremo en 0..1 o 0..*.");
+                        + " tiene la FK obligatoria, asi que no puede ser SET NULL: queda RESTRICT,"
+                        + " igual que una asociacion. Si cada parte exige su todo, cambiala a asociacion;"
+                        + " si la parte debe sobrevivir sin el, poné ese extremo en 0..1.");
                 yield "RESTRICT";
             }
             default -> "RESTRICT";
