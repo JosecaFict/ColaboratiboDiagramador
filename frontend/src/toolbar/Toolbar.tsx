@@ -1,15 +1,3 @@
-import { useState } from 'react'
-import { ESTEREOTIPO_EMBEBIBLE, ESTEREOTIPO_ENUM, type RelationKind } from '../contracts/command'
-import { NotacionRelacion } from './NotacionRelacion'
-
-const TIPOS_RELACION: { id: RelationKind; label: string }[] = [
-  { id: 'ASSOCIATION', label: 'Asociacion' },
-  { id: 'AGGREGATION', label: 'Agregacion' },
-  { id: 'COMPOSITION', label: 'Composicion' },
-  { id: 'GENERALIZATION', label: 'Generalizacion' },
-  { id: 'DEPENDENCY', label: 'Dependencia' },
-]
-
 interface Props {
   disabled: boolean
   /**
@@ -26,16 +14,11 @@ interface Props {
   onImportar: () => void
   /** XMI 2.5.1 (UML 2.5.1) del diagrama. Es una lectura: sigue disponible para un Observador. */
   onExportar: () => void
-  tipoRelacion: RelationKind
-  onCambiarTipoRelacion: (k: RelationKind) => void
-  /** true = la herramienta Relacion esta armada y arrastrar conecta. */
-  modoRelacion: boolean
-  /** Con `estereotipo` crea una enumeracion en vez de una clase comun. */
-  onCrearClase: (nombre: string, estereotipo?: string) => void
-  onIniciarRelacion: () => void
-  onCancelarRelacion: () => void
   /** Lee un diagrama de una imagen. Lo detectado se confirma antes de escribir. */
   onImagen: (archivo: File) => void
+  /** El panel izquierdo (arbol + paleta) esta abierto; null = esta vista no lo tiene. */
+  panelIzquierdo: boolean | null
+  onPanelIzquierdo: () => void
   /**
    * Que deshace y que rehace el proximo clic ("mover Libro"), o null si no hay
    * nada PROPIO: el undo es de esta pestana, no del diagrama (ADR-027).
@@ -47,9 +30,10 @@ interface Props {
 }
 
 /**
- * Barra de herramientas. Solo lo que el catalogo cerrado de comandos
- * (ADR-014) ya sabe aplicar: crear clase, crear relacion. "Generar Spring
- * Boot" no es un comando --no escribe nada-- sino una lectura del modelo.
+ * Barra de herramientas. Crear clases y relaciones se mudo a la PALETA del
+ * panel izquierdo (como en StarUML); aca queda lo que actua sobre el diagrama
+ * entero. "Generar Spring Boot" no es un comando --no escribe nada-- sino una
+ * lectura del modelo.
  *
  * "Importar" abre una revision: el archivo XMI se lee y se propone, y lo que
  * el usuario confirma entra como un BATCH por el bus. "Desde imagen" hace lo
@@ -58,80 +42,21 @@ interface Props {
  */
 export function Toolbar({
   disabled, puedeGenerar, onGenerar, ambiguedadesPendientes, onAmbiguedades, onImportar, onExportar,
-  tipoRelacion, onCambiarTipoRelacion, modoRelacion,
-  onCrearClase, onIniciarRelacion, onCancelarRelacion, onImagen,
+  onImagen, panelIzquierdo, onPanelIzquierdo,
   proximoDeshacer, proximoRehacer, onDeshacer, onRehacer,
 }: Props) {
-  /** Que se esta creando: una clase comun o una enumeracion. */
-  const [creandoClase, setCreandoClase] = useState<false | 'CLASE' | 'ENUM' | 'VALOR'>(false)
-  const [nombreClase, setNombreClase] = useState('')
-
-  const confirmarClase = () => {
-    const n = nombreClase.trim()
-    const estereotipo = creandoClase === 'ENUM' ? ESTEREOTIPO_ENUM
-      : creandoClase === 'VALOR' ? ESTEREOTIPO_EMBEBIBLE : undefined
-    if (n) onCrearClase(n, estereotipo)
-    setNombreClase('')
-    setCreandoClase(false)
-  }
-
   return (
     <div className="toolbar">
-      {creandoClase ? (
-        <form className="tb-form" onSubmit={(e) => { e.preventDefault(); confirmarClase() }}>
-          <input
-            autoFocus
-            className="tb-input"
-            placeholder={creandoClase === 'ENUM' ? 'Nombre de la enumeracion'
-              : creandoClase === 'VALOR' ? 'Nombre del valor (ej. Direccion)' : 'Nombre de la clase'}
-            value={nombreClase}
-            onChange={(e) => setNombreClase(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Escape') { setCreandoClase(false); setNombreClase('') } }}
-          />
-          <button type="submit" className="tb-btn tb-split-main" disabled={!nombreClase.trim()}>Crear</button>
-          <button type="button" className="tb-btn tb-cancelar"
-                  onClick={() => { setCreandoClase(false); setNombreClase('') }}>Cancelar</button>
-        </form>
-      ) : (
+      {panelIzquierdo !== null && (
         <>
-          <button className="tb-btn" disabled={disabled} onClick={() => setCreandoClase('CLASE')}
-                  title="Crear una clase nueva">
-            <span className="tb-icon">▭</span> Clase
+          <button className={panelIzquierdo ? 'tb-btn tb-icono tb-activo' : 'tb-btn tb-icono'}
+                  onClick={onPanelIzquierdo} aria-pressed={panelIzquierdo}
+                  title={panelIzquierdo ? 'Ocultar el proyecto y la paleta' : 'Mostrar el proyecto y la paleta'}>
+            ◧
           </button>
-          <button className="tb-btn" disabled={disabled} onClick={() => setCreandoClase('ENUM')}
-                  title="Crear una enumeracion: sus literales se usan como tipo de un atributo">
-            <span className="tb-icon">«»</span> Enumeración
-          </button>
-          <button className="tb-btn" disabled={disabled} onClick={() => setCreandoClase('VALOR')}
-                  title="Crear un valor embebido (@Embeddable): sin tabla propia, vive dentro de quien lo usa">
-            <span className="tb-icon">▣</span> Valor
-          </button>
+          <div className="tb-separador" />
         </>
       )}
-
-      <div className="tb-separador" />
-
-      <button className={modoRelacion ? 'tb-btn tb-activo' : 'tb-btn'} disabled={disabled}
-              onClick={modoRelacion ? onCancelarRelacion : onIniciarRelacion}
-              title="Con esto activo, arrastrá de una clase a otra para relacionarlas">
-        <span className="tb-icon">↔</span> Relacion
-      </button>
-
-      <div className="tb-notaciones">
-        {TIPOS_RELACION.map((t) => (
-          <button key={t.id} title={t.label} disabled={disabled}
-                  className={tipoRelacion === t.id ? 'tb-notacion activa' : 'tb-notacion'}
-                  onClick={() => onCambiarTipoRelacion(t.id)}>
-            <NotacionRelacion kind={t.id} />
-          </button>
-        ))}
-      </div>
-
-      {modoRelacion && (
-        <span className="tb-hint">Arrastrá de una clase a otra (Esc cancela)</span>
-      )}
-
-      <div className="tb-separador" />
 
       {/* Un input de archivo disfrazado de boton: no hay que subir nada a
           ningun lado, la imagen se procesa y no se guarda. */}

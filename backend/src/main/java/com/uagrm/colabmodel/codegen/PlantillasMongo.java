@@ -191,23 +191,17 @@ final class PlantillasMongo {
                 package {{pkg}}.config;
 
                 import com.mongodb.MongoCredential;
-                import org.bson.types.Decimal128;
                 import org.springframework.beans.factory.annotation.Value;
                 import org.springframework.boot.autoconfigure.mongo.MongoClientSettingsBuilderCustomizer;
                 import org.springframework.context.annotation.Bean;
                 import org.springframework.context.annotation.Configuration;
-                import org.springframework.core.convert.converter.Converter;
-                import org.springframework.data.convert.ReadingConverter;
-                import org.springframework.data.convert.WritingConverter;
                 import org.springframework.data.mongodb.MongoDatabaseFactory;
                 import org.springframework.data.mongodb.core.convert.DefaultDbRefResolver;
                 import org.springframework.data.mongodb.core.convert.DefaultMongoTypeMapper;
                 import org.springframework.data.mongodb.core.convert.MappingMongoConverter;
                 import org.springframework.data.mongodb.core.convert.MongoCustomConversions;
+                import org.springframework.data.mongodb.core.convert.MongoCustomConversions.BigDecimalRepresentation;
                 import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
-
-                import java.math.BigDecimal;
-                import java.util.List;
 
                 /**
                  * Tres ajustes sobre lo que Spring Boot configura solo:
@@ -223,9 +217,15 @@ final class PlantillasMongo {
                 @Configuration
                 public class MongoConfig {
 
+                    /**
+                     * Spring Data MongoDB 4.5 decide como guarda BigDecimal con esta
+                     * opcion, no con convertidores propios: dos convertidores
+                     * BigDecimal <-> Decimal128 se registraban pero se ignoraban, y el
+                     * precio quedaba guardado como texto.
+                     */
                     @Bean
                     MongoCustomConversions mongoCustomConversions() {
-                        return new MongoCustomConversions(List.of(new DecimalAMongo(), new MongoADecimal()));
+                        return MongoCustomConversions.create(c -> c.bigDecimal(BigDecimalRepresentation.DECIMAL128));
                     }
 
                     @Bean
@@ -246,22 +246,6 @@ final class PlantillasMongo {
                                 ajustes.credential(MongoCredential.createCredential(usuario, base, clave.toCharArray()));
                             }
                         };
-                    }
-
-                    @WritingConverter
-                    static class DecimalAMongo implements Converter<BigDecimal, Decimal128> {
-                        @Override
-                        public Decimal128 convert(BigDecimal valor) {
-                            return new Decimal128(valor);
-                        }
-                    }
-
-                    @ReadingConverter
-                    static class MongoADecimal implements Converter<Decimal128, BigDecimal> {
-                        @Override
-                        public BigDecimal convert(Decimal128 valor) {
-                            return valor.bigDecimalValue();
-                        }
                     }
                 }
                 """.replace("{{pkg}}", pkg);

@@ -155,14 +155,16 @@ Abrí **3 pestañas** en `http://localhost:5173`. Cada una es un usuario: en la 
 desde el panel **Miembros** como Modelador (sección 5). Después, en cada una abrí el
 diagrama y:
 
-- Tocá **Clase**, escribí un nombre y dale a **Crear** → la entidad aparece en
+- En la **Paleta** (panel izquierdo) tocá **Clase**, escribí un nombre y dale a **Crear** → la entidad aparece en
   las tres pestañas con su `seq`, **sin recargar**.
 - Hacé clic en una clase → se abre el panel de propiedades. Agregale un
   atributo y marcalo **MULTI**: en **Lógico** ese atributo sale a su propia
   tabla por 1FN (Regla 12). Las anotaciones ER (multivaluado, derivado, clave
   parcial, entidad débil) se editan desde este panel.
-- Tocá **Relación**, elegí el tipo viendo su notación, y **arrastrá de una
-  clase a otra** → la relación se dibuja en las tres pestañas.
+- En la Paleta elegí el tipo de relación viendo su notación (asociación, agregación,
+  composición, herencia o dependencia) y **arrastrá de una clase a otra** → la
+  relación se dibuja en las tres pestañas. Arriba de la Paleta, el árbol del proyecto
+  lista clases y relaciones: un clic selecciona y centra.
 - Hacé clic sobre la línea de una relación → panel para ponerle nombre,
   cardinalidades y roles. Poné una **composición** y mirá en **Lógico** cómo su
   FK queda `NOT NULL` con `ON DELETE CASCADE`; cambiala a **agregación** y pasa

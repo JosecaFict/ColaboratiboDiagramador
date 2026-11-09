@@ -26,6 +26,8 @@ interface Props {
   onMoverQuiebres?: (relationId: string, puntos: Punto[]) => void
   /** Resalte de un diff de versiones: id de clase o relacion -> que le paso. No toca el modelo. */
   resaltados?: Record<string, 'agregado' | 'eliminado' | 'modificado'>
+  /** Llevar esta clase al centro del hueco (clic en el arbol). `n` repite el pedido. */
+  centrar?: { id: string; n: number } | null
 }
 
 const COLOR_RESALTE = { agregado: '#16a34a', eliminado: '#dc2626', modificado: '#d97706' } as const
@@ -181,7 +183,7 @@ function recortar(texto: string, ancho: number): string {
 export function Canvas({
   view, classes, relationships, layout, locks, onSelect, onMove,
   relacionSeleccionada, onSelectRelation, modoConector, onConectar,
-  notacionCardinalidad = 'UML', onMoverQuiebres, resaltados,
+  notacionCardinalidad = 'UML', onMoverQuiebres, resaltados, centrar,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const zonaRef = useRef<HTMLDivElement>(null)
@@ -760,6 +762,16 @@ export function Canvas({
     return { x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) }
   })()
   const trama = TRAMA * zoom
+
+  // Clic en el arbol del proyecto: la clase pasa al centro, sin cambiar el zoom.
+  useEffect(() => {
+    if (!centrar) return
+    const c = caja(centrar.id)
+    if (!c) return
+    const util = Math.max(120, tam.h - ALTO_CONTROLES)
+    aplicarAncla({ ...centroDe(c), px: tam.w / 2, py: util / 2 }, area, zoom)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centrar?.n])
 
   return (
     <div className="lienzo-marco">

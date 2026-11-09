@@ -15,6 +15,8 @@ const TIPOS: { id: RelationKind; label: string }[] = [
 
 interface Props {
   propuesta: DeteccionPropuesta | null
+  /** URL local de la foto que se leyo, para revisarla al lado. */
+  imagen?: string | null
   error: string | null
   aplicando: boolean
   onAplicar: (confirmada: DeteccionConfirmada) => void
@@ -52,8 +54,10 @@ interface Borrador {
  * Por eso NADA viene tildado de arranque cuando no tiene nombre: aceptar por
  * omision seria decidir por el usuario.
  */
-export function PanelVision({ propuesta, error, aplicando, onAplicar, onCerrar }: Props) {
+export function PanelVision({ propuesta, imagen = null, error, aplicando, onAplicar, onCerrar }: Props) {
   const [borrador, setBorrador] = useState<Borrador | null>(null)
+  /** Clase o relacion bajo el mouse: se resalta en la foto para compararla. */
+  const [resaltada, setResaltada] = useState<string | null>(null)
 
   // Se inicializa al llegar la propuesta, no en un efecto: asi no hay un
   // fotograma con el panel vacio.
@@ -121,12 +125,18 @@ export function PanelVision({ propuesta, error, aplicando, onAplicar, onCerrar }
 
   return (
     <div className="modal-fondo" onClick={onCerrar}>
-      <div className="modal modal-ancho" onClick={(e) => e.stopPropagation()}>
+      <div className={imagen ? 'modal modal-ancho modal-vision' : 'modal modal-ancho'}
+           onClick={(e) => e.stopPropagation()}>
         <header>
-          <strong>Lo que se leyo de la imagen</strong>
+          <strong>Lo que se leyó de la imagen</strong>
           <button className="modal-cerrar" onClick={onCerrar} title="Cerrar">×</button>
         </header>
 
+        <div className={imagen ? 'vision-dos' : undefined}>
+        {imagen && (
+          <Foto src={imagen} propuesta={propuesta} resaltada={resaltada} onResaltar={setResaltada} />
+        )}
+        <div className="vision-revision">
         {error && <p className="modal-error">{error}</p>}
         {!error && !propuesta && <p className="tenue">Leyendo la imagen…</p>}
 
@@ -168,7 +178,8 @@ export function PanelVision({ propuesta, error, aplicando, onAplicar, onCerrar }
             <section className="vision-lista">
               <h4>Clases</h4>
               {propuesta.clases.map((c) => (
-                <Caja key={c.ref} clase={c} estado={estado} tocar={tocar} />
+                <Caja key={c.ref} clase={c} estado={estado} tocar={tocar}
+                      resaltada={resaltada === c.ref} onResaltar={setResaltada} />
               ))}
               {!propuesta.clases.length && <p className="tenue">No se reconocio ninguna caja.</p>}
             </section>
@@ -177,7 +188,8 @@ export function PanelVision({ propuesta, error, aplicando, onAplicar, onCerrar }
               <section className="vision-lista">
                 <h4>Relaciones</h4>
                 {propuesta.relaciones.map((r) => (
-                  <Linea key={r.ref} relacion={r} propuesta={propuesta} estado={estado} tocar={tocar} />
+                  <Linea key={r.ref} relacion={r} propuesta={propuesta} estado={estado} tocar={tocar}
+                         resaltada={resaltada === r.ref} onResaltar={setResaltada} />
                 ))}
               </section>
             )}
@@ -202,27 +214,119 @@ export function PanelVision({ propuesta, error, aplicando, onAplicar, onCerrar }
               <button className="accion"
                       disabled={!cantidad || aplicando}
                       onClick={() => onAplicar(confirmada)}>
-                {aplicando ? 'Agregando…' : 'Agregar al diagrama'}
+                {aplicando ? 'Agregando…'
+                  : imagen && confirmada.clases.length
+                    ? `Comparé con la foto: agregar ${plural(confirmada.clases.length, 'clase', 'clases')}`
+                    : 'Agregar al diagrama'}
               </button>
             </footer>
           </>
         )}
+        </div>
+        </div>
       </div>
     </div>
   )
 }
 
-function Caja({ clase, estado, tocar }: {
+const ZOOMS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3]
+
+/**
+ * La foto, al lado de lo leido: lo que la referencia pide comparar a ojo.
+ *
+ * Las Caja de la propuesta estan en pixeles de la imagen de TRABAJO (reescalada
+ * y, si hizo falta, enderezada). Sin enderezar, ese marco es la foto escalada,
+ * asi que la foto entra entera en un SVG del tamano del marco y los recuadros
+ * caen encima. Si se enderezo, la foto que se ve no es la del marco: se muestra
+ * sola y se avisa, en vez de dibujar recuadros corridos.
+ */
+function Foto({ src, propuesta, resaltada, onResaltar }: {
+  src: string
+  propuesta: DeteccionPropuesta | null
+  resaltada: string | null
+  onResaltar: (ref: string | null) => void
+}) {
+  /** null = que entre en el ancho del panel. */
+  const [zoom, setZoom] = useState<number | null>(null)
+  const m = propuesta?.metricas
+  const conRecuadros = !!m && !m.enderezado && m.anchoTrabajo > 0 && m.altoTrabajo > 0
+  const ancho = zoom !== null && m ? Math.round(m.anchoOriginal * zoom) : undefined
+
+  /** Al siguiente escalon; desde "encajada", acercar lleva al 100 %. */
+  const paso = (dir: 1 | -1) => {
+    if (zoom === null && dir > 0) { setZoom(1); return }
+    const actual = zoom ?? 1
+    setZoom(dir > 0
+      ? ZOOMS.find((z) => z > actual) ?? ZOOMS[ZOOMS.length - 1]
+      : [...ZOOMS].reverse().find((z) => z < actual) ?? ZOOMS[0])
+  }
+
+  /** Que recuadros se resaltan: la clase, o las dos puntas de una relacion. */
+  const relacion = propuesta?.relaciones.find((r) => r.ref === resaltada)
+  const resaltadas = new Set(relacion ? [relacion.origenRef, relacion.destinoRef] : resaltada ? [resaltada] : [])
+
+  return (
+    <section className="vision-foto" aria-label="Foto que se leyó">
+      <div className="vision-foto-marco">
+        {conRecuadros ? (
+          <svg viewBox={`0 0 ${m!.anchoTrabajo} ${m!.altoTrabajo}`}
+               style={ancho ? { width: ancho } : { width: '100%' }} role="img"
+               aria-label="Foto con las clases detectadas marcadas">
+            <image href={src} x={0} y={0} width={m!.anchoTrabajo} height={m!.altoTrabajo}
+                   preserveAspectRatio="none" />
+            {propuesta!.clases.map((c) => (
+              <rect key={c.ref} x={c.caja.x} y={c.caja.y} width={c.caja.ancho} height={c.caja.alto}
+                    className={[
+                      'vision-recuadro',
+                      c.nombre ? '' : 'sin-nombre',
+                      resaltadas.has(c.ref) ? 'resaltado' : '',
+                    ].join(' ')}
+                    vectorEffect="non-scaling-stroke"
+                    onMouseEnter={() => onResaltar(c.ref)} onMouseLeave={() => onResaltar(null)}>
+                <title>{c.nombre ?? 'Caja sin nombre'}</title>
+              </rect>
+            ))}
+            {relacion && [relacion.simboloOrigen, relacion.simboloDestino].map((s) => (
+              <rect key={s.ref} x={s.caja.x} y={s.caja.y} width={s.caja.ancho} height={s.caja.alto}
+                    className="vision-recuadro extremo" vectorEffect="non-scaling-stroke" />
+            ))}
+          </svg>
+        ) : (
+          <img src={src} alt="Foto que se leyó" style={ancho ? { width: ancho, maxWidth: 'none' } : undefined} />
+        )}
+      </div>
+      <div className="vision-foto-controles">
+        <button type="button" className="tb-btn tb-icono" onClick={() => paso(-1)}
+                disabled={!m} title="Alejar">−</button>
+        <span className="vision-foto-zoom">{zoom === null ? 'Encajada' : `${Math.round(zoom * 100)}%`}</span>
+        <button type="button" className="tb-btn tb-icono" onClick={() => paso(1)}
+                disabled={!m} title="Acercar">+</button>
+        <button type="button" className="tb-btn" onClick={() => setZoom(null)}
+                disabled={zoom === null}>Encajar</button>
+      </div>
+      <p className="tenue">
+        {m?.enderezado
+          ? `La foto se enderezó ${m.enderezado.grados.toFixed(1)}° para leerla, así que no se marcan las cajas encima: comparala a ojo.`
+          : 'Pasá el mouse por una clase o relación de la lista para verla marcada en la foto. En naranja, las cajas que llegaron sin nombre.'}
+      </p>
+    </section>
+  )
+}
+
+function Caja({ clase, estado, tocar, resaltada, onResaltar }: {
   clase: ClaseDetectada
   estado: Borrador
   tocar: (f: (b: Borrador) => Borrador) => void
+  resaltada: boolean
+  onResaltar: (ref: string | null) => void
 }) {
   const mio = estado.clases[clase.ref]
   const cambiar = (cambios: Partial<Borrador['clases'][string]>) =>
     tocar((b) => ({ ...b, clases: { ...b.clases, [clase.ref]: { ...mio, ...cambios } } }))
 
   return (
-    <div className={mio.aceptada ? 'vision-item' : 'vision-item descartado'}>
+    <div className={['vision-item', mio.aceptada ? '' : 'descartado', resaltada ? 'resaltado' : ''].join(' ')}
+         onMouseEnter={() => onResaltar(clase.ref)} onMouseLeave={() => onResaltar(null)}>
       <div className="vision-fila">
         <input type="checkbox" checked={mio.aceptada}
                disabled={!mio.nombre.trim()}
@@ -281,11 +385,13 @@ function multiplicidad(texto: string): string | null {
   return /^(\d+|\*)(\.\.(\d+|\*))?$/.test(limpio) ? limpio : null
 }
 
-function Linea({ relacion, propuesta, estado, tocar }: {
+function Linea({ relacion, propuesta, estado, tocar, resaltada, onResaltar }: {
   relacion: RelacionDetectada
   propuesta: DeteccionPropuesta
   estado: Borrador
   tocar: (f: (b: Borrador) => Borrador) => void
+  resaltada: boolean
+  onResaltar: (ref: string | null) => void
 }) {
   const mia = estado.relaciones[relacion.ref]
   const nombreDe = (ref: string) =>
@@ -293,8 +399,12 @@ function Linea({ relacion, propuesta, estado, tocar }: {
   const cambiar = (cambios: Partial<Borrador['relaciones'][string]>) =>
     tocar((b) => ({ ...b, relaciones: { ...b.relaciones, [relacion.ref]: { ...mia, ...cambios } } }))
 
+  /** El extremo vacio es uno que la foto no dejo leer: se marca para revisarlo. */
+  const claseMult = (texto: string) => (texto.trim() ? 'vision-mult' : 'vision-mult sin-leer')
+
   return (
-    <div className={mia.aceptada ? 'vision-item' : 'vision-item descartado'}>
+    <div className={['vision-item', mia.aceptada ? '' : 'descartado', resaltada ? 'resaltado' : ''].join(' ')}
+         onMouseEnter={() => onResaltar(relacion.ref)} onMouseLeave={() => onResaltar(null)}>
       <div className="vision-fila">
         <input type="checkbox" checked={mia.aceptada}
                onChange={(e) => cambiar({ aceptada: e.target.checked })} />
@@ -313,12 +423,14 @@ function Linea({ relacion, propuesta, estado, tocar }: {
             convierte la relacion en una tabla puente. */}
         <label className="tenue">
           Mult. {nombreDe(relacion.origenRef)}
-          <input className="vision-mult" value={mia.origen} placeholder="1"
+          <input className={claseMult(mia.origen)} value={mia.origen} placeholder="sin leer"
+                 title={mia.origen.trim() ? undefined : 'La foto no dejó leer este extremo: escribilo (1, 0..1, 1..* o 0..*)'}
                  onChange={(e) => cambiar({ origen: e.target.value })} />
         </label>
         <label className="tenue">
           Mult. {nombreDe(relacion.destinoRef)}
-          <input className="vision-mult" value={mia.destino} placeholder="0..*"
+          <input className={claseMult(mia.destino)} value={mia.destino} placeholder="sin leer"
+                 title={mia.destino.trim() ? undefined : 'La foto no dejó leer este extremo: escribilo (1, 0..1, 1..* o 0..*)'}
                  onChange={(e) => cambiar({ destino: e.target.value })} />
         </label>
         {(mia.origen.trim() && !multiplicidad(mia.origen))
