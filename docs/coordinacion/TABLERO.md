@@ -25,7 +25,7 @@ Lo mantiene el líder en `main`. Estados: `pendiente` · `en curso` · `en revis
 | T-03b | Proyecto Android y APK | Media | Sonnet | 00 (retoma de b9) | `feat/android-movil` | integrada (`24da966`) |
 | T-03c | Voz en el asistente móvil | Media | Sonnet | 00 | `feat/voz-movil` | integrada (`0d750f6`); repetir en el teléfono el envío automático tras el silencio en T-13 |
 | T-04 | Vista IA: sincronía, marca de aplicada y voz web | Media | Sonnet | líder 99 (D-10) | `feat/ia-voz` | integrada (`f1d846c`); Codex halló 2 P2, se corrigen en T-14 |
-| T-05 | Interoperabilidad XMI con Enterprise Architect sin archivo del docente; cuenta para la nota (D-13) | Media-Alta | Opus | Claude (worktree `project-analysis-comparison`) | `feat/xmi-ea` | integrada en `main` (`5f33c42`, D-14) · falta la revisión de Codex |
+| T-05 | Interoperabilidad XMI con Enterprise Architect sin archivo del docente; cuenta para la nota (D-13) | Media-Alta | Opus | Claude (worktree `project-analysis-comparison`) | `feat/xmi-ea` | integrada en `main` (`2c56d78`, con las correcciones de Codex) · falta la reevaluación de Codex |
 | T-06 | Subir `main` a GitHub | Baja | líder | líder | `main` | bloqueada (falta autorización del usuario) |
 | T-07 | Evaluación conjunta del proyecto | Alta | líder + colíder | líder y colíder | `main` | terminada: D-04 y D-05 aprobadas; D-02 acordada con condiciones |
 | T-08 | README y SAD al día con el estado real | Baja | líder (redacta 00) | 00 | `docs/estado-2do-parcial` | integrada (`fef6395`); se actualizan las filas al integrar T-03c, T-09, T-10 y T-11 |
