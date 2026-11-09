@@ -563,7 +563,7 @@ class _NuevoAtributoState extends State<_NuevoAtributo> {
   @override
   Widget build(BuildContext context) {
     return _ConAviso(
-      aviso: _perdido == null ? null : '«$_perdido» ya no existe: el tipo volvió a string.',
+      aviso: _perdido == null ? null : '«$_perdido» ya no existe: quedó $_tipo.',
       child: Row(
         children: [
           Expanded(
@@ -582,9 +582,16 @@ class _NuevoAtributoState extends State<_NuevoAtributo> {
                 isExpanded: true,
                 value: _tipo,
                 items: [for (final t in widget.tipos) DropdownMenuItem(value: t, child: Text(t))],
+                // Un menu abierto antes de un cambio remoto puede ofrecer un tipo
+                // que ya no existe: esa eleccion no se toma.
                 onChanged: (v) => setState(() {
-                  _tipo = v ?? _tipo;
-                  _perdido = null;
+                  if (v == null) return;
+                  if (widget.tipos.contains(v)) {
+                    _tipo = v;
+                    _perdido = null;
+                  } else {
+                    _perdido = v;
+                  }
                 }),
               ),
             ),
@@ -635,7 +642,7 @@ class _NuevoMetodoState extends State<_NuevoMetodo> {
   @override
   Widget build(BuildContext context) {
     return _ConAviso(
-      aviso: _perdido == null ? null : '«$_perdido» ya no existe: el retorno volvió a void.',
+      aviso: _perdido == null ? null : '«$_perdido» ya no existe: quedó $_retorno.',
       child: Row(
         children: [
           Expanded(
@@ -654,8 +661,13 @@ class _NuevoMetodoState extends State<_NuevoMetodo> {
               value: _retorno,
               items: [for (final t in widget.tipos) DropdownMenuItem(value: t, child: Text(t))],
               onChanged: (v) => setState(() {
-                _retorno = v ?? _retorno;
-                _perdido = null;
+                if (v == null) return;
+                if (widget.tipos.contains(v)) {
+                  _retorno = v;
+                  _perdido = null;
+                } else {
+                  _perdido = v;
+                }
               }),
             ),
           ),

@@ -131,7 +131,7 @@ void main() {
       e.modelo = modeloDePrueba(); // DELETE_CLASS de otra sesion
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
-      expect(find.text('«Estado» ya no existe: el tipo volvió a string.'), findsOneWidget);
+      expect(find.text('«Estado» ya no existe: quedó string.'), findsOneWidget);
 
       await t.enterText(find.widgetWithText(TextField, 'nuevo atributo'), 'fecha');
       await t.tap(find.byTooltip('Agregar').first);
@@ -151,7 +151,45 @@ void main() {
           const UmlClass(id: 'estado', diagramId: 'd', name: 'EstadoPedido', stereotype: 'enumeration'));
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
-      expect(find.text('«Estado» ya no existe: el retorno volvió a void.'), findsOneWidget);
+      expect(find.text('«Estado» ya no existe: quedó void.'), findsOneWidget);
+    });
+
+    // Reevaluacion de Codex sobre 046fe6c: el menu ya estaba abierto cuando llego el borrado.
+    Future<void> elegirEnMenuViejo(WidgetTester t, EditorFalso e, Finder selector) async {
+      await t.ensureVisible(selector);
+      await t.tap(selector);
+      await t.pumpAndSettle();
+      e.modelo = modeloDePrueba(); // DELETE_CLASS de otra sesion, con el menu abierto
+      await t.pumpAndSettle();
+      await t.tap(find.text('Estado').last);
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+    }
+
+    testWidgets('elegir en el menu de atributo una enum borrada mientras estaba abierto no la toma', (t) async {
+      telefono(t);
+      final e = EditorFalso(modelo: conEstado);
+      await abrirHoja(t, e, 'pedido');
+      await elegirEnMenuViejo(t, e, find.byType(DropdownButton<String>).first);
+      expect(find.text('«Estado» ya no existe: quedó string.'), findsOneWidget);
+
+      await t.enterText(find.widgetWithText(TextField, 'nuevo atributo'), 'fecha');
+      await t.tap(find.byTooltip('Agregar').first);
+      await t.pumpAndSettle();
+      expect(e.llamadas, contains('agregarAtributo:pedido:fecha:string'));
+    });
+
+    testWidgets('elegir en el menu de retorno una enum borrada mientras estaba abierto no la toma', (t) async {
+      telefono(t);
+      final e = EditorFalso(modelo: conEstado);
+      await abrirHoja(t, e, 'pedido');
+      await elegirEnMenuViejo(t, e, find.byType(DropdownButton<String>).last);
+      expect(find.text('«Estado» ya no existe: quedó void.'), findsOneWidget);
+
+      await t.enterText(find.widgetWithText(TextField, 'nuevo método'), 'cerrar');
+      await t.tap(find.byTooltip('Agregar').last);
+      await t.pumpAndSettle();
+      expect(e.llamadas, contains('agregarMetodo:pedido:cerrar:void'));
     });
 
     test('dos clases con el mismo nombre no repiten la opcion', () {
