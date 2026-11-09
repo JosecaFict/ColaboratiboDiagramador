@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { SIMBOLO_VISIBILIDAD, esEmbebible, esEnumeracion } from '../contracts/command'
 import type {
   InheritanceStrategy, UmlAttribute, UmlClass, UmlMethod, Visibility,
@@ -98,12 +98,14 @@ interface Props {
   onQuitarMetodo: (methodId: string) => void
   onBorrarClase: () => void
   onCerrar: () => void
+  /** Quien cambio esta clase y cuando (sus atributos y relaciones incluidos). */
+  historial?: ReactNode
 }
 
 export function PanelPropiedades({
   clase, enumeraciones, embebibles, esRaizDeJerarquia, sugerirAtributo, onRelacionarCon, onCambiarEstrategia, bloqueadaPorOtro, soloLecturaPorRol = false, onRenombrar, onAgregarAtributo,
   onActualizarAtributo, onQuitarAtributo, onAgregarMetodo, onQuitarMetodo,
-  onBorrarClase, onCerrar,
+  onBorrarClase, onCerrar, historial,
 }: Props) {
   const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoTipo, setNuevoTipo] = useState('string')
@@ -411,6 +413,13 @@ export function PanelPropiedades({
         {errorMetodo && <p className="props-error">{errorMetodo}</p>}
       </div>
       </>}
+
+      {historial && (
+        <div className="props-historial">
+          <h4>Historial de esta clase</h4>
+          {historial}
+        </div>
+      )}
 
       <button className="props-borrar" disabled={soloLectura} onClick={onBorrarClase}>
         Borrar la clase

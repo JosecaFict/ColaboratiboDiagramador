@@ -35,7 +35,7 @@ import { PanelImportacion, type EstadoEnvio } from './importacion/PanelImportaci
 import { PanelExportacion } from './interop/PanelExportacion'
 import { exportarXmi, guardar, type PerfilXmi, type XmiExportado } from './interop/exportacionXmi'
 import type { Plan, PropuestaDeImportacion } from './importacion/propuesta'
-import { esEmbebible, esEnumeracion } from './contracts/command'
+import { ESTEREOTIPO_EMBEBIBLE, ESTEREOTIPO_ENUM, esEmbebible, esEnumeracion } from './contracts/command'
 import type {
   AppliedOperation, CommandType, NotationView, RelationKind, UmlRelationship,
 } from './contracts/command'
@@ -44,6 +44,11 @@ import type { Sesion } from './auth/sesion'
 import { VistaIA, type OpcionesDeLoteIA } from './ai/VistaIA'
 import { EsperaDeLotes, type ResultadoDeLote } from './ai/esperaDeLotes'
 import type { AvisoIA } from './ai/historial'
+import { entradasLegibles, esGeometria, hace, indiceDeNombres, tocaClase } from './historial/describir'
+import { ListaHistorial } from './historial/ListaHistorial'
+import { BarraDeEstado } from './estado/BarraDeEstado'
+import { Explorador, type Herramienta } from './explorador/Explorador'
+import type { TipoDeElemento } from './explorador/arbol'
 
 /**
  * La vista Chen se saco de circulacion: se trabaja solo con UML.
@@ -76,6 +81,9 @@ const tocaDecisiones = (op: AppliedOperation) => op.type === 'SET_MODELING_DECIS
  * base, y cada una recorre el modelo entero.
  */
 const SOLO_GEOMETRIA = new Set(['MOVE_ELEMENT', 'RESIZE_ELEMENT'])
+
+/** Cuantos cambios del modelo guarda el historial del panel. */
+const MAX_HISTORIAL = 60
 
 const tocaEsquema = (op: AppliedOperation): boolean => {
   if (op.type === 'BATCH') {
@@ -128,6 +136,13 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
   const [error, setError] = useState<string | null>(null)
   const [tipoRelacion, setTipoRelacion] = useState<RelationKind>('ASSOCIATION')
   const [herramientaRelacion, setHerramientaRelacion] = useState(false)
+  /** Paleta: "Clase de asociación" armada (solo guia; la conversion la hace el panel de la relacion). */
+  const [modoAsociativa, setModoAsociativa] = useState(false)
+  /** El panel izquierdo (arbol + paleta). En pantallas angostas arranca cerrado. */
+  const [verExplorador, setVerExplorador] = useState(() =>
+    typeof window === 'undefined' || window.innerWidth >= 900)
+  /** Pedido de centrar el lienzo en una clase: el contador lo repite aunque sea la misma. */
+  const [centrar, setCentrar] = useState<{ id: string; n: number } | null>(null)
   const [relacionSeleccionada, setRelacionSeleccionada] = useState<string | null>(null)
   const [notacionCardinalidad, setNotacionCardinalidad] = useState<NotacionCardinalidad>('UML')
   const [logica, setLogica] = useState<ModeloLogico | null>(null)
@@ -200,6 +215,32 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
   const auth = () => ({ Authorization: 'Bearer ' + tokenRef.current })
 
   /**
+   * HISTORIAL LEGIBLE. El log solo trae el userId: el nombre sale de la lista de
+   * miembros. Si falla (o alguien ya no es miembro) se lee "Otro miembro", que es
+   * peor pero no miente.
+   */
+  const [nombresDeMiembros, setNombresDeMiembros] = useState<Map<string, string>>(new Map())
+  useEffect(() => {
+    let vigente = true
+    fetch(`/api/v1/projects/${proyecto.id}/members`, { headers: auth() })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((lista: { userId: string; fullName: string }[]) => {
+        if (vigente) setNombresDeMiembros(new Map(lista.map((m) => [m.userId, m.fullName])))
+      })
+      .catch(() => { /* sin nombres, el historial igual se muestra */ })
+    return () => { vigente = false }
+  }, [proyecto.id])
+
+  const clasesVistasRef = useRef(new Map<string, string>())
+
+  /** Reloj del "hace 2 min": se redibuja cada 30 s, no en cada render. */
+  const [ahora, setAhora] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setAhora(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+
+  /**
    * La API de versiones. Por defecto va al servidor; con VITE_VERSIONES_SIMULADAS=1
    * usa una en memoria (el frente B puede no estar listo). Se crea una vez por
    * diagrama abierto: la simulada guarda su estado en la instancia.
@@ -244,11 +285,14 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
 
       // El log solo se usa para el panel (las ultimas) y para resincronizar
       // tras un hueco en la secuencia (EC-08).
+      // Se piden mas de las que se muestran porque mover cajas tambien es una
+      // operacion y no entra al historial: 40 movimientos dejarian la lista vacia.
       const rHistorial = await fetch(
-        `/api/v1/diagrams/${diagramId}/operations?sinceSeq=${Math.max(0, snapshot.currentSeq - 40)}`, auth)
+        `/api/v1/diagrams/${diagramId}/operations?sinceSeq=${Math.max(0, snapshot.currentSeq - 300)}`, auth)
       const historial: OperacionHistorica[] = rHistorial.ok ? await rHistorial.json() : []
       if (!vivo) return
-      setOps(historial.map(historicaAAplicada).reverse())   // la mas reciente arriba
+      setOps(historial.map(historicaAAplicada).filter((o) => !esGeometria(o))
+        .reverse().slice(0, MAX_HISTORIAL))   // la mas reciente arriba
 
       const c = new ColabClient(diagramId, token, {
         onEstado: setConectado,
@@ -259,7 +303,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
           // Solo lo que el servidor acepto entra a la pila de deshacer.
           historialRef.current?.confirmar(op.opId)
           lotesIARef.current.confirmar(op.opId)
-          setOps((prev) => [op, ...prev].slice(0, 40))
+          if (!esGeometria(op)) setOps((prev) => [op, ...prev].slice(0, MAX_HISTORIAL))
           setModelo((prev) => aplicarOperacion(prev, op))
           if (tocaEsquema(op)) setRevisionEsquema((n) => n + 1)
           if (tocaDecisiones(op)) setRevisionDecisiones((n) => n + 1)
@@ -584,12 +628,30 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     setImportando(false)
   }
 
-  const crearClase = (nombre: string, estereotipo?: string) => {
+  const crearClase = (nombre: string, estereotipo?: string, abstracta = false) => {
     const n = modelo.classes.length
     enviar('CREATE_CLASS', {
       classId: uuid(), name: nombre, stereotype: estereotipo ?? null,
+      ...(abstracta ? { isAbstract: true } : {}),
       x: 160 + (n % 4) * 220, y: 120 + Math.floor(n / 4) * 180,
     })
+  }
+
+  /** Lo que la paleta sabe crear: todo es un CREATE_CLASS con otra marca. */
+  const crearDesdePaleta = (tipo: TipoDeElemento, nombre: string) => {
+    if (tipo === 'ENUM') crearClase(nombre, ESTEREOTIPO_ENUM)
+    else if (tipo === 'VALOR') crearClase(nombre, ESTEREOTIPO_EMBEBIBLE)
+    else crearClase(nombre, undefined, tipo === 'ABSTRACTA')
+  }
+
+  const herramienta: Herramienta = herramientaRelacion
+    ? { tipo: 'RELACION', kind: tipoRelacion }
+    : modoAsociativa ? { tipo: 'ASOCIATIVA' } : { tipo: 'SELECCIONAR' }
+
+  const elegirHerramienta = (h: Herramienta) => {
+    setModoAsociativa(h.tipo === 'ASOCIATIVA')
+    if (h.tipo === 'RELACION') { setTipoRelacion(h.kind); setHerramientaRelacion(true) }
+    else setHerramientaRelacion(false)
   }
 
   /**
@@ -620,8 +682,16 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
    * ningun comando al catalogo cerrado. Lo que devuelve son candidatos, y
    * recien lo que el usuario confirme se convierte en escritura.
    */
+  /** La foto que se esta leyendo, para mostrarla junto a lo leido (se libera al cerrar). */
+  const [imagenVision, setImagenVision] = useState<string | null>(null)
+  const soltarImagen = () => setImagenVision((url) => { if (url) URL.revokeObjectURL(url); return null })
+
   const leerImagen = async (archivo: File) => {
     if (!diagramId) return
+    setImagenVision((anterior) => {
+      if (anterior) URL.revokeObjectURL(anterior)
+      return URL.createObjectURL(archivo)
+    })
     setLeyendoImagen(true)
     setPropuestaVision(null)
     setErrorVision(null)
@@ -654,6 +724,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
     setAplicandoVision(false)
     setLeyendoImagen(false)
     setPropuestaVision(null)
+    soltarImagen()
   }
 
   /**
@@ -794,8 +865,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       entradaDeDecision(a.elementId, a.tipo, a.elegida, chosen, `decidir "${a.titulo}"`))
   }
 
-  const iniciarRelacion = () => setHerramientaRelacion(true)
-  const cancelarRelacion = () => setHerramientaRelacion(false)
+  const cancelarRelacion = () => { setHerramientaRelacion(false); setModoAsociativa(false) }
 
   const alSeleccionar = (elementId: string) => {
     setRelacionSeleccionada(null)
@@ -860,6 +930,28 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
   const duenioDelLock = seleccionada ? locks[seleccionada] : undefined
   const bloqueadaPorOtro = duenioDelLock && duenioDelLock !== userName.current ? duenioDelLock : null
 
+  // Toda clase que esta pestana vio: da el nombre de una que despues se borro.
+  for (const c of modelo.classes) clasesVistasRef.current.set(c.id, c.name)
+  const indiceDeHistorial = useMemo(
+    () => indiceDeNombres(modelo, ops, clasesVistasRef.current), [modelo, ops])
+  const entradasDeHistorial = useMemo(() => entradasLegibles(ops, indiceDeHistorial, (id) => {
+    if (id === usuario.userId) return { nombre: usuario.fullName, propio: true }
+    if (!id) return { nombre: 'El sistema', propio: false }
+    return { nombre: nombresDeMiembros.get(id) ?? 'Otro miembro', propio: false }
+  }), [ops, indiceDeHistorial, nombresDeMiembros, usuario.userId, usuario.fullName])
+  const historialDeLaClase = useMemo(() => claseSeleccionada
+    ? entradasDeHistorial.filter((e) => {
+      const o = ops.find((x) => x.opId === e.opId)
+      return !!o && tocaClase(o, claseSeleccionada.id, indiceDeHistorial)
+    })
+    : [], [claseSeleccionada, entradasDeHistorial, ops, indiceDeHistorial])
+
+  /** Quien tiene algo tomado ahora, sin el numero de pestana ni uno mismo. */
+  const editandoAhora = [...new Set(Object.values(locks)
+    .filter((n) => n !== userName.current)
+    .map((n) => n.replace(/ #\d+$/, '')))]
+  const ultimoCambio = entradasDeHistorial[0]
+
   return (
     <div className="app">
       <header className="barra">
@@ -896,13 +988,9 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
         onAmbiguedades={() => setVerAmbiguedades(true)}
         onImportar={() => setImportando(true)}
         onExportar={() => { void abrirExportacion() }}
-        tipoRelacion={tipoRelacion}
-        onCambiarTipoRelacion={setTipoRelacion}
-        modoRelacion={herramientaRelacion}
-        onCrearClase={crearClase}
-        onIniciarRelacion={iniciarRelacion}
-        onCancelarRelacion={cancelarRelacion}
         onImagen={leerImagen}
+        panelIzquierdo={vista === 'CLASS' ? verExplorador : null}
+        onPanelIzquierdo={() => setVerExplorador((v) => !v)}
         proximoDeshacer={historial.proximoDeshacer()}
         proximoRehacer={historial.proximoRehacer()}
         onDeshacer={() => deshacerOrehacer('deshacer')}
@@ -964,10 +1052,11 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       {leyendoImagen && (
         <PanelVision
           propuesta={propuestaVision}
+          imagen={imagenVision}
           error={errorVision}
           aplicando={aplicandoVision}
           onAplicar={aplicarVision}
-          onCerrar={() => { setLeyendoImagen(false); setPropuestaVision(null) }}
+          onCerrar={() => { setLeyendoImagen(false); setPropuestaVision(null); soltarImagen() }}
         />
       )}
 
@@ -1013,6 +1102,20 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
       )}
 
       <main className="cuerpo">
+        {vista === 'CLASS' && verExplorador && (
+          <Explorador
+            proyecto={proyecto.nombre}
+            clases={modelo.classes}
+            relaciones={modelo.relationships}
+            seleccionada={relacionSeleccionada ?? seleccionada}
+            onSeleccionarClase={(id) => { alSeleccionar(id); setCentrar((c) => ({ id, n: (c?.n ?? 0) + 1 })) }}
+            onSeleccionarRelacion={alSeleccionarRelacion}
+            puedeEditar={conectado && !!diagramId && puedeEditar}
+            onCrear={crearDesdePaleta}
+            herramienta={herramienta}
+            onHerramienta={elegirHerramienta}
+          />
+        )}
         <div className={puedeEditar ? 'lienzo-wrap' : 'lienzo-wrap solo-lectura'}>
           {vista === 'AI' ? (
             <VistaIA diagramId={diagramId} proyectoId={proyecto.id} token={token} modelo={modelo} conectado={conectado}
@@ -1052,7 +1155,8 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
                     onConectar={puedeEditar ? conectar : undefined}
                     notacionCardinalidad={notacionCardinalidad}
                     resaltados={resaltados ?? undefined}
-                    onMoverQuiebres={puedeEditar ? moverQuiebres : undefined} />
+                    onMoverQuiebres={puedeEditar ? moverQuiebres : undefined}
+                    centrar={centrar} />
           )}
         </div>
 
@@ -1126,31 +1230,33 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
                 seleccionar(null)
               }}
               onCerrar={() => seleccionar(null)}
+              historial={<ListaHistorial entradas={historialDeLaClase} ahora={ahora} max={6}
+                                         vacio="Sin cambios recientes en esta clase." />}
             />
           )}
 
-          <h3>Operaciones</h3>
-          <p className="tenue">
-            Todo cambio entra aqui con su <code>seq</code>, venga del mouse, la voz,
-            el texto, una foto o un XMI.
-          </p>
-          {ops.length === 0 && <p className="tenue">Sin operaciones todavia.</p>}
-          <ul className="ops">
-            {ops.map((o) => (
-              <li key={o.opId}>
-                <span className="seq">#{o.seq}</span>
-                <span className="tipo">
-                  {/* Un undo es una operacion mas del log; la marca lo delata. */}
-                  {o.payload.deshace ? <span title={'Deshace la operacion ' + String(o.payload.deshace)}>↶ </span> : null}
-                  {o.type}
-                  {o.type === 'BATCH' && ` (${((o.payload.comandos as unknown[]) ?? []).length})`}
-                </span>
-                <span className={'origen o-' + o.origin}>{o.origin}</span>
-              </li>
-            ))}
-          </ul>
+          {/* El log técnico (#seq y tipo de comando) sigue en el title de cada línea. */}
+          <h3>Historial del diagrama</h3>
+          <ListaHistorial entradas={entradasDeHistorial} ahora={ahora}
+                          vacio="Todavía no hay cambios. Mover cajas no cuenta como cambio." />
         </aside>
       </main>
+
+      <BarraDeEstado
+        clases={modelo.classes}
+        relaciones={modelo.relationships.length}
+        seleccionado={claseSeleccionada
+          ? claseSeleccionada.name
+          : relacionElegida
+            ? `relación ${modelo.classes.find((c) => c.id === relacionElegida.sourceClassId)?.name ?? '?'} — `
+              + `${modelo.classes.find((c) => c.id === relacionElegida.targetClassId)?.name ?? '?'}`
+            : null}
+        vista={VISTAS.find((v) => v.id === vista)?.label ?? ''}
+        editandoAhora={editandoAhora}
+        ultimoCambio={ultimoCambio
+          ? `${ultimoCambio.autor} ${ultimoCambio.texto} · ${hace(ultimoCambio.ts, ahora)}`
+          : null}
+      />
     </div>
   )
 }
