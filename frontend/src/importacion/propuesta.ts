@@ -292,16 +292,21 @@ export function planDeImportacion(r: Revision, modelo: EstadoModelo, nuevoId: ()
     const idClase = idDeClave.get(c.clave)
     if (!c.incluir || !idClase) continue
     const existente = existentePorNombre.get(clave(c.nombre))
-    const yaTiene = new Set((existente?.methods ?? []).map((m) => clave(m.name)))
+    // Por FIRMA (nombre + tipos de los parametros), como el backend: pagar(int)
+    // y pagar(string) son dos metodos; el mismo pagar(int) dos veces, no.
+    const firma = (nombre: string, tipos: (string | null | undefined)[]) =>
+      `${clave(nombre)}(${tipos.map((t) => (t ?? 'string').toLowerCase()).join(', ')})`
+    const yaTiene = new Set((existente?.methods ?? []).map((m) => firma(m.name, m.params.map((p) => p.type))))
     let ordinal = existente?.methods.length ?? 0
 
     for (const m of c.metodos) {
       if (!m.incluir) continue
-      if (yaTiene.has(clave(m.nombre))) {
-        avisos.push(`${c.nombre}.${m.nombre}() ya existe en el diagrama: no se agrega de nuevo.`)
+      const suFirma = firma(m.nombre, m.parametros.map((p) => p.tipo))
+      if (yaTiene.has(suFirma)) {
+        avisos.push(`${c.nombre}.${suFirma} ya existe en el diagrama: no se agrega de nuevo.`)
         continue
       }
-      yaTiene.add(clave(m.nombre))
+      yaTiene.add(suFirma)
       comandos.push({
         type: 'ADD_METHOD',
         payload: {

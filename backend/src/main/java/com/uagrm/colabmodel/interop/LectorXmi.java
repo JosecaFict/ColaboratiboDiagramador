@@ -681,16 +681,18 @@ public class LectorXmi implements LectorDeModelo {
             List<Nodo> interfaces = interfacesDe.getOrDefault(c.id(), List.of());
             if (interfaces.isEmpty()) return metodos;
             List<ModeloLeido.MetodoLeido> r = new ArrayList<>(metodos);
+            // Por FIRMA (nombre + tipos de los parametros), como el backend: una
+            // sobrecarga pagar(int) / pagar(String) son dos metodos, no uno repetido.
             Set<String> tiene = new HashSet<>();
-            metodos.forEach(m -> tiene.add(m.nombre().toLowerCase(Locale.ROOT)));
+            metodos.forEach(m -> tiene.add(firma(m)));
             for (Nodo i : interfaces) {
                 List<ModeloLeido.MetodoLeido> prometidas = metodosDe(i);
                 if (prometidas.isEmpty()) continue;   // nada que copiar: el aviso de la interfaz alcanza
                 List<String> agregadas = new ArrayList<>();
                 for (ModeloLeido.MetodoLeido m : prometidas) {
-                    if (tiene.add(m.nombre().toLowerCase(Locale.ROOT))) {
+                    if (tiene.add(firma(m))) {
                         r.add(m);
-                        agregadas.add(m.nombre());
+                        agregadas.add(firma(m));
                     }
                 }
                 advertencias.add(nombre + " realiza la interfaz " + nombreDe(i) + (agregadas.isEmpty()
@@ -699,6 +701,13 @@ public class LectorXmi implements LectorDeModelo {
                           + " porque ColabModel no modela interfaces."));
             }
             return r;
+        }
+
+        /** "pagar(int, string)": la misma identidad que usa el backend para sobrecargar. */
+        private static String firma(ModeloLeido.MetodoLeido m) {
+            return m.nombre().toLowerCase(Locale.ROOT) + "(" + m.parametros().stream()
+                    .map(p -> p.tipo() == null ? "string" : p.tipo().toLowerCase(Locale.ROOT))
+                    .collect(Collectors.joining(", ")) + ")";
         }
 
         private static ModeloLeido.AtributoLeido atributoSimple(String nombre) {
@@ -766,7 +775,10 @@ public class LectorXmi implements LectorDeModelo {
             refs.addAll(referencias(p, "Parameter.type"));   // UML 1.x
             for (String ref : refs) {
                 Nodo destino = porId.get(ref);
-                if (destino != null && destino.id() != null && !destino.esLocal("EAStub")
+                // Un DataType sin atributos es un primitivo ("String" del perfil):
+                // ahi manda el texto de EA, que trae largo y precision (varchar(80)).
+                boolean primitivo = destino != null && destino.es("DataType") && propiedades(destino).isEmpty();
+                if (destino != null && destino.id() != null && !destino.esLocal("EAStub") && !primitivo
                         && destino.es(CLASIFICADORES_ARR) && nombreDe(destino) != null) {
                     return new Tipo(limpiarTipo(nombreDe(destino)), destino);
                 }
