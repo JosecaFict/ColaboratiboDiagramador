@@ -254,7 +254,8 @@ Future<void> mostrarHojaDeElemento(BuildContext context, EditorDeDiagrama editor
           final clase = modelo?.classes.where((c) => c.id == id).firstOrNull;
           final relacion = modelo?.relationships.where((r) => r.id == id).firstOrNull;
           if (modelo == null || (clase == null && relacion == null)) {
-            return const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Este elemento ya no existe.')));
+            return const Center(
+                child: Padding(padding: EdgeInsets.all(24), child: Text('Este elemento ya no existe.')));
           }
           final quien = editor.bloqueadaPorOtro(id);
           final editable = editor.puedeEditar && quien == null;
@@ -301,16 +302,16 @@ class HojaDeClase extends StatelessWidget {
   final UmlClass clase;
   final bool editable;
 
-  const HojaDeClase({super.key, required this.editor, required this.modelo, required this.clase, required this.editable});
+  const HojaDeClase(
+      {super.key, required this.editor, required this.modelo, required this.clase, required this.editable});
 
   bool get _esEnum => tipoDeClase(clase) == TipoDeElemento.enumeracion;
 
   @override
   Widget build(BuildContext context) {
     final tipos = tiposDeAtributo(modelo, excepto: clase.id);
-    final relaciones = modelo.relationships
-        .where((r) => r.sourceClassId == clase.id || r.targetClassId == clase.id)
-        .toList();
+    final relaciones =
+        modelo.relationships.where((r) => r.sourceClassId == clase.id || r.targetClassId == clase.id).toList();
     String nombre(String id) => modelo.classes.where((c) => c.id == id).firstOrNull?.name ?? '?';
 
     return Column(
@@ -320,8 +321,10 @@ class HojaDeClase extends StatelessWidget {
           children: [
             Expanded(
               child: Text(clase.name,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontStyle: clase.isAbstract ? FontStyle.italic : FontStyle.normal)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontStyle: clase.isAbstract ? FontStyle.italic : FontStyle.normal)),
             ),
             IconButton(
               tooltip: 'Renombrar',
@@ -337,9 +340,9 @@ class HojaDeClase extends StatelessWidget {
         ),
         Text(nombreDeTipo(tipoDeClase(clase)), style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 12),
-
         _Titulo(_esEnum ? 'Literales' : 'Atributos'),
-        if (clase.attributes.isEmpty) const Text('Sin atributos todavía.', style: TextStyle(fontStyle: FontStyle.italic)),
+        if (clase.attributes.isEmpty)
+          const Text('Sin atributos todavía.', style: TextStyle(fontStyle: FontStyle.italic)),
         for (final a in clase.attributes)
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -364,8 +367,8 @@ class HojaDeClase extends StatelessWidget {
                     },
             ),
           ),
-        if (editable) _NuevoAtributo(tipos: tipos, esEnum: _esEnum, alAgregar: (d) => editor.agregarAtributo(clase.id, d)),
-
+        if (editable)
+          _NuevoAtributo(tipos: tipos, esEnum: _esEnum, alAgregar: (d) => editor.agregarAtributo(clase.id, d)),
         if (!_esEnum) ...[
           const SizedBox(height: 12),
           const _Titulo('Métodos'),
@@ -387,9 +390,11 @@ class HojaDeClase extends StatelessWidget {
                       },
               ),
             ),
-          if (editable) _NuevoMetodo(tipos: tipos, alAgregar: (n, r) => editor.agregarMetodo(clase.id, n, retorno: r)),
+          if (editable)
+            _NuevoMetodo(
+                tipos: tiposDeRetorno(modelo, excepto: clase.id),
+                alAgregar: (n, r) => editor.agregarMetodo(clase.id, n, retorno: r)),
         ],
-
         if (relaciones.isNotEmpty) ...[
           const SizedBox(height: 12),
           const _Titulo('Relaciones'),
@@ -398,12 +403,13 @@ class HojaDeClase extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               dense: true,
               leading: SizedBox(
-                  width: 40, height: 16, child: CustomPaint(painter: NotacionDeRelacion(TipoRelacion.desdeClave(r.kind)))),
+                  width: 40,
+                  height: 16,
+                  child: CustomPaint(painter: NotacionDeRelacion(TipoRelacion.desdeClave(r.kind)))),
               title: Text('${nombre(r.sourceClassId)} — ${nombre(r.targetClassId)}'),
               subtitle: Text(nombreDeRelacion(TipoRelacion.desdeClave(r.kind))),
             ),
         ],
-
         const SizedBox(height: 20),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
@@ -477,7 +483,9 @@ class _DialogoAtributoState extends State<_DialogoAtributo> {
             ),
             SwitchListTile(title: const Text('Clave primaria'), value: _pk, onChanged: (v) => setState(() => _pk = v)),
             SwitchListTile(
-                title: const Text('Obligatorio'), value: _obligatorio, onChanged: (v) => setState(() => _obligatorio = v)),
+                title: const Text('Obligatorio'),
+                value: _obligatorio,
+                onChanged: (v) => setState(() => _obligatorio = v)),
             SwitchListTile(title: const Text('Único'), value: _unico, onChanged: (v) => setState(() => _unico = v)),
           ],
         ),
@@ -505,7 +513,12 @@ class _DialogoAtributoState extends State<_DialogoAtributo> {
 
 /// Si unos cambios de atributo dicen algo (para no mandar un comando vacio).
 bool hayCambios(DatosAtributo d) =>
-    d.nombre != null || d.tipoDato != null || d.pk != null || d.obligatorio != null || d.unico != null || d.visibilidad != null;
+    d.nombre != null ||
+    d.tipoDato != null ||
+    d.pk != null ||
+    d.obligatorio != null ||
+    d.unico != null ||
+    d.visibilidad != null;
 
 class _NuevoAtributo extends StatefulWidget {
   final List<String> tipos;
@@ -520,6 +533,19 @@ class _NuevoAtributoState extends State<_NuevoAtributo> {
   final _nombre = TextEditingController();
   String _tipo = 'string';
 
+  /// El tipo elegido que desaparecio (otra sesion borro o renombro esa
+  /// enumeracion o ese valor). Se avisa en vez de cambiarlo en silencio.
+  String? _perdido;
+
+  @override
+  void didUpdateWidget(_NuevoAtributo anterior) {
+    super.didUpdateWidget(anterior);
+    if (!widget.tipos.contains(_tipo)) {
+      _perdido = _tipo;
+      _tipo = 'string';
+    }
+  }
+
   @override
   void dispose() {
     _nombre.dispose();
@@ -531,34 +557,41 @@ class _NuevoAtributoState extends State<_NuevoAtributo> {
     if (n == null) return;
     widget.alAgregar(DatosAtributo(nombre: n, tipoDato: widget.esEnum ? 'string' : _tipo));
     _nombre.clear();
+    setState(() => _perdido = null);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: TextField(
-            controller: _nombre,
-            decoration: InputDecoration(hintText: widget.esEnum ? 'nuevo literal' : 'nuevo atributo'),
-            onSubmitted: (_) => _agregar(),
-          ),
-        ),
-        if (!widget.esEnum) ...[
-          const SizedBox(width: 8),
+    return _ConAviso(
+      aviso: _perdido == null ? null : '«$_perdido» ya no existe: el tipo volvió a string.',
+      child: Row(
+        children: [
           Expanded(
-            flex: 2,
-            child: DropdownButton<String>(
-              isExpanded: true,
-              value: _tipo,
-              items: [for (final t in widget.tipos) DropdownMenuItem(value: t, child: Text(t))],
-              onChanged: (v) => setState(() => _tipo = v ?? _tipo),
+            flex: 3,
+            child: TextField(
+              controller: _nombre,
+              decoration: InputDecoration(hintText: widget.esEnum ? 'nuevo literal' : 'nuevo atributo'),
+              onSubmitted: (_) => _agregar(),
             ),
           ),
+          if (!widget.esEnum) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: _tipo,
+                items: [for (final t in widget.tipos) DropdownMenuItem(value: t, child: Text(t))],
+                onChanged: (v) => setState(() {
+                  _tipo = v ?? _tipo;
+                  _perdido = null;
+                }),
+              ),
+            ),
+          ],
+          IconButton(tooltip: 'Agregar', icon: const Icon(Icons.add_circle_outline), onPressed: _agregar),
         ],
-        IconButton(tooltip: 'Agregar', icon: const Icon(Icons.add_circle_outline), onPressed: _agregar),
-      ],
+      ),
     );
   }
 }
@@ -574,6 +607,16 @@ class _NuevoMetodo extends StatefulWidget {
 class _NuevoMetodoState extends State<_NuevoMetodo> {
   final _nombre = TextEditingController();
   String _retorno = 'void';
+  String? _perdido;
+
+  @override
+  void didUpdateWidget(_NuevoMetodo anterior) {
+    super.didUpdateWidget(anterior);
+    if (!widget.tipos.contains(_retorno)) {
+      _perdido = _retorno;
+      _retorno = 'void';
+    }
+  }
 
   @override
   void dispose() {
@@ -586,31 +629,58 @@ class _NuevoMetodoState extends State<_NuevoMetodo> {
     if (n == null) return;
     widget.alAgregar(n, _retorno);
     _nombre.clear();
+    setState(() => _perdido = null);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return _ConAviso(
+      aviso: _perdido == null ? null : '«$_perdido» ya no existe: el retorno volvió a void.',
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: TextField(
+              controller: _nombre,
+              decoration: const InputDecoration(hintText: 'nuevo método'),
+              onSubmitted: (_) => _agregar(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 2,
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: _retorno,
+              items: [for (final t in widget.tipos) DropdownMenuItem(value: t, child: Text(t))],
+              onChanged: (v) => setState(() {
+                _retorno = v ?? _retorno;
+                _perdido = null;
+              }),
+            ),
+          ),
+          IconButton(tooltip: 'Agregar', icon: const Icon(Icons.add_circle_outline), onPressed: _agregar),
+        ],
+      ),
+    );
+  }
+}
+
+/// Una fila de alta con un aviso debajo, si hay.
+class _ConAviso extends StatelessWidget {
+  final String? aviso;
+  final Widget child;
+  const _ConAviso({required this.aviso, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final texto = aviso;
+    if (texto == null) return child;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          flex: 3,
-          child: TextField(
-            controller: _nombre,
-            decoration: const InputDecoration(hintText: 'nuevo método'),
-            onSubmitted: (_) => _agregar(),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: DropdownButton<String>(
-            isExpanded: true,
-            value: _retorno,
-            items: [for (final t in ['void', ...widget.tipos]) DropdownMenuItem(value: t, child: Text(t))],
-            onChanged: (v) => setState(() => _retorno = v ?? _retorno),
-          ),
-        ),
-        IconButton(tooltip: 'Agregar', icon: const Icon(Icons.add_circle_outline), onPressed: _agregar),
+        child,
+        Text(texto, style: TextStyle(color: Theme.of(context).colorScheme.error)),
       ],
     );
   }
@@ -722,8 +792,7 @@ class _Multiplicidad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actual = valor ?? '';
-    // Una multiplicidad rara que vino de la web o de un XMI se muestra igual.
-    final opciones = {'', ...multiplicidades, actual}.toList();
+    final opciones = opcionesDeMultiplicidad(actual);
     return Row(
       children: [
         Expanded(child: Text(etiqueta)),
@@ -768,7 +837,6 @@ class _Titulo extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(0, 8, 0, 4),
-        child: Text(texto.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.1)),
+        child: Text(texto.toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.1)),
       );
 }

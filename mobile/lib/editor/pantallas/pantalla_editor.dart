@@ -38,6 +38,10 @@ class _PantallaEditorState extends State<PantallaEditor> {
   bool _encuadrado = false;
   Size _pantalla = Size.zero;
 
+  /// Esquina de la escena en coordenadas del modelo ([escenaDe]). El hijo del
+  /// InteractiveViewer empieza ahi: modelo = local + _origen.
+  Offset _origen = Offset.zero;
+
   /// Arrastre en curso: que clase, desde donde y cuanto se movio.
   String? _arrastrada;
   Offset _inicioArrastre = Offset.zero;
@@ -61,12 +65,24 @@ class _PantallaEditorState extends State<PantallaEditor> {
     final escala = escalaParaEncuadrar(_pantalla, limites);
     _zoom.value = Matrix4.identity()
       ..scaleByDouble(escala, escala, 1, 1)
-      ..translateByDouble(-limites.left, -limites.top, 0, 1);
+      ..translateByDouble(_origen.dx - limites.left, _origen.dy - limites.top, 0, 1);
+  }
+
+  /// Si el diagrama se extiende arriba o a la izquierda, la escena cambia de
+  /// esquina. Se corrige el zoom para que lo que se ve no salte.
+  void _moverOrigen(Offset nuevo) {
+    if (nuevo == _origen) return;
+    if (_encuadrado) {
+      final d = nuevo - _origen;
+      _zoom.value = _zoom.value.clone()..translateByDouble(d.dx, d.dy, 0, 1);
+    }
+    _origen = nuevo;
   }
 
   Rect _visible() {
     final m = _zoom.value;
-    return visibleEnModelo(_pantalla, m.getMaxScaleOnAxis(), Offset(m.getTranslation().x, m.getTranslation().y));
+    return visibleEnModelo(_pantalla, m.getMaxScaleOnAxis(), Offset(m.getTranslation().x, m.getTranslation().y))
+        .shift(_origen);
   }
 
   // ------------------------------------------------------------- toques
@@ -174,7 +190,8 @@ class _PantallaEditorState extends State<PantallaEditor> {
           ),
           body: Column(
             children: [
-              if (!_e.conectado) const _Franja(texto: 'Sin conexión: no se puede editar hasta que vuelva', color: Colors.red),
+              if (!_e.conectado)
+                const _Franja(texto: 'Sin conexión: no se puede editar hasta que vuelva', color: Colors.red),
               if (_e.conectado && !_e.puedeEditar)
                 const _Franja(texto: 'Solo lectura: tu rol no permite editar este diagrama', color: Colors.blueGrey),
               if (_e.esperandoConfirmacion) const LinearProgressIndicator(minHeight: 2),
@@ -207,6 +224,10 @@ class _PantallaEditorState extends State<PantallaEditor> {
         ? modelo
         : conClaseEn(modelo, _arrastrada!, posicionArrastrada(_inicioArrastre, _desplazamiento));
     final limites = limitesDe(dibujado);
+    // La escena sale del modelo confirmado, no del arrastre: asi no se corre a
+    // mitad de un gesto.
+    final escena = escenaDe(limitesDe(modelo));
+    _moverOrigen(escena.topLeft);
     final bloqueos = <String, Bloqueo>{
       for (final id in [...modelo.classes.map((c) => c.id), ...modelo.relationships.map((r) => r.id)])
         if (_e.bloqueadaPorOtro(id) case final quien?) id: Bloqueo(id, null, quien),
@@ -229,28 +250,32 @@ class _PantallaEditorState extends State<PantallaEditor> {
               boundaryMargin: const EdgeInsets.all(2000),
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTapUp: (d) => _alTocar(modelo, d.localPosition),
-                onLongPressStart: (d) => _alEmpezarArrastre(modelo, d.localPosition),
+                onTapUp: (d) => _alTocar(modelo, d.localPosition + _origen),
+                onLongPressStart: (d) => _alEmpezarArrastre(modelo, d.localPosition + _origen),
                 onLongPressMoveUpdate: (d) {
                   // En coordenadas del lienzo, no de la pantalla: con zoom no son lo mismo.
                   if (_arrastrada != null) setState(() => _desplazamiento = d.localOffsetFromOrigin);
                 },
                 onLongPressEnd: (_) => _alSoltar(),
                 child: SizedBox(
-                  width: limites.right,
-                  height: limites.bottom,
-                  child: CustomPaint(
-                    painter: DibujoClases(
-                      estado: dibujado,
-                      bloqueos: bloqueos,
-                      seleccionadosPorOtros: const {},
-                      colores: Theme.of(context).colorScheme,
-                    ),
-                    foregroundPainter: MarcasDelEditor(
-                      estado: dibujado,
-                      seleccionada: _e.seleccionada,
-                      origenRelacion: origen,
-                      color: Theme.of(context).colorScheme.primary,
+                  width: escena.width,
+                  height: escena.height,
+                  child: Transform.translate(
+                    offset: -_origen,
+                    child: CustomPaint(
+                      painter: DibujoClases(
+                        estado: dibujado,
+                        bloqueos: bloqueos,
+                        seleccionadosPorOtros: const {},
+                        colores: Theme.of(context).colorScheme,
+                      ),
+                      foregroundPainter: MarcasDelEditor(
+                        estado: dibujado,
+                        seleccionada: _e.seleccionada,
+                        origenRelacion: origen,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      size: escena.size,
                     ),
                   ),
                 ),
@@ -281,7 +306,8 @@ class MarcasDelEditor extends CustomPainter {
   final String? origenRelacion;
   final Color color;
 
-  MarcasDelEditor({required this.estado, required this.seleccionada, required this.origenRelacion, required this.color});
+  MarcasDelEditor(
+      {required this.estado, required this.seleccionada, required this.origenRelacion, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -359,7 +385,10 @@ class _Menu extends StatelessWidget {
             const Divider(),
             const _Seccion('Dibujar'),
             ListTile(leading: const Icon(Icons.widgets_outlined), title: const Text('Paleta'), onTap: alAbrirPaleta),
-            ListTile(leading: const Icon(Icons.fit_screen_outlined), title: const Text('Ver todo el diagrama'), onTap: alEncuadrar),
+            ListTile(
+                leading: const Icon(Icons.fit_screen_outlined),
+                title: const Text('Ver todo el diagrama'),
+                onTap: alEncuadrar),
             const _Seccion('Proyecto'),
             ListTile(
               leading: const Icon(Icons.arrow_back),
@@ -388,8 +417,7 @@ class _Seccion extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        child: Text(texto.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.1)),
+        child: Text(texto.toUpperCase(), style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 1.1)),
       );
 }
 

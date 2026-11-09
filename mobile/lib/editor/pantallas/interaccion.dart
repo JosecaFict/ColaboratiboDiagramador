@@ -1,7 +1,8 @@
 // Logica de la pantalla del editor, sin widgets: que se toco, que hace un
 // toque segun la herramienta armada, donde nace una clase nueva y que textos
-// se aceptan. Todo en coordenadas del MODELO (las del layout), que son las del
-// hijo del InteractiveViewer: el zoom no cambia nada aca.
+// se aceptan. Todo en coordenadas del MODELO (las del layout). El hijo del
+// InteractiveViewer arranca en la esquina de la escena ([escenaDe]), que puede
+// ser negativa: la pantalla suma esa esquina antes de llamar a estas funciones.
 
 import 'dart:math' as math;
 import 'dart:ui';
@@ -171,18 +172,44 @@ bool esMovimiento(Offset desplazamiento) => desplazamiento.distance > 4;
 
 // ------------------------------------------------------------- textos
 
-/// Los tipos que ofrece la web para un atributo (`PanelPropiedades.tsx`), mas
-/// las enumeraciones del diagrama.
+/// Los tipos que ofrece la web (`PanelPropiedades.tsx`).
 const tiposBase = ['string', 'text', 'int', 'long', 'decimal', 'boolean', 'date', 'datetime', 'uuid'];
 
-List<String> tiposDeAtributo(EstadoModelo modelo, {String? excepto}) => [
-      ...tiposBase,
+bool _conEstereotipo(UmlClass c, String estereotipo) => (c.stereotype ?? '').toLowerCase() == estereotipo;
+
+/// Las clases de un estereotipo, menos la que se esta editando, sin repetir nombres.
+List<String> _nombresDe(EstadoModelo modelo, String estereotipo, String? excepto) => {
       for (final c in modelo.classes)
-        if ((c.stereotype ?? '').toLowerCase() == 'enumeration' && c.id != excepto) c.name,
-    ];
+        if (_conEstereotipo(c, estereotipo) && c.id != excepto) c.name,
+    }.toList();
+
+/// Tipos de un atributo de la clase [excepto], como en la web: los base, las
+/// enumeraciones y los valores embebidos. Un valor no puede contener otro valor
+/// (anidar @Embeddable no esta soportado), asi que dentro de uno no se ofrecen.
+List<String> tiposDeAtributo(EstadoModelo modelo, {String? excepto}) {
+  final propia = modelo.classes.where((c) => c.id == excepto).firstOrNull;
+  final esValor = propia != null && _conEstereotipo(propia, 'embeddable');
+  return {
+    ...tiposBase,
+    ..._nombresDe(modelo, 'enumeration', excepto),
+    if (!esValor) ..._nombresDe(modelo, 'embeddable', excepto),
+  }.toList();
+}
+
+/// Tipos de retorno de un metodo, como en la web: `void`, los base y las
+/// enumeraciones. Los valores embebidos no: tienen otro catalogo.
+List<String> tiposDeRetorno(EstadoModelo modelo, {String? excepto}) =>
+    {'void', ...tiposBase, ..._nombresDe(modelo, 'enumeration', excepto)}.toList();
 
 /// Las multiplicidades que ofrece la web (`PanelRelacion.tsx`).
 const multiplicidades = ['1', '0..1', '1..*', '0..*'];
+
+/// Lo que ofrece el selector de una multiplicidad que hoy vale [actual] (`''` es
+/// sin definir). Una rara que vino de la web o de un XMI se muestra igual.
+/// «sin definir» aparece solo si ya esta asi: el contrato del editor no tiene
+/// como borrar una multiplicidad (un null en [CambiosRelacion] es «no cambia»).
+List<String> opcionesDeMultiplicidad(String actual) =>
+    {if (actual.isEmpty) '', ...multiplicidades, if (actual.isNotEmpty) actual}.toList();
 
 /// Una multiplicidad escrita a mano: `1`, `0..1`, `2..5`, `*`, `1..*`. Vacia vale ("no se sabe").
 bool multiplicidadValida(String texto) {
@@ -202,6 +229,12 @@ Rect visibleEnModelo(Size pantalla, double escala, Offset traslacion) {
   return Rect.fromLTWH(-traslacion.dx / s, -traslacion.dy / s, pantalla.width / s, pantalla.height / s);
 }
 
+/// El rectangulo que ocupa el lienzo: todo el diagrama y tambien el origen.
+/// Las coordenadas pueden ser negativas (la web deja mover una clase arriba a la
+/// izquierda del origen); incluir siempre el (0,0) hace que un diagrama comun
+/// tenga la esquina fija en el origen y no se corra al editar.
+Rect escenaDe(Rect limites) => Rect.fromLTRB(
+    math.min(limites.left, 0), math.min(limites.top, 0), math.max(limites.right, 0), math.max(limites.bottom, 0));
+
 /// Escala para que entre todo el diagrama a lo ancho, sin agrandar de mas.
-double escalaParaEncuadrar(Size pantalla, Rect limites) =>
-    math.min(1.0, math.max(0.2, pantalla.width / limites.width));
+double escalaParaEncuadrar(Size pantalla, Rect limites) => math.min(1.0, math.max(0.2, pantalla.width / limites.width));
