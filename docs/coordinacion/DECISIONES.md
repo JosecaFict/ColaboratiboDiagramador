@@ -293,3 +293,39 @@ Codex se quedó sin cuota hasta las 13:30 sin dictaminar T-04. Mientras dure:
   demás, un agente que no sea el autor más el líder.
 - Cuando Codex vuelva, revisa lo integrado en su ausencia y lo anota en cada ficha.
 - T-04: aprobada por 00; falta be. T-12: la revisa be.
+
+## D-12 · La app móvil también edita el diagrama (enmienda ADR-036) · 2026-11-09
+Propuesta: Claude Code (sesión del worktree `project-analysis-comparison`). Autorizada por: usuario.
+El docente exige editar el diagrama desde la app instalada, no solo desde el navegador.
+- La app Flutter suma un modo **Editor** para rol Modelador o Propietario. El modo **Visor**
+  sigue siendo solo lectura (su canal sigue sin poder escribir) y el **Asistente** sigue
+  consumiendo solo el backend generado.
+- El Editor escribe por el mismo bus que la web (`/app/diagram/{id}/op`), con los mismos
+  comandos del catálogo cerrado (ADR-014), los mismos locks con latido (ADR-004) y sin
+  escritura optimista. No hay comandos ni endpoints nuevos: el backend no cambia.
+- Aparece un **sexto espejo**: el contrato Command en Dart. Lo protege una prueba que compara
+  sus valores con `CommandType.java` y `RejectionReason.java`.
+- Trabajo en T-15, partido en T-15a (Codex: canal y controlador) y T-15b (Claude: pantallas),
+  contra el contrato `mobile/lib/editor/contrato_editor.dart`.
+- Queda fuera, por ahora, en la app: deshacer/rehacer, Modo IA, importar, generar y versiones.
+
+## D-13 · Enterprise Architect sin archivo del docente, y lo próximo de Codex · 2026-11-09
+Propuesta: Claude Code (sesión del worktree `project-analysis-comparison`). Autorizada por: usuario.
+- El docente avisó que **no habrá archivo de ejemplo** de Enterprise Architect y que la implementación se evalúa
+  **según su eficiencia** y cuenta para la nota. T-05 deja de estar bloqueada y cambia de alcance: corpus propio
+  de XMI de EA, tabla de fidelidad, medición de rendimiento y exportación que EA abra. Queda sin asignar.
+- Codex (`t1q`) toma, en este orden, **T-17** (login de la app Flutter: crear cuenta, sesión guardada con
+  almacenamiento cifrado, cerrar sesión) y **T-18** (mejora visual de la web: W4, W8, W10 y pulido). T-17 parte de
+  `feat/editor-flutter-ui` porque `main` todavía no tiene el editor móvil. Las revisa Claude (regla 5).
+- **W7** («Clase abstracta» en la web) queda afuera de T-18: cambiar `isAbstract` después de crear la clase
+  necesita una bandera nueva en `SET_ER_FLAG` y sus espejos; se decide aparte.
+- T-16 (editor web en el teléfono) espera a que se integre T-18, porque tocan los mismos archivos.
+
+## D-14 · El usuario pide integrar todo en el main local, con el líder cerrado · 2026-11-09
+Propuesta y autorización: usuario. Ejecuta: Claude Code (sesión del worktree `project-analysis-comparison`).
+- Se unen a `main` (local, sin push) `feat/login-flutter` (que trae T-15a, T-15b y T-17), `feat/xmi-ea` (T-05) y
+  `feat/web-visual` (T-18), con merge `--no-ff`, y se corren las tres suites (backend, web y móvil).
+- T-05 entra con la revisión de Codex todavía pendiente, y T-18 con los pedidos del usuario en curso (botón de
+  Generar a la vista y tema Grafito): lo que Codex entregue después se une con otro merge.
+- Subir a GitHub sigue siendo decisión del usuario: Claude le da los comandos y no hace push.
+
