@@ -350,6 +350,8 @@ nuevo que supersede al anterior.
 **Decisión:** la app Flutter suma un modo **solo lectura** que inicia sesión en la herramienta, baja el snapshot, escucha `/topic/diagram/{id}/ops` y se pone al día con `?sinceSeq=` al reconectar. El modo Asistente sigue consumiendo solo el backend generado. El efecto de cada comando se copia en Dart (`aplicar_operacion.dart`), quinto espejo junto a `CommandApplier.java` y `applyOperation.ts`.
 **Consecuencia:** el visor nunca escribe; un VIEWER alcanza para usarlo.
 
+**Enmienda (2026-11-09, D-12):** el docente exige editar el diagrama desde la app instalada. La app suma un modo **Editor** para rol EDITOR u OWNER, que escribe por el mismo bus que la web (`/app/diagram/{id}/op`), con los mismos comandos del catálogo cerrado (ADR-014), los mismos locks con latido (ADR-004) y sin escritura optimista. El **Visor** sigue sin poder escribir: su canal (`ConexionEnVivo`) no tiene ningún método de envío, y el Editor usa un canal aparte (`ConexionEditable`). Aparece un sexto espejo, el contrato Command en Dart, protegido por una prueba que lo compara con `CommandType.java` y `RejectionReason.java`. Quedan en la web: deshacer, Modo IA, importar, generar y versiones.
+
 ---
 **ADR-037 · Control de versiones tipo Git sobre el log de operaciones** — *Aceptada* · se apoya en ADR-002 (bus único de escritura) y ADR-014 (catálogo cerrado)
 

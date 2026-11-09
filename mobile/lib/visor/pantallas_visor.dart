@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../editor/pantallas/entrada.dart';
+import '../editor/pantallas/pantalla_editor.dart';
 import 'almacen_local.dart';
 import 'cliente_herramienta.dart';
 import 'controlador_visor.dart';
@@ -163,7 +165,8 @@ class _PantallaProyectosState extends State<PantallaProyectos> {
                   title: Text(p.nombre),
                   subtitle: Text('${p.cantidadDiagramas} diagramas · ${p.miRol ?? ''}'),
                   onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => PantallaDiagramas(cliente: widget.cliente, almacen: widget.almacen, proyecto: p),
+                    builder: (_) => PantallaDiagramas(
+                        cliente: widget.cliente, almacen: widget.almacen, proyecto: p, nombreUsuario: widget.nombre),
                   )),
                 ),
             ],
@@ -178,7 +181,10 @@ class PantallaDiagramas extends StatelessWidget {
   final ClienteHerramienta cliente;
   final AlmacenLocal almacen;
   final ProyectoResumen proyecto;
-  const PantallaDiagramas({super.key, required this.cliente, required this.almacen, required this.proyecto});
+  /// Para el lock del editor («La está editando Ana»).
+  final String nombreUsuario;
+  const PantallaDiagramas(
+      {super.key, required this.cliente, required this.almacen, required this.proyecto, this.nombreUsuario = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -198,6 +204,24 @@ class PantallaDiagramas extends StatelessWidget {
                   leading: const Icon(Icons.account_tree_outlined),
                   title: Text(d.nombre),
                   subtitle: Text('operacion ${d.currentSeq}'),
+                  // Editar: solo Modelador o Propietario, y solo si el editor esta instalado (T-15).
+                  trailing: fabricaDeEditor != null && rolPuedeEditar(proyecto.miRol)
+                      ? IconButton(
+                          tooltip: 'Editar diagrama',
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                            builder: (_) => PantallaEditor(
+                              titulo: d.nombre,
+                              editor: fabricaDeEditor!(
+                                cliente: cliente,
+                                diagramId: d.id,
+                                rol: proyecto.miRol,
+                                nombreUsuario: nombreUsuario,
+                              ),
+                            ),
+                          )),
+                        )
+                      : null,
                   onTap: () async {
                     await almacen.guardarUltimo(d.id, d.nombre);
                     if (!context.mounted) return;
