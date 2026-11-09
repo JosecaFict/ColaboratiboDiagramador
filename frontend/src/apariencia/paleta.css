@@ -13,6 +13,7 @@
   --acento-fondo: #e0e7ff;
   --acento-linea: #c7d2fe;
   --accion: #1d4ed8;
+  --radio-accion: 6px;
   --accion-hover: #1e40af;
   --sobre-acento: #ffffff;
   --inverso: #172033;
@@ -63,6 +64,7 @@
   --acento-fondo: #243c64;
   --acento-linea: #425e95;
   --accion: #3566d3;
+  --radio-accion: 6px;
   --accion-hover: #2f59bb;
   --sobre-acento: #ffffff;
   --inverso: #172033;
@@ -97,4 +99,56 @@
   --verde-translucido: rgba(134, 239, 172, .18);
   --rojo-translucido: rgba(255, 146, 146, .16);
   --ambar-translucido: rgba(251, 191, 36, .25);
+}
+
+:root[data-tema="grafito"] {
+  --linea: #3a3a3a;
+  --texto: #f1f1f1;
+  --tenue: #aaaaaa;
+  --secundario: #d0d0d0;
+  --fondo: #0f0f0f;
+  --panel: #181818;
+  --suave: #212121;
+  --elevado: #272727;
+  --rejilla: #262626;
+  --acento: #3ea6ff;
+  --acento-fondo: #1f2f40;
+  --acento-linea: #2f5d8a;
+  --accion: #f1f1f1;
+  --accion-hover: #d9d9d9;
+  --radio-accion: 999px;
+  --sobre-acento: #0f0f0f;
+  /* Fondos aclarados para texto oscuro con contraste AA. */
+  --inverso: #f1f1f1;
+  --verde: #81c995;
+  --verde-fondo: #1b2a1f;
+  --verde-linea: #2e5a3a;
+  --verde-vivo: #81c995;
+  --rojo: #f28b82;
+  --rojo-fondo: #2d1b1b;
+  --rojo-linea: #6b2f2f;
+  --rojo-vivo: #ff8a80;
+  --peligro: #f28b82;
+  --ambar: #fdd663;
+  --ambar-fondo: #2b2516;
+  --ambar-linea: #6b5a24;
+  --ambar-vivo: #fbbf24;
+  --lila: #c58af9;
+  --lila-fondo: #2a2238;
+  --lila-linea: #5a4a7a;
+  --lila-accion: #9575e5;
+  --cian: #78d9ec;
+  --cian-fondo: #16292d;
+  --marca-inicio: #0f0f0f;
+  --marca-fin: #272727;
+  --marca-texto: #f1f1f1;
+  --marca-azul: #3ea6ff;
+  --sombra: rgba(0, 0, 0, .5);
+  --sombra-fuerte: rgba(0, 0, 0, .7);
+  --velo: rgba(0, 0, 0, .7);
+  --foco-suave: rgba(62, 166, 255, .25);
+  --blanco-translucido: rgba(255, 255, 255, .1);
+  --verde-translucido: rgba(129, 201, 149, .18);
+  --rojo-translucido: rgba(242, 139, 130, .16);
+  --ambar-translucido: rgba(253, 214, 99, .22);
 }

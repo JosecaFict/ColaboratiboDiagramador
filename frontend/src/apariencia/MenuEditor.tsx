@@ -7,7 +7,7 @@ export function MenuEditor({ grupos, alElegir }: { grupos: GrupoMenu[]; alElegir
   const inicio = useRef(false)
   const id = useId()
   const botones = () => Array.from(nav.current?.querySelectorAll<HTMLButtonElement>('[data-cabecera]') ?? [])
-  const opciones = () => Array.from(nav.current?.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]') ?? [])
+  const opciones = () => Array.from(nav.current?.querySelectorAll<HTMLButtonElement>('[role="menu"] > button') ?? [])
   const cerrar = () => { setAbierto(null); botones()[foco]?.focus() }
   useEffect(() => {
     if (abierto === null) return
@@ -42,7 +42,8 @@ export function MenuEditor({ grupos, alElegir }: { grupos: GrupoMenu[]; alElegir
         tabIndex={foco === i ? 0 : -1} onFocus={() => setFoco(i)} onKeyDown={(e) => tecla(e, true)}
         onClick={() => { inicio.current = false; setAbierto(abierto === i ? null : i) }}>{grupo.titulo}</button>
       {abierto === i && <div className="menu-desplegable" role="menu" id={`${id}-${i}`} aria-label={grupo.titulo}>
-        {grupo.acciones.map((a) => <button key={a.id} role="menuitem" tabIndex={-1} disabled={!a.habilitada}
+        {grupo.acciones.map((a) => <button key={a.id} role={a.tipo === 'radio' ? 'menuitemradio' : 'menuitem'}
+          aria-checked={a.tipo === 'radio' ? a.marcada : undefined} tabIndex={-1} disabled={!a.habilitada}
           onKeyDown={(e) => tecla(e, false)} onClick={() => { cerrar(); alElegir(a.id) }}>
           <span>{a.texto}</span>{a.atajo && <kbd>{a.atajo}</kbd>}
         </button>)}
