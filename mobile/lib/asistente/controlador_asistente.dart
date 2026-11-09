@@ -310,6 +310,18 @@ class ControladorAsistente extends ChangeNotifier {
     });
   }
 
+  /// La version del REGISTRO, con el nombre que le puso el generador: `version`,
+  /// o `versionRegistro` cuando el dominio ya usa ese nombre (`Meta.para` en
+  /// GeneradorSpringBoot). Un campo del dominio que se llame igual no es el
+  /// bloqueo optimista y no se reenvia.
+  Map<String, dynamic> _versionLeida(EntityDescriptor e, Map<String, dynamic> fila) {
+    final delDominio = {for (final f in e.fields) f.name};
+    for (final clave in const ['version', 'versionRegistro']) {
+      if (!delDominio.contains(clave) && fila[clave] != null) return {clave: fila[clave]};
+    }
+    return const {};
+  }
+
   /// PATCH con solo lo que cambia y la `version` leida: si otro escribio en el
   /// medio, el backend responde 409 y se dice en vez de pisarle el cambio.
   Future<void> _cambiar(Resuelta r, Map<String, dynamic> fila) async {
@@ -319,7 +331,7 @@ class ControladorAsistente extends ChangeNotifier {
       final nombres = await _nombresDeReferencias(e);
       final quien = _resumen(e, fila, nombres);
       Future<void> aplicar() => _protegido(() async {
-            final enviado = {...cambios, if (fila['version'] != null) 'version': fila['version']};
+            final enviado = {...cambios, ..._versionLeida(e, fila)};
             final nuevo = await cliente.actualizar(manifiesto, e, '${fila['id']}', enviado);
             final despues = nuevo.isEmpty ? {...fila, ...cambios} : nuevo;
             _decir('Listo, actualicé ${e.label.toLowerCase()}: '

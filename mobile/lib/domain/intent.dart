@@ -415,6 +415,12 @@ class MotorDeIntenciones {
       }
     }
     if (rechazos.isNotEmpty) return Rechazada(texto, entidad, rechazos);
+    // Un cambio pedido sin valor no se descarta: mandar el resto seria hacer
+    // menos de lo que se pidio sin avisar.
+    if (parcial && sinValor.isNotEmpty) {
+      final cuales = enumerar(sinValor.map((f) => f.nombreHablado).toList(), conjuncion: 'y');
+      return NoEntendida(texto, '¿A qué valor cambio $cuales? No cambié nada: decilo de nuevo con el valor.');
+    }
     if (parcial) {
       return Resuelta(texto, Accion.actualizar, entidad,
           cuerpo: cuerpo, referencias: referencias, unicos: valores.keys.where((f) => f.unique).toList());
@@ -589,13 +595,32 @@ class MotorDeIntenciones {
       campo = campos.candidatos.firstWhere((c) => c.name == aclaraciones[clave],
           orElse: () => campos.candidatos.first);
 
-      // El ultimo "a" (o "por", "en") separa el registro del valor nuevo.
-      var corte = -1;
-      for (var k = tokens.length - 1; k > ents.hasta; k--) {
-        if (!tokens[k].citado && const {'a', 'por', 'en'}.contains(tokens[k].norma)) {
-          corte = k;
-          break;
+      // "a" (o "por", "en") separa el registro del valor nuevo. Vale un corte
+      // que deja nombre y un valor valido; "a" manda sobre "por" y "en", que
+      // tambien aparecen dentro de un titulo. Si aun quedan varios, se pregunta.
+      bool sirve(int k) {
+        if (_nombreDelRegistro(texto, tokens, ents.hasta, k) == null) return false;
+        final r = _recortar(tokens, k + 1, tokens.length, campo);
+        return r != null && convertir(campo, _valorDe(texto, tokens, r.$1, r.$2), reloj()) is! Invalido;
+      }
+
+      final separadores = [
+        for (var k = ents.hasta + 1; k < tokens.length; k++)
+          if (!tokens[k].citado && const {'a', 'por', 'en'}.contains(tokens[k].norma)) k,
+      ];
+      var validos = separadores.where(sirve).toList();
+      if (validos.any((k) => tokens[k].norma == 'a')) {
+        validos = validos.where((k) => tokens[k].norma == 'a').toList();
+      }
+      var corte = validos.isNotEmpty ? validos.last : (separadores.isEmpty ? -1 : separadores.last);
+      if (validos.length > 1) {
+        final elegido = int.tryParse(aclaraciones['corte'] ?? '');
+        if (elegido == null || !validos.contains(elegido)) {
+          return Ambigua(texto, 'corte',
+              'No me queda claro dónde termina el nombre de ${entidad.nombreHablado}: ¿cuál es?',
+              [for (final k in validos) Opcion('$k', '«${_nombreDelRegistro(texto, tokens, ents.hasta, k)}»')]);
         }
+        corte = elegido;
       }
       final busqueda = _nombreDelRegistro(texto, tokens, ents.hasta, corte < 0 ? tokens.length : corte);
       if (busqueda == null) {
