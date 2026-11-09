@@ -158,11 +158,37 @@ export function revisarParaGenerar(modelo: EstadoModelo, resumen: ResumenCodegen
         resumen: `Cambiar ${s} - ${t}: un ${otro} tiene 0..* prerrequisitos` }] }])
   }
 
+  // 4. Agregacion con FK obligatoria: no puede soltar la parte (SET NULL), queda RESTRICT como una
+  // asociacion. Mismo criterio de FK que DerivadorLogico: la lleva el lado "muchos"; en 1:1, el destino.
+  let agregacionesRevisadas = false
+  for (const r of modelo.relationships) {
+    if (r.kind !== 'AGGREGATION' || !r.sourceMultiplicity || !r.targetMultiplicity) continue
+    const origenMuchos = r.sourceMultiplicity.includes('*'), destinoMuchos = r.targetMultiplicity.includes('*')
+    if (origenMuchos && destinoMuchos) continue
+    const fkEnDestino = destinoMuchos || !origenMuchos
+    if (!(fkEnDestino ? r.sourceMultiplicity : r.targetMultiplicity).startsWith('1')) continue
+    agregacionesRevisadas = true
+    const s = nombre(r.sourceClassId), t = nombre(r.targetClassId)
+    const parte = fkEnDestino ? t : s, todo = fkEnDestino ? s : t
+    agregar('MEDIA', `La agregacion ${s} - ${t} exige que cada ${parte} tenga su ${todo}: borrar un ${todo} no puede `
+      + `soltar a los ${parte} que dependen de el (SET NULL) y queda RESTRICT, igual que una asociacion.`, [s, t], [
+      { etiqueta: 'Cambiar a asociacion', cambios: [{ tipo: 'UPDATE_RELATION', payload: { relationId: r.id, kind: 'ASSOCIATION' },
+        resumen: `Cambiar ${s} - ${t} de agregacion a asociacion` }] },
+      { etiqueta: `Un ${parte} puede quedar sin ${todo} (0..1)`, cambios: [{ tipo: 'UPDATE_RELATION', payload: { relationId: r.id,
+        ...(fkEnDestino ? { sourceMultiplicity: '0..1' } : { targetMultiplicity: '0..1' }) },
+        resumen: `Cambiar el extremo de ${todo} en ${s} - ${t} a 0..1` }] },
+    ])
+  }
+
   for (const c of resumen?.correcciones ?? []) {
     agregar('MEDIA', `Nombre de relacion: ${c.descripcion}`, [], [{ etiqueta: `Renombrar a ${c.name}`,
       cambios: [{ tipo: 'UPDATE_RELATION', payload: { relationId: c.relationId, name: c.name }, resumen: c.descripcion }] }])
   }
-  for (const a of resumen?.advertencias ?? []) agregar('MEDIA', a, [])
+  // El backend avisa lo mismo sin arreglo: no se repite si ya salio el punto 4.
+  for (const a of resumen?.advertencias ?? []) {
+    if (agregacionesRevisadas && /^La agregacion .* tiene la FK obligatoria/.test(a)) continue
+    agregar('MEDIA', a, [])
+  }
   for (const a of (ambiguedades ?? []).filter((x) => !x.decidida))
     agregar('BAJA', `${a.titulo}: se usara la lectura por defecto. Si preferis la otra, decidila en "Puntos de ambiguedad".`, [])
 

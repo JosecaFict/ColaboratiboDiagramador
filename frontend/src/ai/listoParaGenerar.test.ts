@@ -95,4 +95,19 @@ describe('listo para generar', () => {
     expect(identificadorJava('Ventá', true)).toBe('Venta')
     expect(identificadorJava('String', true)).toBe('StringEntidad')
   })
+
+  it('una agregacion con FK obligatoria ofrece pasar a asociacion y no repite el aviso del backend', () => {
+    const agregada: EstadoModelo = { ...sano, relationships: [{ ...rel('r', 'c', 'v', '1', '0..*'), kind: 'AGGREGATION' },
+      { ...rel('o', 'v', 'c', '0..1', '0..*'), kind: 'AGGREGATION' }] }
+    const aviso = 'La agregacion Cliente - Venta tiene la FK obligatoria, asi que no puede ser SET NULL: queda RESTRICT.'
+    const r = revisarParaGenerar(agregada, { advertencias: [aviso], correcciones: [] }, [])
+    // Otro test agrega Venta.estado a 'sano': aca solo cuentan los puntos de agregacion.
+    const puntos = r.recomendaciones.filter((x) => /agregacion/i.test(x.titulo))
+    expect(puntos).toHaveLength(1)
+    const [punto] = puntos
+    expect(punto.titulo).toContain('cada Venta tenga su Cliente')
+    expect(r.arreglos![punto.id][0].cambios[0]).toMatchObject({ tipo: 'UPDATE_RELATION',
+      payload: { relationId: 'r', kind: 'ASSOCIATION' } })
+    expect(r.arreglos![punto.id][1].cambios[0].payload).toEqual({ relationId: 'r', sourceMultiplicity: '0..1' })
+  })
 })
