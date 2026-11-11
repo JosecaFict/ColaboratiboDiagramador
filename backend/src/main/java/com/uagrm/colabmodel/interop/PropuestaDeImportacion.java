@@ -57,7 +57,12 @@ public record PropuestaDeImportacion(String formato, String fuente, List<ClasePr
      * @param yaExiste la clase existente ya tiene un metodo con ese nombre
      */
     public record MetodoPropuesto(String nombre, String tipoRetorno, List<ModeloLeido.ParametroLeido> parametros,
-                                  boolean yaExiste) { }
+                                  boolean yaExiste, String visibilidad, boolean esEstatico, boolean esAbstracto) {
+        public MetodoPropuesto(String nombre, String tipoRetorno, List<ModeloLeido.ParametroLeido> parametros,
+                               boolean yaExiste) {
+            this(nombre, tipoRetorno, parametros, yaExiste, null, false, false);
+        }
+    }
 
     public record RelacionPropuesta(String claveOrigen, String claveDestino, RelationKind tipo, String nombre,
                                     String multiplicidadOrigen, String multiplicidadDestino,
