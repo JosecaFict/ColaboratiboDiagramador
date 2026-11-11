@@ -19,6 +19,8 @@ const BANDERAS: { campo: keyof UmlAttribute; etiqueta: string; ayuda: string }[]
   { campo: 'multivalued', etiqueta: 'MULTI', ayuda: 'Multivaluado: doble ovalo en Chen; sale a su propia tabla por 1FN (Regla 12)' },
   { campo: 'derived', etiqueta: 'DERIV', ayuda: 'Derivado: ovalo punteado en Chen; se calcula, no se persiste' },
   { campo: 'partialKey', etiqueta: 'PARCIAL', ayuda: 'Clave parcial de entidad debil: forma la PK compuesta junto con la del dueno (Regla 11)' },
+  { campo: 'isStatic', etiqueta: 'estático', ayuda: 'UML isStatic: el atributo es de la clase y no de cada objeto. Se dibuja subrayado.' },
+  { campo: 'readOnly', etiqueta: 'solo lectura', ayuda: 'UML isReadOnly: no cambia tras inicializarse. Se dibuja con {readOnly}.' },
 ]
 
 export interface NuevoMetodo {
@@ -91,11 +93,12 @@ interface Props {
   onActualizarAtributo: (attributeId: string, cambios: Record<string, unknown>) => void
   onQuitarAtributo: (attributeId: string) => void
   /**
-   * No hay UPDATE_METHOD: el catalogo de comandos es cerrado (ADR-014), asi
-   * que cambiarle la firma a un metodo es quitarlo y volver a agregarlo.
+   * UPDATE_METHOD solo cambia lo que se le manda (hoy, estatico y abstracto);
+   * la firma sigue siendo quitar y volver a agregar.
    */
   onAgregarMetodo: (m: NuevoMetodo) => void
   onQuitarMetodo: (methodId: string) => void
+  onActualizarMetodo: (methodId: string, cambios: Record<string, unknown>) => void
   onBorrarClase: () => void
   onCerrar: () => void
   /** Quien cambio esta clase y cuando (sus atributos y relaciones incluidos). */
@@ -104,7 +107,7 @@ interface Props {
 
 export function PanelPropiedades({
   clase, enumeraciones, embebibles, esRaizDeJerarquia, sugerirAtributo, onRelacionarCon, onCambiarEstrategia, bloqueadaPorOtro, soloLecturaPorRol = false, onRenombrar, onAgregarAtributo,
-  onActualizarAtributo, onQuitarAtributo, onAgregarMetodo, onQuitarMetodo,
+  onActualizarAtributo, onQuitarAtributo, onAgregarMetodo, onQuitarMetodo, onActualizarMetodo,
   onBorrarClase, onCerrar, historial,
 }: Props) {
   const [nuevoNombre, setNuevoNombre] = useState('')
@@ -378,7 +381,18 @@ export function PanelPropiedades({
       <ul className="props-metodos">
         {clase.methods.map((m) => (
           <li key={m.id}>
-            <code>{firmaDe(m)}</code>
+            <code className={(m.isStatic ? 'txt-estatico ' : '') + (m.isAbstract ? 'abstracta' : '')}>{firmaDe(m)}</code>
+            <span className="props-banderas">
+              {([['isStatic', 'estático', 'UML isStatic: el método es de la clase. Se dibuja subrayado.'],
+                 ['isAbstract', 'abstracto', 'UML isAbstract: sin cuerpo; solo en una clase abstracta o una interfaz. Se dibuja en cursiva.']] as const)
+                .map(([campo, etiqueta, ayuda]) => (
+                  <label key={campo} title={ayuda} className={m[campo] ? 'bandera activa' : 'bandera'}>
+                    <input type="checkbox" checked={Boolean(m[campo])} disabled={soloLectura}
+                           onChange={(e) => onActualizarMetodo(m.id, { [campo]: e.target.checked })} />
+                    {etiqueta}
+                  </label>
+                ))}
+            </span>
             <button className="props-quitar" disabled={soloLectura}
                     onClick={() => onQuitarMetodo(m.id)}
                     title="Quitar metodo (para cambiarle la firma, quitalo y agregalo de nuevo)">✕</button>

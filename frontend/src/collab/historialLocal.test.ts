@@ -405,3 +405,34 @@ describe('HistorialLocal', () => {
     expect(h.proximoDeshacer()).toBeNull()
   })
 })
+
+describe('entradaDe: miembros estaticos, abstractos y de solo lectura (D-15 b y c)', () => {
+  const conMetodo = (): EstadoModelo => {
+    const e = conLibroEn(0, 0)
+    e.classes[0].methods.push({ id: 'm', classId: 'libro', name: 'prestar', returnType: 'void', params: [],
+      visibility: 'PUBLIC', ordinal: 0 })
+    return e
+  }
+
+  it('UPDATE_METHOD se deshace con el mismo comando y el valor anterior (ausente = false)', () => {
+    const e = entradaDe(conMetodo(), 'UPDATE_METHOD', { methodId: 'm', isStatic: true })!
+    expect(rehacer(e)).toMatchObject({ type: 'UPDATE_METHOD', payload: { methodId: 'm', isStatic: true, esperado: { isStatic: false } } })
+    expect(deshacer(e)).toMatchObject({ type: 'UPDATE_METHOD', payload: { methodId: 'm', isStatic: false, esperado: { isStatic: true } } })
+  })
+
+  it('UPDATE_METHOD que no cambia nada no deja entrada', () => {
+    expect(entradaDe(conMetodo(), 'UPDATE_METHOD', { methodId: 'm', isAbstract: false })).toBeNull()
+  })
+
+  it('UPDATE_ATTRIBUTE de readOnly se deshace con false', () => {
+    const e = entradaDe(conLibroEn(0, 0), 'UPDATE_ATTRIBUTE', { attributeId: 'paginas', readOnly: true })!
+    expect(deshacer(e)).toMatchObject({ payload: { attributeId: 'paginas', readOnly: false, esperado: { readOnly: true } } })
+  })
+
+  it('quitar un metodo estatico y abstracto lo vuelve a crear con sus banderas', () => {
+    const estado = conMetodo()
+    Object.assign(estado.classes[0].methods[0], { isStatic: true, isAbstract: true })
+    const e = entradaDe(estado, 'REMOVE_METHOD', { methodId: 'm' })!
+    expect(deshacer(e)).toMatchObject({ type: 'ADD_METHOD', payload: { methodId: 'm', isStatic: true, isAbstract: true } })
+  })
+})

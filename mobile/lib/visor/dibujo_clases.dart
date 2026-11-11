@@ -37,7 +37,7 @@ String _firma(UmlAttribute a) {
     'PACKAGE' => '~',
     _ => '-',
   };
-  return '${a.pk ? '(PK) ' : ''}$signo ${a.name}: ${a.dataType}';
+  return '${a.pk ? '(PK) ' : ''}$signo ${a.name}: ${a.dataType}${a.readOnly ? ' {readOnly}' : ''}';
 }
 
 String _firmaMetodo(UmlMethod m) {
@@ -121,14 +121,20 @@ class DibujoClases extends CustomPainter {
     var y = rect.top + _altoCabecera + 2;
     final estiloLinea = TextStyle(fontSize: 11, color: colores.onSurface);
     for (final a in c.attributes) {
-      _texto(canvas, _firma(a), Offset(rect.left + 6, y), rect.width - 12, estilo: estiloLinea);
+      _texto(canvas, _firma(a), Offset(rect.left + 6, y), rect.width - 12,
+          // UML 2.5.1: miembro estatico subrayado.
+          estilo: a.isStatic ? estiloLinea.copyWith(decoration: TextDecoration.underline) : estiloLinea);
       y += _altoLinea;
     }
     if (c.attributes.isEmpty) y += _altoLinea;
     canvas.drawLine(Offset(rect.left, y + 2), Offset(rect.right, y + 2), Paint()..color = colores.outlineVariant);
     y += 4;
     for (final m in c.methods) {
-      _texto(canvas, _firmaMetodo(m), Offset(rect.left + 6, y), rect.width - 12, estilo: estiloLinea);
+      _texto(canvas, _firmaMetodo(m), Offset(rect.left + 6, y), rect.width - 12,
+          // UML 2.5.1: estatico subrayado, abstracto en cursiva.
+          estilo: estiloLinea.copyWith(
+              decoration: m.isStatic ? TextDecoration.underline : null,
+              fontStyle: m.isAbstract ? FontStyle.italic : null));
       y += _altoLinea;
     }
 

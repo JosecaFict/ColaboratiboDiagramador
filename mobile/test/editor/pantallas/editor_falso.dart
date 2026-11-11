@@ -84,6 +84,9 @@ class EditorFalso extends ChangeNotifier implements EditorDeDiagrama {
   }
 
   @override
+  void actualizarMetodo(String methodId, {bool? estatico, bool? abstracto}) =>
+      llamadas.add('actualizarMetodo:$methodId:$estatico:$abstracto');
+  @override
   void quitarMetodo(String methodId) => llamadas.add('quitarMetodo:$methodId');
   @override
   String? crearRelacion(String origenId, String destinoId, TipoRelacion tipo) {

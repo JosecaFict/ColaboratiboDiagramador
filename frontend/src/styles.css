@@ -211,6 +211,9 @@ body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-seri
 .lienzo-wrap.solo-lectura .entidad { cursor: default; }
 .txt-entidad { font-size: 14px; font-weight: 600; fill: var(--texto); }
 .txt-entidad.abstracta { font-style: italic; }
+/* UML 2.5.1: miembro estatico subrayado, operacion abstracta en cursiva. */
+.txt-estatico { text-decoration: underline; }
+.txt-metodo.abstracta { font-style: italic; }
 .txt-attr { font-size: 11px; fill: var(--secundario); }
 /* Subrayado = CLAVE. Es notacion ER (Chen): en UML 2.5.1 el subrayado
    significa "estatica", asi que en la vista de Clases la clave se escribe

@@ -104,6 +104,8 @@ EstadoModelo aplicarOperacion(EstadoModelo estado, OperacionAplicada op) {
           'parentAttributeId': p['parentAttributeId'],
           'minValue': p['minValue'],
           'maxValue': p['maxValue'],
+          if (p['isStatic'] == true) 'isStatic': true,
+          if (p['readOnly'] == true) 'readOnly': true,
         });
         return _conClase(estado, p['classId'] as String, (c) => c.copiar(attributes: [...c.attributes, a]));
       }
@@ -139,8 +141,25 @@ EstadoModelo aplicarOperacion(EstadoModelo estado, OperacionAplicada op) {
           'params': p['params'] ?? const [],
           'visibility': p['visibility'] ?? 'PUBLIC',
           'ordinal': p['ordinal'] ?? 0,
+          if (p['isStatic'] == true) 'isStatic': true,
+          if (p['isAbstract'] == true) 'isAbstract': true,
         });
         return _conClase(estado, p['classId'] as String, (c) => c.copiar(methods: [...c.methods, m]));
+      }
+
+    case 'UPDATE_METHOD':
+      {
+        // Igual que UPDATE_ATTRIBUTE: `methodId` identifica y las marcas de deshacer no son campos.
+        final cambios = {...p}
+          ..remove('methodId')
+          ..remove('deshace')
+          ..remove('esperado');
+        return estado.copiar(
+          classes: [
+            for (final c in estado.classes)
+              c.copiar(methods: [for (final m in c.methods) m.id == p['methodId'] ? m.mezclar(cambios) : m]),
+          ],
+        );
       }
 
     case 'REMOVE_METHOD':

@@ -27,6 +27,18 @@ describe('describir: el historial en palabras de persona', () => {
     expect(describir(relacion, indice)).toBe('relacionó «Pedido» — «Cliente» (asociación)')
   })
 
+  it('dice que cambio en un metodo y en un atributo (estatico, abstracto, solo lectura)', () => {
+    const m = op('ADD_METHOD', { methodId: 'm1', classId: 'pedido', name: 'calcular' })
+    const idx = indiceDeNombres(modeloTras([...ops, m]), [...ops, m])
+    expect(describir(op('UPDATE_METHOD', { methodId: 'm1', isStatic: true }), idx))
+      .toBe('cambió si es estático del método «calcular()»')
+    expect(describir(op('UPDATE_METHOD', { methodId: 'm1', isAbstract: true, esperado: { isAbstract: false } }), idx))
+      .toBe('cambió si es abstracto del método «calcular()»')
+    expect(tocaClase(op('UPDATE_METHOD', { methodId: 'm1', isStatic: true }), 'pedido', idx)).toBe(true)
+    expect(describir(op('UPDATE_ATTRIBUTE', { attributeId: 'total', readOnly: true }), indice))
+      .toContain('si es de solo lectura')
+  })
+
   it('distingue la interfaz y la realizacion', () => {
     const i = op('CREATE_CLASS', { classId: 'repo', name: 'Repositorio', stereotype: 'interface' })
     expect(describir(i, indice)).toBe('creó la interfaz «Repositorio»')

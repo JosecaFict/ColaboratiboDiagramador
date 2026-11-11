@@ -105,6 +105,7 @@ export function aplicarOperacion(estado: EstadoModelo, op: AppliedOperation): Es
         derived: p.derived ?? false, partialKey: p.partialKey ?? false,
         parentAttributeId: p.parentAttributeId ?? null,
         minValue: p.minValue ?? null, maxValue: p.maxValue ?? null,
+        ...(p.isStatic ? { isStatic: true } : {}), ...(p.readOnly ? { readOnly: true } : {}),
       }
       return conClase(estado, p.classId, (c) => ({ ...c, attributes: [...c.attributes, a] }))
     }
@@ -131,8 +132,20 @@ export function aplicarOperacion(estado: EstadoModelo, op: AppliedOperation): Es
         id: p.methodId, classId: p.classId, name: p.name,
         returnType: p.returnType ?? 'void', params: p.params ?? [],
         visibility: p.visibility ?? 'PUBLIC', ordinal: p.ordinal ?? 0,
+        ...(p.isStatic ? { isStatic: true } : {}), ...(p.isAbstract ? { isAbstract: true } : {}),
       }
       return conClase(estado, p.classId, (c) => ({ ...c, methods: [...c.methods, m] }))
+    }
+
+    case 'UPDATE_METHOD': {
+      // Igual que UPDATE_ATTRIBUTE: `methodId` identifica y las marcas de deshacer no son campos.
+      const { methodId, deshace: _d, esperado: _e, ...cambios } = p
+      return {
+        ...estado,
+        classes: estado.classes.map((c) => ({
+          ...c, methods: c.methods.map((m) => (m.id === methodId ? { ...m, ...cambios } : m)),
+        })),
+      }
     }
 
     case 'REMOVE_METHOD':
