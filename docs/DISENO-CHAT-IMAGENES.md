@@ -1,6 +1,6 @@
 # Diseño · Chat de la IA con imágenes (Fase 0: contrato)
 
-**Estado: PROPUESTA** · Juan, 2026-11-11 · base `04212fa` (`main` local, mesa integrada, migraciones hasta V13) · rama `codex/juan-chat-imagenes`.
+**Estado: APROBADO** (usuario, 2026-11-11, opción B para `PanelVision`; aceptadas O-1, O-4 y O-6) · Juan, 2026-11-11 · base `04212fa` (`main` local, mesa integrada, migraciones hasta V13) · rama `codex/juan-chat-imagenes`.
 Plan: `docs/PLAN-CHAT-IMAGENES-IA.md` (D1 a D7 aprobadas, no se discuten aquí). Esta fase es solo documento: no hay código de
 producción ni migraciones reales. Claude revisa y el usuario aprueba.
 
