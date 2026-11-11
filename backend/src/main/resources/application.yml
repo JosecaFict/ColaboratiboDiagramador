@@ -68,6 +68,12 @@ colabmodel:
     # nombre de cada autor. Si no entran en el contexto del modelo, se sacan
     # primero los mas viejos. presupuesto-tokens en 0 = automatico: el contexto
     # de Ollama con el proveedor local, 32000 con los de la nube.
+    # Imagenes del chat (docs/DISENO-CHAT-IMAGENES.md, D5): tope por diagrama. Cuenta solo las vivas;
+    # eliminar una libera cupo. El limite por imagen (8 MB) es colabmodel.vision.max-bytes.
+    imagenes:
+      max-por-diagrama: 100
+      # 200 MB, en bytes como colabmodel.vision.max-bytes.
+      max-bytes-por-diagrama: 209715200
     memoria:
       max-turnos: 8
       presupuesto-tokens: 0

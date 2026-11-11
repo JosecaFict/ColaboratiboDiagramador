@@ -1,5 +1,6 @@
 package com.uagrm.colabmodel.config;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -81,7 +82,13 @@ public class ManejadorDeErrores {
      * esto, Spring lo corta antes del controlador y llega un error generico.
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<Map<String, String>> archivoGrande(MaxUploadSizeExceededException e) {
+    public ResponseEntity<Map<String, String>> archivoGrande(MaxUploadSizeExceededException e,
+                                                             HttpServletRequest pedido) {
+        // Las imagenes del chat tienen su propio limite (8 MB): decirles "exporta solo el paquete" confunde.
+        if (pedido != null && pedido.getRequestURI() != null && pedido.getRequestURI().contains("/ai/imagenes")) {
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of("mensaje",
+                    "La imagen es demasiado grande: el máximo es de 8 MB"));
+        }
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of("mensaje",
                 "El archivo es demasiado grande: el máximo es de 25 MB. Si es un XMI, exportá solo el paquete que"
                         + " querés importar"));
