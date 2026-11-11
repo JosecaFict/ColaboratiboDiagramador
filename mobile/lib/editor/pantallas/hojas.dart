@@ -385,6 +385,15 @@ class HojaDeClase extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               dense: true,
               title: Text('${m.name}(): ${m.returnType}'),
+              subtitle: m.isStatic || m.isAbstract
+                  ? Text([if (m.isStatic) 'estático', if (m.isAbstract) 'abstracto'].join(' · '))
+                  : null,
+              onTap: !editable
+                  ? null
+                  : () async {
+                      final r = await _editarMetodo(context, m);
+                      if (r != null) editor.actualizarMetodo(m.id, estatico: r.estatico, abstracto: r.abstracto);
+                    },
               trailing: IconButton(
                 tooltip: 'Quitar',
                 icon: const Icon(Icons.delete_outline),
@@ -437,7 +446,13 @@ class HojaDeClase extends StatelessWidget {
   }
 
   Widget? _marcas(UmlAttribute a) {
-    final m = [if (a.pk) 'PK', if (a.required) 'obligatorio', if (a.unique) 'único'];
+    final m = [
+      if (a.pk) 'PK',
+      if (a.required) 'obligatorio',
+      if (a.unique) 'único',
+      if (a.isStatic) 'estático',
+      if (a.readOnly) 'solo lectura',
+    ];
     return m.isEmpty ? null : Text(m.join(' · '));
   }
 }
@@ -464,6 +479,8 @@ class _DialogoAtributoState extends State<_DialogoAtributo> {
   late bool _pk = widget.atributo.pk;
   late bool _obligatorio = widget.atributo.required;
   late bool _unico = widget.atributo.unique;
+  late bool _estatico = widget.atributo.isStatic;
+  late bool _soloLectura = widget.atributo.readOnly;
 
   @override
   void dispose() {
@@ -494,6 +511,12 @@ class _DialogoAtributoState extends State<_DialogoAtributo> {
                 value: _obligatorio,
                 onChanged: (v) => setState(() => _obligatorio = v)),
             SwitchListTile(title: const Text('Único'), value: _unico, onChanged: (v) => setState(() => _unico = v)),
+            SwitchListTile(
+                title: const Text('Estático'), value: _estatico, onChanged: (v) => setState(() => _estatico = v)),
+            SwitchListTile(
+                title: const Text('Solo lectura'),
+                value: _soloLectura,
+                onChanged: (v) => setState(() => _soloLectura = v)),
           ],
         ),
       ),
@@ -508,8 +531,60 @@ class _DialogoAtributoState extends State<_DialogoAtributo> {
               pk: _pk != a.pk ? _pk : null,
               obligatorio: _obligatorio != a.required ? _obligatorio : null,
               unico: _unico != a.unique ? _unico : null,
+              estatico: _estatico != a.isStatic ? _estatico : null,
+              soloLectura: _soloLectura != a.readOnly ? _soloLectura : null,
             );
             Navigator.of(context).pop(hayCambios(cambios) ? cambios : null);
+          },
+          child: const Text('Guardar'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lo que cambio en un metodo (D-15): null = sin cambio.
+typedef CambiosDeMetodo = ({bool? estatico, bool? abstracto});
+
+/// Dialogo de un metodo: UML isStatic e isAbstract. Devuelve SOLO lo que cambio, o null.
+Future<CambiosDeMetodo?> _editarMetodo(BuildContext context, UmlMethod m) {
+  return showDialog<CambiosDeMetodo>(context: context, builder: (context) => _DialogoMetodo(metodo: m));
+}
+
+class _DialogoMetodo extends StatefulWidget {
+  final UmlMethod metodo;
+  const _DialogoMetodo({required this.metodo});
+  @override
+  State<_DialogoMetodo> createState() => _DialogoMetodoState();
+}
+
+class _DialogoMetodoState extends State<_DialogoMetodo> {
+  late bool _estatico = widget.metodo.isStatic;
+  late bool _abstracto = widget.metodo.isAbstract;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.metodo;
+    return AlertDialog(
+      title: Text('Método «${m.name}»'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SwitchListTile(
+              title: const Text('Estático'), value: _estatico, onChanged: (v) => setState(() => _estatico = v)),
+          SwitchListTile(
+              title: const Text('Abstracto'), value: _abstracto, onChanged: (v) => setState(() => _abstracto = v)),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        FilledButton(
+          onPressed: () {
+            final cambios = (
+              estatico: _estatico != m.isStatic ? _estatico : null,
+              abstracto: _abstracto != m.isAbstract ? _abstracto : null,
+            );
+            Navigator.of(context).pop(cambios.estatico == null && cambios.abstracto == null ? null : cambios);
           },
           child: const Text('Guardar'),
         ),
@@ -525,7 +600,9 @@ bool hayCambios(DatosAtributo d) =>
     d.pk != null ||
     d.obligatorio != null ||
     d.unico != null ||
-    d.visibilidad != null;
+    d.visibilidad != null ||
+    d.estatico != null ||
+    d.soloLectura != null;
 
 class _NuevoAtributo extends StatefulWidget {
   final List<String> tipos;

@@ -337,6 +337,13 @@ void main() {
           'ordinal': 1
         },
         Origin.TEXT);
+    e.actualizarAtributo('a1', const DatosAtributo(estatico: true, soloLectura: false));
+    enviado(CommandType.UPDATE_ATTRIBUTE,
+        {'attributeId': 'a1', 'isStatic': true, 'readOnly': false});
+    e.actualizarMetodo('m1', estatico: true);
+    enviado(CommandType.UPDATE_METHOD, {'methodId': 'm1', 'isStatic': true});
+    e.actualizarMetodo('m1', abstracto: false);
+    enviado(CommandType.UPDATE_METHOD, {'methodId': 'm1', 'isAbstract': false});
     e.quitarMetodo('m1');
     enviado(CommandType.REMOVE_METHOD, {'methodId': 'm1'});
     for (final tipo in TipoRelacion.values) {

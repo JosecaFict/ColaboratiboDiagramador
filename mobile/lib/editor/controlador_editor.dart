@@ -466,6 +466,8 @@ class ControladorEditor extends ChangeNotifier implements EditorDeDiagrama {
         if (datos.obligatorio != null) 'required': datos.obligatorio,
         if (datos.unico != null) 'unique': datos.unico,
         if (datos.visibilidad != null) 'visibility': datos.visibilidad,
+        if (datos.estatico != null) 'isStatic': datos.estatico,
+        if (datos.soloLectura != null) 'readOnly': datos.soloLectura,
       };
   bool _validarAtributo(DatosAtributo datos) {
     if (datos.nombre != null && !_nombre(datos.nombre)) return false;
@@ -538,6 +540,16 @@ class ControladorEditor extends ChangeNotifier implements EditorDeDiagrama {
         },
         origin: Origin.TEXT);
     return ok ? id : null;
+  }
+
+  @override
+  void actualizarMetodo(String methodId, {bool? estatico, bool? abstracto}) {
+    if (estatico == null && abstracto == null) return;
+    _enviar(CommandType.UPDATE_METHOD, {
+      'methodId': methodId,
+      if (estatico != null) 'isStatic': estatico,
+      if (abstracto != null) 'isAbstract': abstracto,
+    });
   }
 
   @override

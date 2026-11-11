@@ -73,6 +73,10 @@ class DatosAtributo {
   /// PUBLIC, PRIVATE, PROTECTED o PACKAGE.
   final String? visibilidad;
 
+  /// UML isStatic e isReadOnly (D-15). Solo se envian si cambian.
+  final bool? estatico;
+  final bool? soloLectura;
+
   const DatosAtributo({
     this.nombre,
     this.tipoDato,
@@ -80,6 +84,8 @@ class DatosAtributo {
     this.obligatorio,
     this.unico,
     this.visibilidad,
+    this.estatico,
+    this.soloLectura,
   });
 }
 
@@ -165,6 +171,9 @@ abstract class EditorDeDiagrama implements Listenable {
 
   String? agregarMetodo(String classId, String nombre, {String retorno = 'void'});
   void quitarMetodo(String methodId);
+
+  /// UPDATE_METHOD (D-15): UML isStatic e isAbstract. Los null no se envian.
+  void actualizarMetodo(String methodId, {bool? estatico, bool? abstracto});
 
   String? crearRelacion(String origenId, String destinoId, TipoRelacion tipo);
   void actualizarRelacion(String relationId, CambiosRelacion cambios);
