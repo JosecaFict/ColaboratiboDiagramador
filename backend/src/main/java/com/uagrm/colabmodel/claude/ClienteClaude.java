@@ -1,4 +1,4 @@
-package com.uagrm.colabmodel.ai;
+package com.uagrm.colabmodel.claude;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;

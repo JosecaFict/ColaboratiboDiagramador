@@ -300,7 +300,7 @@ Este documento junta lo que antes estaba al final del README: el checklist del 1
   porque las coordenadas salen de la matriz del SVG y no de una conversión a mano
 
 - [x] **La defensa se hace con Claude, en texto y en imagen** (ADR-025, cierra
-  la decisión pendiente del ADR-017). `ai/ClienteClaude` es la única conexión,
+  la decisión pendiente del ADR-017). `claude/ClienteClaude` es la única conexión,
   por el SDK oficial, y la usan el prompt de texto y el nivel 2b de visión:
   modelo `claude-opus-5` con esfuerzo `low`, caché del prompt sobre
   herramientas y sistema, y herramientas estrictas. Lo beta —modo rápido y

@@ -1,5 +1,6 @@
 package com.uagrm.colabmodel.ai;
 
+import com.uagrm.colabmodel.claude.ClienteClaude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.uagrm.colabmodel.modelcore.command.Origin;
 import com.uagrm.colabmodel.modelcore.metamodel.*;

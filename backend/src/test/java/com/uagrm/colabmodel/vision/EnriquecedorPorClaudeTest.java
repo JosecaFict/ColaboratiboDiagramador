@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpServer;
-import com.uagrm.colabmodel.ai.ClienteClaude;
+import com.uagrm.colabmodel.claude.ClienteClaude;
 import com.uagrm.colabmodel.modelcore.metamodel.RelationKind;
 import com.uagrm.colabmodel.vision.DeteccionPropuesta.Caja;
 import com.uagrm.colabmodel.vision.DeteccionPropuesta.ClaseDetectada;

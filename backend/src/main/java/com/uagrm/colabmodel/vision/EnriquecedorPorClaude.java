@@ -11,7 +11,7 @@ import com.anthropic.models.beta.messages.BetaThinkingConfigDisabled;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.uagrm.colabmodel.ai.ClienteClaude;
+import com.uagrm.colabmodel.claude.ClienteClaude;
 import com.uagrm.colabmodel.modelcore.metamodel.RelationKind;
 import com.uagrm.colabmodel.vision.DeteccionPropuesta.Caja;
 import com.uagrm.colabmodel.vision.DeteccionPropuesta.ClaseDetectada;

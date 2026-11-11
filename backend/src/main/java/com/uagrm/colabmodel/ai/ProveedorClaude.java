@@ -1,5 +1,6 @@
 package com.uagrm.colabmodel.ai;
 
+import com.uagrm.colabmodel.claude.ClienteClaude;
 import com.anthropic.core.JsonValue;
 import com.anthropic.errors.AnthropicException;
 import com.anthropic.errors.AnthropicServiceException;
