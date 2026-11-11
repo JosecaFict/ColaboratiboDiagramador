@@ -51,7 +51,7 @@ public class EntidadBloqueable {
             // Un atributo o un metodo es parte de su clase: el lease es de la
             // clase, como decide ADR-004 (granularidad por entidad, no por campo).
             case UPDATE_ATTRIBUTE, REMOVE_ATTRIBUTE -> claseDelAtributo(uuid(p, "attributeId"));
-            case REMOVE_METHOD -> uuid(p, "methodId").flatMap(methods::findById).map(UmlMethod::getClassId);
+            case UPDATE_METHOD, REMOVE_METHOD -> uuid(p, "methodId").flatMap(methods::findById).map(UmlMethod::getClassId);
             case SET_ER_FLAG -> "ATTRIBUTE".equals(p.path("targetType").asText())
                     ? claseDelAtributo(uuid(p, "targetId"))
                     : uuid(p, "targetId");

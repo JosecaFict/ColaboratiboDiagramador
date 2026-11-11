@@ -323,6 +323,10 @@ public class CommandApplier {
                     UmlClass c = findClass(command, requireUuid(command, "targetId"));
                     switch (flag) {
                         case "weak" -> c.setWeak(value);
+                        case "isAbstract" -> {
+                            if (!value) rechazarSiTieneMetodosAbstractos(command, c);
+                            c.setAbstract(value);
+                        }
                         case "erKind" -> c.setErKind(enumOrThrow(ErKind.class, text(p, "erKind"), command, "erKind invalido"));
                         // Regla 4: la estrategia es de la jerarquia y se marca en la
                         // raiz. Es una anotacion de mapeo, como erKind.
@@ -413,7 +417,37 @@ public class CommandApplier {
                 m.setVisibility(enumOrDefault(Visibility.class, text(p, "visibility"),
                         Visibility.PUBLIC, command));
                 m.setOrdinal((int) num(p, "ordinal", 0));
+                m.setStatic(bool(p, "isStatic", false));
+                m.setAbstract(bool(p, "isAbstract", false));
+                validarMetodo(command, m, findClass(command, classId));
                 rechazarFirmaRepetida(command, m);
+                methods.save(m);
+            }
+            case UPDATE_METHOD -> {
+                UmlMethod m = methods.findById(requireUuid(command, "methodId"))
+                        .orElseThrow(() -> notFound(command, "El metodo no existe"));
+                // Se arma el resultado en una copia y se valida ANTES de tocar el guardado:
+                // un rechazo no deja el metodo a medio cambiar.
+                UmlMethod c = new UmlMethod();
+                c.setId(m.getId());
+                c.setClassId(m.getClassId());
+                c.setName(p.has("name") ? requireText(command, "name") : m.getName());
+                c.setReturnType(p.has("returnType") ? textOr(p, "returnType", "void") : m.getReturnType());
+                c.setParams(p.has("params") ? parametrosValidados(command, p.get("params")) : m.getParams());
+                c.setVisibility(p.has("visibility") ? enumOrThrow(Visibility.class,
+                        p.get("visibility").asText(), command, "Visibilidad invalida") : m.getVisibility());
+                c.setOrdinal(p.has("ordinal") ? p.get("ordinal").asInt() : m.getOrdinal());
+                c.setStatic(p.has("isStatic") ? p.get("isStatic").asBoolean() : m.isStatic());
+                c.setAbstract(p.has("isAbstract") ? p.get("isAbstract").asBoolean() : m.isAbstract());
+                validarMetodo(command, c, findClass(command, m.getClassId()));
+                rechazarFirmaRepetida(command, c);
+                m.setName(c.getName());
+                m.setReturnType(c.getReturnType());
+                m.setParams(c.getParams());
+                m.setVisibility(c.getVisibility());
+                m.setOrdinal(c.getOrdinal());
+                m.setStatic(c.isStatic());
+                m.setAbstract(c.isAbstract());
                 methods.save(m);
             }
 
@@ -476,6 +510,31 @@ public class CommandApplier {
      * guarda basura, el proyecto generado no compila y el error aparece
      * recien cuando el usuario corre `mvn package`, lejos de la causa.
      */
+    /**
+     * V2 y V3. Una interfaz cuenta como contenedor de metodos abstractos: sus operaciones
+     * lo son por definicion, asi que no hace falta marcar la clase como abstracta.
+     */
+    private void validarMetodo(Command command, UmlMethod m, UmlClass duenia) {
+        if (m.isStatic() && m.isAbstract()) {
+            throw invalid(command, "El metodo " + m.getName() + " no puede ser estatico y abstracto a la vez:"
+                    + " un metodo de clase necesita cuerpo.");
+        }
+        if (m.isAbstract() && !duenia.isAbstract() && !Interfaces.es(duenia)) {
+            throw invalid(command, "El metodo " + m.getName() + " es abstracto pero " + duenia.getName()
+                    + " no es abstracta ni interfaz: marcala abstracta primero.");
+        }
+    }
+
+    /** V4: una clase con metodos abstractos no puede dejar de ser abstracta. */
+    private void rechazarSiTieneMetodosAbstractos(Command command, UmlClass c) {
+        if (Interfaces.es(c)) return;
+        methods.findByClassIdOrderByOrdinalAsc(c.getId()).stream().filter(UmlMethod::isAbstract).findFirst()
+                .ifPresent(m -> {
+                    throw invalid(command, c.getName() + " tiene el metodo abstracto " + m.getName()
+                            + ": no puede dejar de ser abstracta. Quita o implementa el metodo primero.");
+                });
+    }
+
     /** V5: una clase no puede ser interfaz y, a la vez, enumeracion o valor embebido. */
     private void validarEstereotipo(Command command, String estereotipo) {
         if (estereotipo == null) return;

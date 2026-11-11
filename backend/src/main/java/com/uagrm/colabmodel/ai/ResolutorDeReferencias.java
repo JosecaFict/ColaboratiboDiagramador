@@ -81,7 +81,7 @@ class ResolutorDeReferencias {
             case UPDATE_RELATION -> actualizarRelacion(p);
             case DELETE_RELATION -> borrarRelacion(p);
             case SET_ER_FLAG -> marcarFlag(p);
-            case MOVE_ELEMENT, RESIZE_ELEMENT, SET_MODELING_DECISION, CONFIRM_SCHEMA, BATCH ->
+            case MOVE_ELEMENT, RESIZE_ELEMENT, SET_MODELING_DECISION, CONFIRM_SCHEMA, BATCH, UPDATE_METHOD ->
                     throw new ComandoIAInvalidoException(tipo + " no es una edicion que la IA pueda proponer");
         };
     }
