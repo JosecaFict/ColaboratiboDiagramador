@@ -480,7 +480,7 @@ public class DiagramSnapshotService {
     /** Los parametros viajan tipados, igual que los quiebres: el cliente no parsea JSON crudo. */
     private DiagramSnapshot.Metodo aDto(UmlMethod m) {
         return new DiagramSnapshot.Metodo(m.getId(), m.getClassId(), m.getName(), m.getReturnType(),
-                parametrosDe(m.getParams()), m.getVisibility(), m.getOrdinal());
+                parametrosDe(m.getParams()), m.getVisibility(), m.getOrdinal(), m.isStatic(), m.isAbstract());
     }
 
     private List<DiagramSnapshot.Parametro> parametrosDe(String json) {

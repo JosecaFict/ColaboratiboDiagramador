@@ -54,7 +54,9 @@ public record DiagramSnapshot(
             String returnType,
             List<Parametro> params,
             Visibility visibility,
-            int ordinal
+            int ordinal,
+            boolean isStatic,
+            boolean isAbstract
     ) {}
 
     public record Parametro(String name, String type) {}
