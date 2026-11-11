@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xmi:XMI xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1">
-  <xmi:Documentation exporter="ColabModel" exporterVersion="1.0">
-    Perdidas declaradas (ADR-018): La multiplicidad de los atributos solo se exporta cuando son multivaluados: el dato «opcional» de los demas atributos no viaja y, al reimportar, un atributo sin multiplicidad se lee como obligatorio (1..1, el valor por omision de UML). | Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.
-  </xmi:Documentation>
+  <xmi:Documentation exporter="Enterprise Architect" exporterVersion="6.5" exporterID="1625"/>
+  <!-- Exportado por ColabModel 1.0. Perdidas declaradas (ADR-018): La multiplicidad de los atributos solo se exporta cuando son multivaluados: el dato «opcional» de los demas atributos no viaja y, al reimportar, un atributo sin multiplicidad se lee como obligatorio (1..1, el valor por omision de UML). | Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI. -->
   <uml:Model xmi:type="uml:Model" xmi:id="EAPK_MODELO" name="EA_Model">
     <packagedElement xmi:type="uml:Package" xmi:id="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" name="ColabModel" visibility="public">
       <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000001" name="Persona" visibility="public" isAbstract="true">
@@ -159,7 +158,7 @@
         <source xmi:idref="EAID_C0000000_0000_4000_8000_000000000003">
           <model ea_localid="4" type="Class" name="Pedido"/>
           <role visibility="Public" targetScope="instance"/>
-          <type multiplicity="0..*" aggregation="none" containment="Unspecified"/>
+          <type multiplicity="0..*" aggregation="composite" containment="Unspecified"/>
           <constraints/>
           <modifiers isOrdered="false" changeable="none" isNavigable="false"/>
           <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Non-Navigable;"/>
@@ -170,7 +169,7 @@
         <target xmi:idref="EAID_C0000000_0000_4000_8000_000000000002">
           <model ea_localid="3" type="Class" name="Cliente"/>
           <role visibility="Public" targetScope="instance"/>
-          <type multiplicity="1" aggregation="composite" containment="Unspecified"/>
+          <type multiplicity="1" aggregation="none" containment="Unspecified"/>
           <constraints/>
           <modifiers isOrdered="false" changeable="none" isNavigable="true"/>
           <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Navigable;"/>

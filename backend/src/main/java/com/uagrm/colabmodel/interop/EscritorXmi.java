@@ -146,9 +146,20 @@ public final class EscritorXmi {
         } else {
             x.abrir("xmi:XMI", "xmlns:xmi", NS_XMI, "xmlns:uml", NS_UML);
         }
-        x.abrir("xmi:Documentation", "exporter", "ColabModel", "exporterVersion", "1.0");
-        x.texto("Perdidas declaradas (ADR-018): " + String.join(" | ", perdidas));
-        x.cerrar("xmi:Documentation");
+        if (ea) {
+            // Probado en EA 16.1 real (tanda 1, 2026-11-11): EA solo lee su Extension (diagramas y
+            // tipos primitivos) cuando el archivo dice que lo exporto Enterprise Architect. Con
+            // exporter="ColabModel" importaba las clases pero descartaba el diagrama y los tipos.
+            // Por eso la cabecera es la de EA y las perdidas van en un comentario.
+            x.vacio("xmi:Documentation", "exporter", "Enterprise Architect", "exporterVersion", "6.5",
+                    "exporterID", "1625");
+            x.comentario("Exportado por ColabModel 1.0. Perdidas declaradas (ADR-018): "
+                    + String.join(" | ", perdidas));
+        } else {
+            x.abrir("xmi:Documentation", "exporter", "ColabModel", "exporterVersion", "1.0");
+            x.texto("Perdidas declaradas (ADR-018): " + String.join(" | ", perdidas));
+            x.cerrar("xmi:Documentation");
+        }
         x.abrir("uml:Model", "xmi:type", "uml:Model", "xmi:id", ea ? "EAPK_MODELO" : "modelo",
                 "name", ea ? "EA_Model" : "Modelo");
         // EA importa un PAQUETE ("Import Package from XMI"): las clases van
@@ -723,10 +734,13 @@ public final class EscritorXmi {
             default -> "Association";
         };
         x.abrir("connector", "xmi:idref", id("r", r.getId()), "name", asociativa ? r.getName() : null);
+        // En ColabModel el todo es el ORIGEN (en la parte UML, `aggregation` va en el extremo del destino,
+        // que es lo que dice UML). EA, en cambio, marca el rombo en el extremo del todo dentro del conector:
+        // probado en EA 16.1 real, con el rombo en el destino lo dibujaba del lado de la parte.
         extremoDeConector(x, "source", origen, localOrigen, asociativa, rolExportable(r.getSourceRole(), r.getSourceClassId()), r.getSourceMultiplicity(),
-                "none", false);
+                k == RelationKind.COMPOSITION ? "composite" : k == RelationKind.AGGREGATION ? "shared" : "none", false);
         extremoDeConector(x, "target", destino, localDestino, asociativa, rolExportable(r.getTargetRole(), r.getTargetClassId()), r.getTargetMultiplicity(),
-                k == RelationKind.COMPOSITION ? "composite" : k == RelationKind.AGGREGATION ? "shared" : "none", true);
+                "none", true);
         x.vacio("model", "ea_localid", String.valueOf(localConector));
         x.vacio("properties", "ea_type", tipoEa, "direction", "Source -> Destination");
         if (asociativa) {
@@ -813,6 +827,13 @@ public final class EscritorXmi {
         Xml texto(String contenido) {
             sangria();
             sb.append(escapar(contenido)).append('\n');
+            return this;
+        }
+
+        /** `<!-- ... -->`. Un comentario XML no admite "--" adentro: se reemplaza. */
+        Xml comentario(String contenido) {
+            sangria();
+            sb.append("<!-- ").append(contenido.replace("--", "- -")).append(" -->\n");
             return this;
         }
 

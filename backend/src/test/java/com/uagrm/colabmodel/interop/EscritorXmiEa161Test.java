@@ -115,8 +115,12 @@ class EscritorXmiEa161Test {
                 .containsExactlyInAnyOrder("Generalization", "Association", "Association", "Dependency", "Realisation");
         Element composicion = conectores.stream()
                 .filter(c -> idRelacion(EA, 3).equals(c.getAttribute("xmi:idref"))).findFirst().orElseThrow();
+        // El todo es el origen. EA 16.1 real (tanda 1) dibuja el rombo en el extremo del conector que lleva
+        // `aggregation`; con el rombo en el destino lo ponia del lado de la parte.
+        assertThat(hijos(hijos(composicion, "source").get(0), "type").get(0).getAttribute("aggregation"))
+                .as("el rombo va en el extremo del todo, que es el origen").isEqualTo("composite");
         assertThat(hijos(hijos(composicion, "target").get(0), "type").get(0).getAttribute("aggregation"))
-                .as("el rombo va en el extremo del todo").isEqualTo("composite");
+                .isEqualTo("none");
         assertThat(hijos(hijos(composicion, "source").get(0), "type").get(0).getAttribute("multiplicity"))
                 .isEqualTo("0..*");
     }
