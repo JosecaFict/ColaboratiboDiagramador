@@ -239,7 +239,10 @@ class EscritorXmiInterfazTest {
                 .filter(e -> idClase(EscritorXmi.Perfil.ENTERPRISE_ARCHITECT, PAGABLE).equals(e.getAttribute("xmi:idref")))
                 .findFirst().orElseThrow();
         assertThat(elementoInterfaz.getAttribute("xmi:type")).isEqualTo("uml:Interface");
-        assertThat(hijos(elementoInterfaz, "properties").get(0).getAttribute("sType")).isEqualTo("Interface");
+        Element propiedades = hijos(elementoInterfaz, "properties").get(0);
+        assertThat(propiedades.getAttribute("sType")).isEqualTo("Interface");
+        assertThat(propiedades.getAttribute("isAbstract")).isEqualTo("true");
+        assertThat(propiedades.hasAttribute("stereotype")).as("el estereotipo ya es la metaclase").isFalse();
     }
 
     @Test
@@ -303,6 +306,24 @@ class EscritorXmiInterfazTest {
             for (int i = 0; i < e.getAttributes().getLength(); i++) r.add(e.getAttributes().item(i).getNodeName());
             return r;
         }
+    }
+
+    // ============================================== ARCHIVOS DE EJEMPLO PARA EA REAL
+
+    /**
+     * No prueba nada: con `-Dejemplos.escribir=<carpeta>` escribe un archivo por
+     * perfil (interfaz + realizacion) para que Pepe y el usuario los abran en EA
+     * real. Sin la propiedad se omite.
+     */
+    @ParameterizedTest
+    @EnumSource(EscritorXmi.Perfil.class)
+    void escribe_los_ejemplos_para_abrir_en_ea(EscritorXmi.Perfil perfil) throws IOException {
+        String carpeta = System.getProperty("ejemplos.escribir");
+        org.junit.jupiter.api.Assumptions.assumeTrue(carpeta != null, "solo con -Dejemplos.escribir=<carpeta>");
+        Files.createDirectories(Path.of(carpeta));
+        String nombre = perfil == EscritorXmi.Perfil.ENTERPRISE_ARCHITECT
+                ? "interfaz-realizacion-ea.xml" : "interfaz-realizacion-estandar.xmi";
+        Files.write(Path.of(carpeta, nombre), conInterfaz().exportar(perfil).xmi());
     }
 
     // ============================================================ AYUDAS

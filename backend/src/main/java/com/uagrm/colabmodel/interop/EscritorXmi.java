@@ -2,6 +2,7 @@ package com.uagrm.colabmodel.interop;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uagrm.colabmodel.modelcore.mapping.Interfaces;
 import com.uagrm.colabmodel.modelcore.metamodel.*;
 
 import java.nio.charset.StandardCharsets;
@@ -95,8 +96,12 @@ public final class EscritorXmi {
                 .filter(r -> r.getKind() == RelationKind.GENERALIZATION).toList();
         List<UmlRelationship> dependencias = relaciones.stream()
                 .filter(r -> r.getKind() == RelationKind.DEPENDENCY).toList();
+        List<UmlRelationship> realizaciones = relaciones.stream()
+                .filter(r -> r.getKind() == RelationKind.REALIZATION).toList();
+        // Una realizacion NO es una asociacion: sale como interfaceRealization dentro de la clase (D-15).
         List<UmlRelationship> asociaciones = relaciones.stream()
-                .filter(r -> r.getKind() != RelationKind.GENERALIZATION && r.getKind() != RelationKind.DEPENDENCY)
+                .filter(r -> r.getKind() != RelationKind.GENERALIZATION && r.getKind() != RelationKind.DEPENDENCY
+                        && r.getKind() != RelationKind.REALIZATION)
                 .toList();
 
         // Se calculan ANTES de escribir: asi viajan en el propio archivo, en
@@ -124,7 +129,7 @@ public final class EscritorXmi {
 
         for (UmlClass c : clases) {
             escribirClase(x, c, atrsPorClase.getOrDefault(c.getId(), List.of()),
-                    metsPorClase.getOrDefault(c.getId(), List.of()), generalizaciones, idTipo);
+                    metsPorClase.getOrDefault(c.getId(), List.of()), generalizaciones, realizaciones, idTipo);
         }
         for (UmlRelationship r : asociaciones) escribirAsociacion(x, r);
         for (UmlRelationship r : dependencias) {
@@ -136,7 +141,7 @@ public final class EscritorXmi {
 
         if (ea) x.cerrar("packagedElement");
         x.cerrar("uml:Model");
-        if (ea) extensionEa(x, paquete, clases, atrsPorClase, metsPorClase, disposicion);
+        if (ea) extensionEa(x, paquete, clases, atrsPorClase, metsPorClase, disposicion, realizaciones);
         x.cerrar("xmi:XMI");
 
         return new Exportado(x.toString().getBytes(StandardCharsets.UTF_8), perdidas);
@@ -198,16 +203,21 @@ public final class EscritorXmi {
      */
     private static String metaclase(UmlClass c, List<UmlAttribute> propios) {
         String s = c.getStereotype() == null ? "" : c.getStereotype().toLowerCase(Locale.ROOT);
+        // El estereotipo `interface` ES la metaclase (D-15): por eso tampoco es una perdida.
+        if (Interfaces.es(c)) return "uml:Interface";
         if (s.equals("enumeration")) return "uml:Enumeration";
         if (s.equals("embeddable") && !propios.isEmpty()) return "uml:DataType";
         return "uml:Class";
     }
 
     private void escribirClase(Xml x, UmlClass c, List<UmlAttribute> propios, List<UmlMethod> propiosMetodos,
-                                      List<UmlRelationship> generalizaciones, Map<String, String> idTipo) {
+                                      List<UmlRelationship> generalizaciones, List<UmlRelationship> realizaciones,
+                                      Map<String, String> idTipo) {
         String metaclase = metaclase(c, propios);
+        // EA escribe isAbstract="true" en toda interfaz (corpus); en el estandar solo si la clase lo marca.
+        boolean abstracta = c.isAbstract() || (ea && metaclase.equals("uml:Interface"));
         x.abrir("packagedElement", "xmi:type", metaclase, "xmi:id", id("c", c.getId()), "name", c.getName(),
-                "visibility", ea ? "public" : null, "isAbstract", c.isAbstract() ? "true" : ea ? "false" : null);
+                "visibility", ea ? "public" : null, "isAbstract", abstracta ? "true" : ea ? "false" : null);
 
         if (metaclase.equals("uml:Enumeration")) {
             for (UmlAttribute a : propios) {
@@ -223,6 +233,15 @@ public final class EscritorXmi {
             if (g.getSourceClassId().equals(c.getId())) {
                 x.vacio("generalization", "xmi:type", "uml:Generalization", "xmi:id", id("r", g.getId()),
                         "general", id("c", g.getTargetClassId()));
+            }
+        }
+
+        for (UmlRelationship r : realizaciones) {
+            if (r.getSourceClassId().equals(c.getId())) {
+                // client = quien realiza; supplier = contract = la interfaz (UML 2.5.1 §10.3.7).
+                x.vacio("interfaceRealization", "xmi:type", "uml:InterfaceRealization", "xmi:id", id("r", r.getId()),
+                        "client", id("c", c.getId()), "supplier", id("c", r.getTargetClassId()),
+                        "contract", id("c", r.getTargetClassId()));
             }
         }
 
@@ -415,7 +434,7 @@ public final class EscritorXmi {
      */
     private void extensionEa(Xml x, String paquete, List<UmlClass> clases,
                              Map<UUID, List<UmlAttribute>> atrsPorClase, Map<UUID, List<UmlMethod>> metsPorClase,
-                             List<DiagramLayout> disposicion) {
+                             List<DiagramLayout> disposicion, List<UmlRelationship> realizaciones) {
         x.abrir("xmi:Extension", "extender", "Enterprise Architect", "extenderID", "6.5");
 
         x.abrir("elements");
@@ -427,7 +446,9 @@ public final class EscritorXmi {
             x.vacio("model", "package", paquete, "ea_eleType", "element");
             x.vacio("properties", "isSpecification", "false", "sType", metaclase.substring("uml:".length()),
                     "nType", "0", "scope", "public",
-                    "isAbstract", c.isAbstract() ? "true" : "false", "stereotype", c.getStereotype());
+                    "isAbstract", c.isAbstract() || metaclase.equals("uml:Interface") ? "true" : "false",
+                    // En una uml:Interface el estereotipo ya ES la metaclase: repetirlo mostraria «interface» dos veces.
+                    "stereotype", metaclase.equals("uml:Interface") ? null : c.getStereotype());
             if (!atrs.isEmpty()) {
                 x.abrir("attributes");
                 for (UmlAttribute a : atrs) {
@@ -444,6 +465,25 @@ public final class EscritorXmi {
             x.cerrar("element");
         }
         x.cerrar("elements");
+
+        if (!realizaciones.isEmpty()) {
+            // Solo si hay realizaciones: un diagrama sin ellas sale igual que antes.
+            Map<UUID, UmlClass> porId = new HashMap<>();
+            clases.forEach(c -> porId.put(c.getId(), c));
+            x.abrir("connectors");
+            for (UmlRelationship r : realizaciones) {
+                UmlClass origen = porId.get(r.getSourceClassId());
+                UmlClass destino = porId.get(r.getTargetClassId());
+                if (origen == null || destino == null) continue;
+                x.abrir("connector", "xmi:idref", id("r", r.getId()));
+                conectorExtremo(x, "source", origen);
+                conectorExtremo(x, "target", destino);
+                // EA escribe `Realisation`, con «s» (forma del corpus).
+                x.vacio("properties", "ea_type", "Realisation", "direction", "Source -> Destination");
+                x.cerrar("connector");
+            }
+            x.cerrar("connectors");
+        }
 
         x.abrir("diagrams");
         x.abrir("diagram", "xmi:id", "EAID_" + guid(UUID.nameUUIDFromBytes(("diagrama" + paquete)
@@ -492,6 +532,14 @@ public final class EscritorXmi {
         x.cerrar("diagrams");
 
         x.cerrar("xmi:Extension");
+    }
+
+    private void conectorExtremo(Xml x, String lado, UmlClass c) {
+        x.abrir(lado, "xmi:idref", id("c", c.getId()));
+        x.vacio("model", "type", metaclase(c, List.of()).substring("uml:".length()), "name", c.getName());
+        x.vacio("role", "visibility", "Public", "targetScope", "instance");
+        x.vacio("type", "aggregation", "none", "containment", "Unspecified");
+        x.cerrar(lado);
     }
 
     private static String entero(double v) {
