@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { aplicarOperacion, estadoVacio, type EstadoModelo } from '../canvas/applyOperation'
-import type { UmlClass } from '../contracts/command'
+import type { UmlClass, UmlRelationship } from '../contracts/command'
 import { entradaDe, entradaDeDecision, HistorialLocal, type EntradaSinConfirmar } from './historialLocal'
 
 /**
@@ -168,6 +168,48 @@ describe('entradaDe: crear y borrar (escalon 3)', () => {
 
     const sinQuiebres = entradaDe(conLibroEn(0, 0), 'DELETE_RELATION', { relationId: 'rel' })
     expect(deshacer(sinQuiebres)?.type).toBe('CREATE_RELATION')
+  })
+})
+
+describe('entradaDe: interfaz y realizacion (D-15)', () => {
+  const conInterfaz = (): EstadoModelo => {
+    const e = conLibroEn(0, 0)
+    e.classes.push({ ...libro(), id: 'repo', name: 'Repositorio', stereotype: 'interface', attributes: [] })
+    return e
+  }
+
+  it('deshacer y rehacer crear una interfaz conserva el estereotipo', () => {
+    const e = entradaDe(estadoVacio('d'), 'CREATE_CLASS',
+      { classId: 'repo', name: 'Repositorio', stereotype: 'interface', x: 1, y: 2 })
+    expect(deshacer(e)?.type).toBe('DELETE_CLASS')
+    expect(rehacer(e)?.payload).toMatchObject({ classId: 'repo', stereotype: 'interface', esperado: { eliminada: true } })
+  })
+
+  it('deshacer borrar una interfaz la vuelve a crear como interfaz', () => {
+    const e = entradaDe(conInterfaz(), 'DELETE_CLASS', { classId: 'repo' })
+    const lote = deshacer(e)!
+    const cambios = lote.payload.comandos as { type: string; payload: Record<string, unknown> }[]
+    expect(cambios[0]).toMatchObject({ type: 'CREATE_CLASS', payload: { classId: 'repo', stereotype: 'interface' } })
+  })
+
+  it('deshacer y rehacer crear una realizacion; borrarla vuelve con su tipo', () => {
+    const crear = entradaDe(conInterfaz(), 'CREATE_RELATION',
+      { relationId: 'rz', sourceClassId: 'libro', targetClassId: 'repo', kind: 'REALIZATION' })
+    expect(deshacer(crear)?.type).toBe('DELETE_RELATION')
+    expect(rehacer(crear)?.payload).toMatchObject({ relationId: 'rz', kind: 'REALIZATION' })
+
+    const estado = conInterfaz()
+    estado.relationships.push({ id: 'rz', diagramId: 'd', sourceClassId: 'libro', targetClassId: 'repo',
+      kind: 'REALIZATION', identifying: false, degree: 2 } as UmlRelationship)
+    const borrar = entradaDe(estado, 'DELETE_RELATION', { relationId: 'rz' })
+    expect(deshacer(borrar)).toMatchObject({ type: 'CREATE_RELATION',
+      payload: { relationId: 'rz', kind: 'REALIZATION', sourceClassId: 'libro', targetClassId: 'repo' } })
+  })
+
+  it('el estado local aplica la realizacion en vivo', () => {
+    const op = { opId: 'o', seq: 1, type: 'CREATE_RELATION' as const, origin: 'MOUSE' as const, userId: 'u', ts: '',
+      payload: { relationId: 'rz', sourceClassId: 'libro', targetClassId: 'repo', kind: 'REALIZATION' } }
+    expect(aplicarOperacion(conInterfaz(), op).relationships.find((r) => r.id === 'rz')?.kind).toBe('REALIZATION')
   })
 })
 

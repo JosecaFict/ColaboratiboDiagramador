@@ -27,6 +27,13 @@ describe('describir: el historial en palabras de persona', () => {
     expect(describir(relacion, indice)).toBe('relacionó «Pedido» — «Cliente» (asociación)')
   })
 
+  it('distingue la interfaz y la realizacion', () => {
+    const i = op('CREATE_CLASS', { classId: 'repo', name: 'Repositorio', stereotype: 'interface' })
+    expect(describir(i, indice)).toBe('creó la interfaz «Repositorio»')
+    const r = op('CREATE_RELATION', { relationId: 'r2', sourceClassId: 'pedido', targetClassId: 'cliente', kind: 'REALIZATION' })
+    expect(describir(r, indice)).toBe('relacionó «Pedido» — «Cliente» (realización)')
+  })
+
   it('distingue enumeraciones y valores embebidos', () => {
     const e = op('CREATE_CLASS', { classId: 'e', name: 'Estado', stereotype: 'enumeration' })
     expect(describir(e, indice)).toBe('creó la enumeración «Estado»')

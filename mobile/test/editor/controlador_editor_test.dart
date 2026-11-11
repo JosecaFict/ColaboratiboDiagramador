@@ -237,11 +237,12 @@ void main() {
       expect(c.payload, {
         'classId': id,
         'name': 'Pedido',
-        'stereotype': tipo == TipoDeElemento.enumeracion
-            ? 'enumeration'
-            : tipo == TipoDeElemento.valor
-                ? 'embeddable'
-                : null,
+        'stereotype': switch (tipo) {
+          TipoDeElemento.enumeracion => 'enumeration',
+          TipoDeElemento.valor => 'embeddable',
+          TipoDeElemento.interfaz => 'interface',
+          _ => null,
+        },
         if (tipo == TipoDeElemento.abstracta) 'isAbstract': true,
         'x': 600.0,
         'y': 120.0

@@ -1,5 +1,5 @@
 import type { AppliedOperation, CommandType, Origin, RelationKind } from '../contracts/command'
-import { ESTEREOTIPO_EMBEBIBLE, ESTEREOTIPO_ENUM } from '../contracts/command'
+import { ESTEREOTIPO_EMBEBIBLE, ESTEREOTIPO_ENUM, ESTEREOTIPO_INTERFAZ } from '../contracts/command'
 import type { EstadoModelo } from '../canvas/applyOperation'
 
 /**
@@ -169,7 +169,8 @@ export function describir(op: Pick<AppliedOperation, 'opId' | 'type' | 'origin' 
     case 'CREATE_CLASS': {
       const estereotipo = String(p.stereotype ?? '').toLowerCase()
       const que = estereotipo === ESTEREOTIPO_ENUM ? 'la enumeración'
-        : estereotipo === ESTEREOTIPO_EMBEBIBLE ? 'el valor embebido' : 'la clase'
+        : estereotipo === ESTEREOTIPO_EMBEBIBLE ? 'el valor embebido'
+        : estereotipo === ESTEREOTIPO_INTERFAZ ? 'la interfaz' : 'la clase'
       return `creó ${que} ${comillas(String(p.name))}`
     }
     case 'RENAME_CLASS': {

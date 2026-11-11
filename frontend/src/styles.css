@@ -1131,6 +1131,7 @@ input.fis-col { font-family: ui-monospace, monospace; }
 .ex-letra { flex: none; width: 17px; height: 17px; border-radius: 999px; display: grid; place-items: center;
             font-size: 10px; font-weight: 700; border: 1.5px solid currentColor; color: var(--secundario); }
 .ex-letra.t-ABSTRACTA { color: var(--lila); font-style: italic; }
+.ex-letra.t-INTERFAZ { color: var(--cian); font-style: italic; }
 .ex-letra.t-ENUM { color: var(--cian); }
 .ex-letra.t-VALOR { color: var(--ambar); }
 .ex-texto { font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

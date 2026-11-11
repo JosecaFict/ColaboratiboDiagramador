@@ -19,14 +19,14 @@ export function NotacionRelacion({ kind }: { kind: RelationKind }) {
       <line
         x1={kind === 'AGGREGATION' || kind === 'COMPOSITION' ? 18 : 2}
         y1={8}
-        x2={kind === 'GENERALIZATION' ? 40 : kind === 'DEPENDENCY' ? 40 : 52}
+        x2={kind === 'GENERALIZATION' || kind === 'DEPENDENCY' || kind === 'REALIZATION' ? 40 : 52}
         y2={8}
         stroke={trazo}
         strokeWidth={1.4}
-        strokeDasharray={kind === 'DEPENDENCY' ? '4 3' : undefined}
+        strokeDasharray={kind === 'DEPENDENCY' || kind === 'REALIZATION' ? '4 3' : undefined}
       />
 
-      {kind === 'GENERALIZATION' && (
+      {(kind === 'GENERALIZATION' || kind === 'REALIZATION') && (
         <polygon points="40,3 52,8 40,13" fill="var(--panel)" stroke={trazo} strokeWidth={1.2} />
       )}
       {kind === 'DEPENDENCY' && (

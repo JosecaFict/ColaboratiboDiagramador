@@ -9,6 +9,7 @@ const TIPOS: { id: RelationKind; label: string }[] = [
   { id: 'COMPOSITION', label: 'Composicion' },
   { id: 'GENERALIZATION', label: 'Generalizacion' },
   { id: 'DEPENDENCY', label: 'Dependencia' },
+  { id: 'REALIZATION', label: 'Realizacion' },
 ]
 
 /** Las de siempre. El resto se escribe a mano con "otro…". */

@@ -40,7 +40,7 @@ import { PanelImportacion, type EstadoEnvio } from './importacion/PanelImportaci
 import { PanelExportacion } from './interop/PanelExportacion'
 import { exportarXmi, guardar, type PerfilXmi, type XmiExportado } from './interop/exportacionXmi'
 import type { Plan, PropuestaDeImportacion } from './importacion/propuesta'
-import { ESTEREOTIPO_EMBEBIBLE, ESTEREOTIPO_ENUM, esEmbebible, esEnumeracion } from './contracts/command'
+import { ESTEREOTIPO_EMBEBIBLE, ESTEREOTIPO_ENUM, ESTEREOTIPO_INTERFAZ, esEmbebible, esEnumeracion } from './contracts/command'
 import type {
   AppliedOperation, CommandType, NotationView, RelationKind, UmlRelationship,
 } from './contracts/command'
@@ -659,6 +659,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
   const crearDesdePaleta = (tipo: TipoDeElemento, nombre: string) => {
     if (tipo === 'ENUM') crearClase(nombre, ESTEREOTIPO_ENUM)
     else if (tipo === 'VALOR') crearClase(nombre, ESTEREOTIPO_EMBEBIBLE)
+    else if (tipo === 'INTERFAZ') crearClase(nombre, ESTEREOTIPO_INTERFAZ)
     else crearClase(nombre, undefined, tipo === 'ABSTRACTA')
   }
 
