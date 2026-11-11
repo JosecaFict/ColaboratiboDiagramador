@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.omg.org/spec/UML/20161101">
+  <xmi:Documentation exporter="ColabModel" exporterVersion="1.0">
+    Perdidas declaradas (ADR-018): La multiplicidad de los atributos solo se exporta cuando son multivaluados: el dato «opcional» de los demas atributos no viaja y, al reimportar, un atributo sin multiplicidad se lee como obligatorio (1..1, el valor por omision de UML). | Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.
+  </xmi:Documentation>
+  <uml:Model xmi:type="uml:Model" xmi:id="modelo" name="Modelo">
+    <packagedElement xmi:type="uml:Class" xmi:id="cc0000000-0000-4000-8000-000000000001" name="Persona" isAbstract="true">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="aa0000000-0000-4000-8000-000000000001" name="nombre" visibility="private">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi#String"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="cc0000000-0000-4000-8000-000000000002" name="Cliente">
+      <generalization xmi:type="uml:Generalization" xmi:id="rf0000000-0000-4000-8000-000000000001" general="cc0000000-0000-4000-8000-000000000001"/>
+      <ownedAttribute xmi:type="uml:Property" xmi:id="aa0000000-0000-4000-8000-000000000002" name="codigo" visibility="private" isID="true">
+        <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi#Integer"/>
+      </ownedAttribute>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Class" xmi:id="cc0000000-0000-4000-8000-000000000003" name="Pedido">
+      <ownedAttribute xmi:type="uml:Property" xmi:id="aa0000000-0000-4000-8000-000000000003" name="total" visibility="private" type="t-decimal">
+      </ownedAttribute>
+      <ownedOperation xmi:type="uml:Operation" xmi:id="me0000000-0000-4000-8000-000000000001" name="calcular" visibility="public">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="mpe0000000-0000-4000-8000-000000000001-0" name="descuento" direction="in" type="t-decimal">
+        </ownedParameter>
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="mre0000000-0000-4000-8000-000000000001" name="return" direction="return" type="t-decimal">
+        </ownedParameter>
+      </ownedOperation>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rf0000000-0000-4000-8000-000000000002" name="hace" memberEnd="rf0000000-0000-4000-8000-000000000002-o rf0000000-0000-4000-8000-000000000002-d" navigableOwnedEnd="rf0000000-0000-4000-8000-000000000002-d">
+      <ownedEnd xmi:type="uml:Property" xmi:id="rf0000000-0000-4000-8000-000000000002-o" type="cc0000000-0000-4000-8000-000000000003" association="rf0000000-0000-4000-8000-000000000002">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="rf0000000-0000-4000-8000-000000000002-o-lo"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="rf0000000-0000-4000-8000-000000000002-o-up" value="*"/>
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="rf0000000-0000-4000-8000-000000000002-d" type="cc0000000-0000-4000-8000-000000000002" association="rf0000000-0000-4000-8000-000000000002">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="rf0000000-0000-4000-8000-000000000002-d-lo" value="1"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="rf0000000-0000-4000-8000-000000000002-d-up" value="1"/>
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Association" xmi:id="rf0000000-0000-4000-8000-000000000003" memberEnd="rf0000000-0000-4000-8000-000000000003-o rf0000000-0000-4000-8000-000000000003-d" navigableOwnedEnd="rf0000000-0000-4000-8000-000000000003-d">
+      <ownedEnd xmi:type="uml:Property" xmi:id="rf0000000-0000-4000-8000-000000000003-o" type="cc0000000-0000-4000-8000-000000000003" association="rf0000000-0000-4000-8000-000000000003">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="rf0000000-0000-4000-8000-000000000003-o-lo"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="rf0000000-0000-4000-8000-000000000003-o-up" value="*"/>
+      </ownedEnd>
+      <ownedEnd xmi:type="uml:Property" xmi:id="rf0000000-0000-4000-8000-000000000003-d" type="cc0000000-0000-4000-8000-000000000002" association="rf0000000-0000-4000-8000-000000000003" aggregation="composite">
+        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="rf0000000-0000-4000-8000-000000000003-d-lo" value="1"/>
+        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="rf0000000-0000-4000-8000-000000000003-d-up" value="1"/>
+      </ownedEnd>
+    </packagedElement>
+    <packagedElement xmi:type="uml:Dependency" xmi:id="rf0000000-0000-4000-8000-000000000004" name="usa" client="cc0000000-0000-4000-8000-000000000003" supplier="cc0000000-0000-4000-8000-000000000001"/>
+    <packagedElement xmi:type="uml:PrimitiveType" xmi:id="t-decimal" name="decimal"/>
+  </uml:Model>
+</xmi:XMI>

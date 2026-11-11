@@ -32,6 +32,11 @@ class EnterpriseArchitectXmiTest {
 
     private final UUID diagramId = UUID.randomUUID();
 
+    /** Los atributos sin multiplicidad vuelven obligatorios (UML: 1..1): se compara el DDL sin esa restriccion. */
+    private static String sinNotNull(String ddl) {
+        return ddl.replace(" NOT NULL", "");
+    }
+
     private static List<DiagramLayout> enGrilla(List<UmlClass> clases) {
         List<DiagramLayout> r = new ArrayList<>();
         for (int i = 0; i < clases.size(); i++) {
@@ -69,7 +74,9 @@ class EnterpriseArchitectXmiTest {
         EscritorXmi.Exportado ex = ea(original, enGrilla(original.clases()));
 
         ModeloCanonico.Cargado vuelta = RevisionPorDefecto.aplicar(reimportar(ex.xmi()));
-        assertThat(LectorXmiTest.ddlDe(vuelta)).as(canonico).isEqualTo(LectorXmiTest.ddlDe(original));
+        // Sin multiplicidad UML asume 1..1: lo que era opcional vuelve NOT NULL (perdida declarada).
+        assertThat(sinNotNull(LectorXmiTest.ddlDe(vuelta))).as(canonico)
+                .isEqualTo(sinNotNull(LectorXmiTest.ddlDe(original)));
     }
 
     @Test
@@ -94,8 +101,8 @@ class EnterpriseArchitectXmiTest {
                 .as("las clases dentro de un paquete, que es lo que importa EA")
                 .containsPattern("<packagedElement xmi:type=\"uml:Package\" xmi:id=\"EAPK_[0-9A-F_]{36}\"")
                 .containsPattern("xmi:type=\"uml:Class\" xmi:id=\"EAID_[0-9A-F_]{36}\"")
-                .as("tipos como los escribe EA con el lenguaje <none>, no la biblioteca de la OMG")
-                .contains("<type xmi:idref=\"EAnone_")
+                .as("tipos como los escribe EA 16.1: definidos en primitivetypes y referenciados por EAJava_, no la biblioteca de la OMG")
+                .contains("<type xmi:idref=\"EAJava_").contains("<primitivetypes>")
                 .doesNotContain("PrimitiveTypes.xmi")
                 .as("extremos EAID_src/EAID_dst")
                 .contains("xmi:id=\"EAID_src").contains("xmi:id=\"EAID_dst")
