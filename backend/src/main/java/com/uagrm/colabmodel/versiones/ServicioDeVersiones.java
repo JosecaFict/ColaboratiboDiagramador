@@ -523,7 +523,7 @@ public class ServicioDeVersiones {
             UUID entidad = switch (c.path("type").asText()) {
                 case "MOVE_ELEMENT", "RESIZE_ELEMENT", "SET_MODELING_DECISION" -> null;   // nivel 3 / del diagrama
                 case "UPDATE_ATTRIBUTE", "REMOVE_ATTRIBUTE" -> claseDe(actual.atributos, p.path("attributeId"));
-                case "REMOVE_METHOD" -> claseDe(actual.metodos, p.path("methodId"));
+                case "UPDATE_METHOD", "REMOVE_METHOD" -> claseDe(actual.metodos, p.path("methodId"));
                 case "SET_ER_FLAG" -> {
                     UUID t = uuid(p.path("targetId"));
                     yield "ATTRIBUTE".equals(p.path("targetType").asText()) ? claseDe(actual.atributos, p.path("targetId")) : t;

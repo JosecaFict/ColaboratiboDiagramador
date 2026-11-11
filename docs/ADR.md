@@ -92,6 +92,13 @@ nuevo que supersede al anterior.
 **Decisión:** el *function-calling schema* expone únicamente comandos de edición atómica; no existe ningún comando de generación masiva. Tope de 8 comandos por enunciado.
 **Descartado:** confiar en instrucciones del prompt — no verificable.
 **Consecuencias:** la restricción se cumple **por construcción, no por intención**. Verificable en vivo pidiéndole a la IA que diseñe algo.
+**Enmienda 2026-11-10 (D-15, contrato UML 2.5.1 v1) · mesa UML/EA, Juan (M-UML-01):** el catálogo sigue cerrado y sigue sin existir un comando de generación masiva; lo que crece es el contrato, y **solo de forma aditiva**.
+- `RelationKind` agrega `REALIZATION` (una clase cumple una interfaz; va de la clase a la interfaz). **Implementado en la rebanada (a).**
+- La **interfaz** se modela como el estereotipo `interface` de la clase, igual que `enumeration` (opción A). No agrega columna. Una interfaz no genera tabla y su realización no genera clave foránea. **Implementado en la rebanada (a).**
+- El catálogo pasa de 17 a 18 comandos con `UPDATE_METHOD` (edición atómica de un método; la IA no lo recibe). **Implementado en la rebanada (b).** `SET_ER_FLAG` admite la bandera `isAbstract` para cambiarla después de crear la clase: el comando y la regla V4 llegaron con la (b); *queda para la (g)* que restaurar una versión no recree la clase por ese cambio.
+- Los campos nuevos (`isStatic` y `isAbstract` de método, `isStatic` y `readOnly` de atributo, `direction` del parámetro con `in`/`out`/`inout`, `sourceNavigable` y `targetNavigable`, `externalId`) son opcionales en el payload y tienen valor por defecto al leer: ningún snapshot, versión ni operación anterior cambia de significado. *`isStatic` e `isAbstract` de método: rebanada (b), implementados; el resto, pendiente de (c) a (f).*
+- Validaciones nuevas, todas con rechazo `INVALID`: V1 una realización va de una clase a una interfaz; V5 una clase no es interfaz y enumeración (o valor embebido) a la vez; V9 una interfaz solo extiende a otra interfaz; V2 un método no es estático y abstracto a la vez; V3 un método abstracto vive en una clase abstracta o en una interfaz; V4 una clase con métodos abstractos no deja de ser abstracta. El resto (V6–V8, V10) llega con su rebanada.
+- La IA no expone `REALIZATION` ni `UPDATE_METHOD`: su esquema de herramientas se mantiene en los cinco tipos de relación de antes.
 
 ---
 **ADR-015 · Chen editable ahora; Crow's Foot vía `NotationRenderer`** — *Aceptada*

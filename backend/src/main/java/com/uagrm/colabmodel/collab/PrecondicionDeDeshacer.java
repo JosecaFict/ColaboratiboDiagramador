@@ -54,6 +54,8 @@ final class PrecondicionDeDeshacer {
             Map.entry("chosen", "la decision"),
             Map.entry("attributeIds", "los atributos de la clase"),
             Map.entry("methodIds", "los metodos de la clase"),
+            Map.entry("isStatic", "si es estatico"), Map.entry("isAbstract", "si es abstracto"),
+            Map.entry("returnType", "el tipo de retorno"), Map.entry("params", "los parametros"),
             Map.entry("relationIds", "las relaciones de la clase"),
             Map.entry("eliminada", "si estaba borrada (alguien la restauro)"),
             Map.entry("existe", "si existia (alguien lo agrego)"));
@@ -160,6 +162,7 @@ final class PrecondicionDeDeshacer {
                 if ("CLASS".equals(p.path("targetType").asText())) {
                     UmlClass c = clase(command, target);
                     if ("weak".equals(flag)) n.put("value", c.isWeak());
+                    if ("isAbstract".equals(flag)) n.put("value", c.isAbstract());
                     n.put("erKind", texto(c.getErKind()));
                     n.put("strategy", texto(c.getInheritanceStrategy()));
                 } else {
@@ -207,12 +210,16 @@ final class PrecondicionDeDeshacer {
             case ADD_METHOD -> n.put("existe", methods.existsById(uuid(command, "methodId")));
             // Quitar lo que uno agrego: solo si nadie lo edito despues.
             case REMOVE_ATTRIBUTE -> volcarAtributo(n, atributo(command, uuid(command, "attributeId")));
-            case REMOVE_METHOD -> {
+            case REMOVE_METHOD, UPDATE_METHOD -> {
                 UmlMethod m = methods.findById(uuid(command, "methodId"))
                         .orElseThrow(() -> notFound(command, "El metodo ya no existe: alguien lo quito despues."));
                 n.put("name", m.getName());
                 n.put("returnType", m.getReturnType());
                 n.put("visibility", texto(m.getVisibility()));
+                n.put("ordinal", m.getOrdinal());
+                n.put("isStatic", m.isStatic());
+                n.put("isAbstract", m.isAbstract());
+                n.set("params", parametrosDe(m.getParams()));
             }
             case DELETE_RELATION -> volcarRelacion(n, relaciones(command));
             // El lote no tiene estado propio: cada cambio de adentro trae su
@@ -220,6 +227,15 @@ final class PrecondicionDeDeshacer {
             case BATCH -> { }
         }
         return n;
+    }
+
+    private ArrayNode parametrosDe(String guardados) {
+        try {
+            JsonNode n = mapper.readTree(guardados == null || guardados.isBlank() ? "[]" : guardados);
+            return n.isArray() ? (ArrayNode) n : mapper.createArrayNode();
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return mapper.createArrayNode().add("corrupto");
+        }
     }
 
     private UmlRelationship relaciones(Command command) {
@@ -260,6 +276,8 @@ final class PrecondicionDeDeshacer {
         n.put("multivalued", a.isMultivalued());
         n.put("derived", a.isDerived());
         n.put("partialKey", a.isPartialKey());
+        n.put("isStatic", a.isStatic());
+        n.put("readOnly", a.isReadOnly());
         n.put("minValue", a.getMinValue());
         n.put("maxValue", a.getMaxValue());
         return n;

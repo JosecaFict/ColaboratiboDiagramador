@@ -223,7 +223,7 @@ public class DiagramSnapshotService {
      */
     static String nombreSugerido(String actual, String kind, String destino, String multiplicidadDestino,
                                  String rolDestino) {
-        if ("GENERALIZATION".equals(kind) || "DEPENDENCY".equals(kind)) return null;
+        if ("GENERALIZATION".equals(kind) || "DEPENDENCY".equals(kind) || "REALIZATION".equals(kind)) return null;
         if (!nombreDeRelleno(actual) || destino == null || destino.isBlank()) return null;
         String sugerido;
         if (rolDestino != null && !rolDestino.isBlank()) {
@@ -480,7 +480,7 @@ public class DiagramSnapshotService {
     /** Los parametros viajan tipados, igual que los quiebres: el cliente no parsea JSON crudo. */
     private DiagramSnapshot.Metodo aDto(UmlMethod m) {
         return new DiagramSnapshot.Metodo(m.getId(), m.getClassId(), m.getName(), m.getReturnType(),
-                parametrosDe(m.getParams()), m.getVisibility(), m.getOrdinal());
+                parametrosDe(m.getParams()), m.getVisibility(), m.getOrdinal(), m.isStatic(), m.isAbstract());
     }
 
     private List<DiagramSnapshot.Parametro> parametrosDe(String json) {
@@ -502,7 +502,7 @@ public class DiagramSnapshotService {
         return new DiagramSnapshot.Atributo(a.getId(), a.getClassId(), a.getName(), a.getDataType(),
                 a.getVisibility(), a.getLength(), a.isPk(), a.isRequired(), a.isUnique(), a.getOrdinal(),
                 a.isMultivalued(), a.isDerived(), a.isPartialKey(), a.getParentAttributeId(),
-                a.getDefaultValue(), a.getMinValue(), a.getMaxValue());
+                a.getDefaultValue(), a.getMinValue(), a.getMaxValue(), a.isStatic(), a.isReadOnly());
     }
 
     private static DiagramSnapshot.Relacion aDto(UmlRelationship r) {

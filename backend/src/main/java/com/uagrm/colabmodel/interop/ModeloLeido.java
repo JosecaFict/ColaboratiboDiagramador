@@ -38,10 +38,20 @@ public record ModeloLeido(String formato, List<ClaseLeida> clases, List<Relacion
      * @param tipoLeido       como venia escrito en el archivo (`varchar(50)`, `real`), o null
      * @param visibilidad     PUBLIC, PRIVATE, PROTECTED o PACKAGE, o null si el archivo no la dice
      * @param valorPorDefecto el valor inicial tal cual venia (`PENDIENTE`, `0.0`), o null
+     * @param esEstatico      UML isStatic (de la clase, no de la instancia); false si el archivo no lo dice
+     * @param soloLectura     UML isReadOnly; false si el archivo no lo dice
      */
     public record AtributoLeido(String nombre, String tipoLeido, boolean pk, boolean requerido, boolean unico,
                                 boolean multivaluado, boolean derivado, boolean claveParcial,
-                                String visibilidad, String valorPorDefecto) {
+                                String visibilidad, String valorPorDefecto, boolean esEstatico, boolean soloLectura) {
+        /** Con visibilidad y valor por defecto pero sin las marcas UML isStatic e isReadOnly (rebanada c). */
+        public AtributoLeido(String nombre, String tipoLeido, boolean pk, boolean requerido, boolean unico,
+                             boolean multivaluado, boolean derivado, boolean claveParcial,
+                             String visibilidad, String valorPorDefecto) {
+            this(nombre, tipoLeido, pk, requerido, unico, multivaluado, derivado, claveParcial,
+                    visibilidad, valorPorDefecto, false, false);
+        }
+
         /** Los formatos que no traen visibilidad ni valor por defecto (SQL, JSON, ERD). */
         public AtributoLeido(String nombre, String tipoLeido, boolean pk, boolean requerido, boolean unico,
                              boolean multivaluado, boolean derivado, boolean claveParcial) {
@@ -55,7 +65,16 @@ public record ModeloLeido(String formato, List<ClaseLeida> clases, List<Relacion
      *
      * @param tipoRetorno "void" si la operacion no declara uno
      */
-    public record MetodoLeido(String nombre, String tipoRetorno, List<ParametroLeido> parametros) { }
+    /**
+     * `visibilidad` es el nombre de {@code Visibility} (PUBLIC, PRIVATE, PROTECTED, PACKAGE) o null si el
+     * archivo no la dice (el servidor aplica PUBLIC). `esEstatico` y `esAbstracto` son UML isStatic e isAbstract.
+     */
+    public record MetodoLeido(String nombre, String tipoRetorno, List<ParametroLeido> parametros,
+                              String visibilidad, boolean esEstatico, boolean esAbstracto) {
+        public MetodoLeido(String nombre, String tipoRetorno, List<ParametroLeido> parametros) {
+            this(nombre, tipoRetorno, parametros, null, false, false);
+        }
+    }
 
     public record ParametroLeido(String nombre, String tipo) { }
 

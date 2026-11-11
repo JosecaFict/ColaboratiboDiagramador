@@ -22,6 +22,8 @@ public enum CommandType {
 
     ADD_METHOD,
     REMOVE_METHOD,
+    /** Edita un metodo existente (D-15). Antes solo se podia quitar y volver a agregar. */
+    UPDATE_METHOD,
 
     CREATE_RELATION,
     UPDATE_RELATION,

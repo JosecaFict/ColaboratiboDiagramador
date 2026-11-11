@@ -21,6 +21,12 @@ class UmlAttribute {
   bool get unique => datos['unique'] == true;
   int get ordinal => (datos['ordinal'] as num?)?.toInt() ?? 0;
 
+  /// UML 2.5.1 isStatic (D-15): el atributo es de la clase. Ausente = false (snapshots anteriores).
+  bool get isStatic => datos['isStatic'] == true;
+
+  /// UML 2.5.1 isReadOnly (D-15). Ausente = false.
+  bool get readOnly => datos['readOnly'] == true;
+
   UmlAttribute mezclar(Json cambios) => UmlAttribute({...datos, ...cambios});
 }
 
@@ -33,6 +39,14 @@ class UmlMethod {
   String get returnType => (datos['returnType'] ?? 'void') as String;
   String get visibility => (datos['visibility'] ?? 'PUBLIC') as String;
   List<dynamic> get params => (datos['params'] as List?) ?? const [];
+
+  /// UML 2.5.1 isStatic (D-15). Ausente = false: asi lo leen los snapshots anteriores.
+  bool get isStatic => datos['isStatic'] == true;
+
+  /// UML 2.5.1 isAbstract (D-15). Ausente = false.
+  bool get isAbstract => datos['isAbstract'] == true;
+
+  UmlMethod mezclar(Json cambios) => UmlMethod({...datos, ...cambios});
 }
 
 class UmlClass {
@@ -46,6 +60,12 @@ class UmlClass {
   final String inheritanceStrategy;
   final List<UmlAttribute> attributes;
   final List<UmlMethod> methods;
+
+  /// Estereotipo de una interfaz UML (D-15, opcion A). Espejo de `Interfaces.ESTEREOTIPO` en el backend.
+  static const estereotipoInterfaz = 'interface';
+
+  /// Una interfaz es un contrato, no una entidad. Se compara sin distinguir mayusculas ni espacios.
+  bool get esInterfaz => (stereotype ?? '').trim().toLowerCase() == estereotipoInterfaz;
 
   const UmlClass({
     required this.id,

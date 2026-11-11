@@ -54,7 +54,9 @@ public record DiagramSnapshot(
             String returnType,
             List<Parametro> params,
             Visibility visibility,
-            int ordinal
+            int ordinal,
+            boolean isStatic,
+            boolean isAbstract
     ) {}
 
     public record Parametro(String name, String type) {}
@@ -78,7 +80,9 @@ public record DiagramSnapshot(
             UUID parentAttributeId,
             String defaultValue,
             java.math.BigDecimal minValue,
-            java.math.BigDecimal maxValue
+            java.math.BigDecimal maxValue,
+            boolean isStatic,
+            boolean readOnly
     ) {}
 
     public record Relacion(

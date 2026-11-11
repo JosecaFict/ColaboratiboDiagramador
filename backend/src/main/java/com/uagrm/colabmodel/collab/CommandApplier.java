@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uagrm.colabmodel.modelcore.command.*;
 import com.uagrm.colabmodel.modelcore.mapping.Ambiguedad;
+import com.uagrm.colabmodel.modelcore.mapping.Enumeraciones;
+import com.uagrm.colabmodel.modelcore.mapping.Incrustables;
+import com.uagrm.colabmodel.modelcore.mapping.Interfaces;
 import com.uagrm.colabmodel.modelcore.metamodel.*;
 import com.uagrm.colabmodel.project.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -154,6 +157,7 @@ public class CommandApplier {
                 // Como una clase nueva: si tenia SINGLE_TABLE, el lote que la
                 // restaura lo vuelve a marcar, igual que el espejo del cliente.
                 c.setInheritanceStrategy(InheritanceStrategy.JOINED);
+                validarEstereotipo(command, text(p, "stereotype"));
                 c.setStereotype(text(p, "stereotype"));
                 c.setAbstract(bool(p, "isAbstract", false));
                 c.setWeak(bool(p, "weak", false));
@@ -209,6 +213,8 @@ public class CommandApplier {
                 a.setMultivalued(bool(p, "multivalued", false));
                 a.setDerived(bool(p, "derived", false));
                 a.setPartialKey(bool(p, "partialKey", false));
+                a.setStatic(bool(p, "isStatic", false));
+                a.setReadOnly(bool(p, "readOnly", false));
                 String parent = text(p, "parentAttributeId");
                 a.setParentAttributeId(parent == null ? null : UUID.fromString(parent));
                 if (p.has("minValue")) a.setMinValue(decimalOrNull(command, p.get("minValue")));
@@ -233,6 +239,8 @@ public class CommandApplier {
                 if (p.has("multivalued")) a.setMultivalued(p.get("multivalued").asBoolean());
                 if (p.has("derived")) a.setDerived(p.get("derived").asBoolean());
                 if (p.has("partialKey")) a.setPartialKey(p.get("partialKey").asBoolean());
+                if (p.has("isStatic")) a.setStatic(p.get("isStatic").asBoolean());
+                if (p.has("readOnly")) a.setReadOnly(p.get("readOnly").asBoolean());
                 if (p.has("minValue")) a.setMinValue(decimalOrNull(command, p.get("minValue")));
                 if (p.has("maxValue")) a.setMaxValue(decimalOrNull(command, p.get("maxValue")));
                 validarRango(command, a);
@@ -265,7 +273,9 @@ public class CommandApplier {
                 r.setDiagramId(command.diagramId());
                 r.setSourceClassId(srcId);
                 r.setTargetClassId(tgtId);
-                r.setKind(enumOrThrow(RelationKind.class, text(p, "kind"), command, "Tipo de relacion invalido"));
+                RelationKind tipo = enumOrThrow(RelationKind.class, text(p, "kind"), command, "Tipo de relacion invalido");
+                validarRelacion(command, tipo, findClass(command, srcId), findClass(command, tgtId));
+                r.setKind(tipo);
                 r.setName(text(p, "name"));
                 r.setSourceRole(text(p, "sourceRole"));
                 r.setTargetRole(text(p, "targetRole"));
@@ -282,7 +292,12 @@ public class CommandApplier {
                 UmlRelationship r = relationships.findById(requireUuid(command, "relationId"))
                         .filter(x -> x.getDeletedAt() == null)
                         .orElseThrow(() -> notFound(command, "La relacion no existe"));
-                if (p.has("kind")) r.setKind(enumOrThrow(RelationKind.class, p.get("kind").asText(), command, "Tipo de relacion invalido"));
+                if (p.has("kind")) {
+                    RelationKind tipo = enumOrThrow(RelationKind.class, p.get("kind").asText(), command, "Tipo de relacion invalido");
+                    validarRelacion(command, tipo, classes.findById(r.getSourceClassId()).orElse(null),
+                            classes.findById(r.getTargetClassId()).orElse(null));
+                    r.setKind(tipo);
+                }
                 if (p.has("name")) r.setName(p.get("name").isNull() ? null : p.get("name").asText());
                 if (p.has("sourceRole")) r.setSourceRole(p.get("sourceRole").isNull() ? null : p.get("sourceRole").asText());
                 if (p.has("targetRole")) r.setTargetRole(p.get("targetRole").isNull() ? null : p.get("targetRole").asText());
@@ -312,6 +327,10 @@ public class CommandApplier {
                     UmlClass c = findClass(command, requireUuid(command, "targetId"));
                     switch (flag) {
                         case "weak" -> c.setWeak(value);
+                        case "isAbstract" -> {
+                            if (!value) rechazarSiTieneMetodosAbstractos(command, c);
+                            c.setAbstract(value);
+                        }
                         case "erKind" -> c.setErKind(enumOrThrow(ErKind.class, text(p, "erKind"), command, "erKind invalido"));
                         // Regla 4: la estrategia es de la jerarquia y se marca en la
                         // raiz. Es una anotacion de mapeo, como erKind.
@@ -402,7 +421,37 @@ public class CommandApplier {
                 m.setVisibility(enumOrDefault(Visibility.class, text(p, "visibility"),
                         Visibility.PUBLIC, command));
                 m.setOrdinal((int) num(p, "ordinal", 0));
+                m.setStatic(bool(p, "isStatic", false));
+                m.setAbstract(bool(p, "isAbstract", false));
+                validarMetodo(command, m, findClass(command, classId));
                 rechazarFirmaRepetida(command, m);
+                methods.save(m);
+            }
+            case UPDATE_METHOD -> {
+                UmlMethod m = methods.findById(requireUuid(command, "methodId"))
+                        .orElseThrow(() -> notFound(command, "El metodo no existe"));
+                // Se arma el resultado en una copia y se valida ANTES de tocar el guardado:
+                // un rechazo no deja el metodo a medio cambiar.
+                UmlMethod c = new UmlMethod();
+                c.setId(m.getId());
+                c.setClassId(m.getClassId());
+                c.setName(p.has("name") ? requireText(command, "name") : m.getName());
+                c.setReturnType(p.has("returnType") ? textOr(p, "returnType", "void") : m.getReturnType());
+                c.setParams(p.has("params") ? parametrosValidados(command, p.get("params")) : m.getParams());
+                c.setVisibility(p.has("visibility") ? enumOrThrow(Visibility.class,
+                        p.get("visibility").asText(), command, "Visibilidad invalida") : m.getVisibility());
+                c.setOrdinal(p.has("ordinal") ? p.get("ordinal").asInt() : m.getOrdinal());
+                c.setStatic(p.has("isStatic") ? p.get("isStatic").asBoolean() : m.isStatic());
+                c.setAbstract(p.has("isAbstract") ? p.get("isAbstract").asBoolean() : m.isAbstract());
+                validarMetodo(command, c, findClass(command, m.getClassId()));
+                rechazarFirmaRepetida(command, c);
+                m.setName(c.getName());
+                m.setReturnType(c.getReturnType());
+                m.setParams(c.getParams());
+                m.setVisibility(c.getVisibility());
+                m.setOrdinal(c.getOrdinal());
+                m.setStatic(c.isStatic());
+                m.setAbstract(c.isAbstract());
                 methods.save(m);
             }
 
@@ -465,6 +514,73 @@ public class CommandApplier {
      * guarda basura, el proyecto generado no compila y el error aparece
      * recien cuando el usuario corre `mvn package`, lejos de la causa.
      */
+    /**
+     * V2 y V3. Una interfaz cuenta como contenedor de metodos abstractos: sus operaciones
+     * lo son por definicion, asi que no hace falta marcar la clase como abstracta.
+     */
+    private void validarMetodo(Command command, UmlMethod m, UmlClass duenia) {
+        if (m.isStatic() && m.isAbstract()) {
+            throw invalid(command, "El metodo " + m.getName() + " no puede ser estatico y abstracto a la vez:"
+                    + " un metodo de clase necesita cuerpo.");
+        }
+        if (m.isAbstract() && !duenia.isAbstract() && !Interfaces.es(duenia)) {
+            throw invalid(command, "El metodo " + m.getName() + " es abstracto pero " + duenia.getName()
+                    + " no es abstracta ni interfaz: marcala abstracta primero.");
+        }
+    }
+
+    /** V4: una clase con metodos abstractos no puede dejar de ser abstracta. */
+    private void rechazarSiTieneMetodosAbstractos(Command command, UmlClass c) {
+        if (Interfaces.es(c)) return;
+        methods.findByClassIdOrderByOrdinalAsc(c.getId()).stream().filter(UmlMethod::isAbstract).findFirst()
+                .ifPresent(m -> {
+                    throw invalid(command, c.getName() + " tiene el metodo abstracto " + m.getName()
+                            + ": no puede dejar de ser abstracta. Quita o implementa el metodo primero.");
+                });
+    }
+
+    /** V5: una clase no puede ser interfaz y, a la vez, enumeracion o valor embebido. */
+    private void validarEstereotipo(Command command, String estereotipo) {
+        if (estereotipo == null) return;
+        java.util.Set<String> marcas = new HashSet<>();
+        for (String marca : estereotipo.toLowerCase().split("[,;\s]+")) {
+            if (!marca.isBlank()) marcas.add(marca);
+        }
+        if (marcas.contains(Interfaces.ESTEREOTIPO)
+                && (marcas.contains(Enumeraciones.ESTEREOTIPO) || marcas.contains(Incrustables.ESTEREOTIPO))) {
+            throw invalid(command, "Una clase no puede ser interfaz y a la vez enumeracion o valor embebido: "
+                    + estereotipo);
+        }
+    }
+
+    /**
+     * V1 y V9. Las clases pueden ser null solo cuando se revalida una relacion cuyo
+     * extremo ya no esta: en ese caso no hay nada que comparar.
+     */
+    private void validarRelacion(Command command, RelationKind tipo, UmlClass origen, UmlClass destino) {
+        if (origen == null || destino == null) return;
+        if (tipo == RelationKind.REALIZATION) {
+            if (origen.getId().equals(destino.getId())) {
+                throw invalid(command, "Una clase no puede realizarse a si misma.");
+            }
+            if (Interfaces.es(origen)) {
+                throw invalid(command, origen.getName() + " es una interfaz: una interfaz no realiza a otra,"
+                        + " la extiende (generalizacion).");
+            }
+            if (Enumeraciones.es(origen)) {
+                throw invalid(command, origen.getName() + " es una enumeracion: no puede realizar una interfaz.");
+            }
+            if (!Interfaces.es(destino)) {
+                throw invalid(command, "Una realizacion termina en una interfaz y " + destino.getName()
+                        + " no lo es (estereotipo \"interface\").");
+            }
+        }
+        if (tipo == RelationKind.GENERALIZATION && Interfaces.es(origen) && !Interfaces.es(destino)) {
+            throw invalid(command, origen.getName() + " es una interfaz: solo puede extender a otra interfaz,"
+                    + " y " + destino.getName() + " no lo es.");
+        }
+    }
+
     private String parametrosValidados(Command command, JsonNode params) {
         if (params == null || params.isNull()) return "[]";
         if (!params.isArray()) throw invalid(command, "params debe ser una lista");

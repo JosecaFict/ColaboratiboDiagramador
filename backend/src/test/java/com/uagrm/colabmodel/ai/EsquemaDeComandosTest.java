@@ -18,9 +18,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class EsquemaDeComandosTest {
 
-    /** CONFIRM_SCHEMA: confirmar la base es la firma de una persona (ADR-032). */
+    /**
+     * CONFIRM_SCHEMA: confirmar la base es la firma de una persona (ADR-032).
+     * UPDATE_METHOD: D-15, la IA no edita miembros ya creados; solo agrega y quita.
+     */
     private static final Set<String> EXCLUIDOS_A_POSTA =
-            Set.of("BATCH", "MOVE_ELEMENT", "RESIZE_ELEMENT", "SET_MODELING_DECISION", "CONFIRM_SCHEMA");
+            Set.of("BATCH", "MOVE_ELEMENT", "RESIZE_ELEMENT", "SET_MODELING_DECISION", "CONFIRM_SCHEMA",
+                    "UPDATE_METHOD");
 
     @Test
     void expone_una_herramienta_por_cada_comando_de_edicion_atomica() {

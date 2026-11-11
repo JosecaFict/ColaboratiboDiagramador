@@ -16,7 +16,7 @@ export type Origin = 'MOUSE' | 'TEXT' | 'VOICE' | 'IMAGE' | 'XMI_IMPORT'
 export type CommandType =
   | 'CREATE_CLASS' | 'RENAME_CLASS' | 'DELETE_CLASS'
   | 'ADD_ATTRIBUTE' | 'UPDATE_ATTRIBUTE' | 'REMOVE_ATTRIBUTE'
-  | 'ADD_METHOD' | 'REMOVE_METHOD'
+  | 'ADD_METHOD' | 'UPDATE_METHOD' | 'REMOVE_METHOD'
   | 'CREATE_RELATION' | 'UPDATE_RELATION' | 'DELETE_RELATION'
   | 'SET_ER_FLAG' | 'SET_MODELING_DECISION'
   /** Confirma el esquema fisico revisado (ADR-032). No toca el modelo. */
@@ -102,6 +102,8 @@ export interface LockMessage {
 // ---------------------------------------------------------------- METAMODELO
 export type RelationKind =
   | 'ASSOCIATION' | 'AGGREGATION' | 'COMPOSITION' | 'GENERALIZATION' | 'DEPENDENCY'
+  /** UML 2.5.1 InterfaceRealization: va de la clase a la interfaz que cumple (D-15). */
+  | 'REALIZATION'
 
 export type ErKind = 'STRONG' | 'WEAK' | 'ASSOCIATIVE'
 /** Regla 4: como se mapea una jerarquia. Se fija en la clase raiz. */
@@ -128,6 +130,10 @@ export interface UmlAttribute {
   derived: boolean
   partialKey: boolean
   parentAttributeId?: string | null
+  /** UML 2.5.1 isStatic: el atributo es de la clase. Ausente = false. */
+  isStatic?: boolean
+  /** UML 2.5.1 isReadOnly: no cambia tras la inicializacion. Ausente = false. */
+  readOnly?: boolean
   /** Regla 9: limites de un atributo numerico. null = sin limite de ese lado. */
   minValue?: number | null
   maxValue?: number | null
@@ -141,6 +147,16 @@ export interface UmlAttribute {
 export const ESTEREOTIPO_ENUM = 'enumeration'
 export const esEnumeracion = (c: { stereotype?: string | null }) =>
   (c.stereotype ?? '').toLowerCase() === ESTEREOTIPO_ENUM
+
+/**
+ * Estereotipo de una interfaz UML (D-15, opcion A). Es un contrato y no una
+ * entidad: no genera tabla. Las clases lo cumplen con una relacion REALIZATION.
+ * Espejo de Interfaces.ESTEREOTIPO en el backend; se compara sin distinguir
+ * mayusculas ni espacios, como alla.
+ */
+export const ESTEREOTIPO_INTERFAZ = 'interface'
+export const esInterfaz = (c: { stereotype?: string | null }) =>
+  (c.stereotype ?? '').trim().toLowerCase() === ESTEREOTIPO_INTERFAZ
 
 /**
  * Regla 5: clase de VALOR. No tiene tabla ni identidad; vive en las columnas de
@@ -175,6 +191,10 @@ export interface UmlMethod {
   params: UmlParametro[]
   visibility: Visibility
   ordinal: number
+  /** UML 2.5.1 isStatic (D-15). Ausente = false: asi lo leen los snapshots y versiones anteriores. */
+  isStatic?: boolean
+  /** UML 2.5.1 isAbstract (D-15). Ausente = false. Solo en una clase abstracta o una interfaz. */
+  isAbstract?: boolean
 }
 
 export interface UmlClass {

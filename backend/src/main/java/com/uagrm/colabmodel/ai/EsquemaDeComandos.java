@@ -166,6 +166,8 @@ public final class EsquemaDeComandos {
 
             // Geometria pura (ADR-004 nivel 3): un prompt de texto no decide coordenadas.
             case MOVE_ELEMENT, RESIZE_ELEMENT -> Optional.empty();
+            // D-15: la IA no edita miembros ya creados; no se le expone UPDATE_METHOD.
+            case UPDATE_METHOD -> Optional.empty();
 
             // Se contesta con evidencia que la IA no tiene (que construccion del
             // modelo genero la ambiguedad): es una decision del panel, no del prompt.

@@ -67,9 +67,10 @@ final class Foto {
             "name", "stereotype", "isAbstract", "weak", "erKind", "inheritanceStrategy");
     static final List<String> CAMPOS_ATRIBUTO = List.of(
             "classId", "name", "dataType", "visibility", "length", "pk", "required", "unique", "ordinal",
-            "multivalued", "derived", "partialKey", "parentAttributeId", "defaultValue", "minValue", "maxValue");
+            "multivalued", "derived", "partialKey", "parentAttributeId", "defaultValue", "minValue", "maxValue",
+            "isStatic", "readOnly");
     static final List<String> CAMPOS_METODO = List.of(
-            "classId", "name", "returnType", "params", "visibility", "ordinal");
+            "classId", "name", "returnType", "params", "visibility", "ordinal", "isStatic", "isAbstract");
     static final List<String> CAMPOS_RELACION = List.of(
             "sourceClassId", "targetClassId", "kind", "name", "sourceRole", "targetRole",
             "sourceMultiplicity", "targetMultiplicity", "identifying", "sourceParticipation",
@@ -81,6 +82,13 @@ final class Foto {
             "classId", "parentAttributeId", "sourceClassId", "targetClassId");
 
     private static final Set<String> DOBLES = Set.of("x", "y", "width", "height");
+    /**
+     * Banderas que un snapshot guardado ANTES de que existieran no traen. Ausente es lo mismo que false:
+     * sin esto la foto vieja diria null y la viva false, y Diferencias y Fusion verian un cambio que nadie hizo.
+     */
+    private static final Set<String> BANDERAS = Set.of(
+            "isAbstract", "weak", "pk", "required", "unique", "multivalued", "derived", "partialKey",
+            "identifying", "isStatic", "readOnly");
     private static final Set<String> DECIMALES = Set.of("minValue", "maxValue");
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
@@ -173,6 +181,8 @@ final class Foto {
                 ca.put("defaultValue", texto(a.defaultValue()));
                 ca.put("minValue", decimal(a.minValue()));
                 ca.put("maxValue", decimal(a.maxValue()));
+                ca.put("isStatic", JSON.booleanNode(a.isStatic()));
+                ca.put("readOnly", JSON.booleanNode(a.readOnly()));
                 atributos.put(a.id(), new Elemento(a.id(), Tipo.ATRIBUTO, ca));
             }
             for (DiagramSnapshot.Metodo m : c.methods()) {
@@ -187,6 +197,8 @@ final class Foto {
                 cm.put("params", params);
                 cm.put("visibility", texto(m.visibility() == null ? null : m.visibility().name()));
                 cm.put("ordinal", IntNode.valueOf(m.ordinal()));
+                cm.put("isStatic", JSON.booleanNode(m.isStatic()));
+                cm.put("isAbstract", JSON.booleanNode(m.isAbstract()));
                 metodos.put(m.id(), new Elemento(m.id(), Tipo.METODO, cm));
             }
         }
@@ -281,6 +293,7 @@ final class Foto {
         if (v == null || v.isNull() || v.isMissingNode()) {
             // Una lista vacia y una ausente son lo mismo para params y quiebres.
             if (campo.equals("params") || campo.equals("waypoints")) return JSON.arrayNode();
+            if (BANDERAS.contains(campo)) return JSON.booleanNode(false);
             return NullNode.getInstance();
         }
         if (DECIMALES.contains(campo)) return decimal(v.decimalValue());
