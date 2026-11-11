@@ -100,6 +100,12 @@
             <properties type="decimal" derived="0" collection="false" changeability="changeable"/>
           </attribute>
         </attributes>
+        <operations>
+          <operation xmi:idref="EAID_E0000000_0000_4000_8000_000000000001" name="calcular" scope="Public">
+            <properties position="0"/>
+            <type type="decimal" const="false" static="false" isAbstract="false" synchronised="0" pure="0" isQuery="false"/>
+          </operation>
+        </operations>
       </element>
     </elements>
     <connectors>

@@ -343,8 +343,11 @@ public final class EscritorXmi {
      */
     private void escribirOperacion(Xml x, UmlMethod m, Map<String, String> idTipo) {
         String idm = id("m", m.getId());
+        // Rebanada (b): UML 2.5.1 BehavioralFeature.isStatic / isAbstract. Solo se escriben cuando son true,
+        // asi un modelo sin metodos estaticos ni abstractos exporta igual que antes.
         x.abrir("ownedOperation", "xmi:type", "uml:Operation", "xmi:id", idm, "name", m.getName(),
-                "visibility", visibilidad(m.getVisibility()));
+                "visibility", visibilidad(m.getVisibility()),
+                "isStatic", m.isStatic() ? "true" : null, "isAbstract", m.isAbstract() ? "true" : null);
         int i = 0;
         for (JsonNode p : parametros(m)) {
             String nombre = p.path("name").asText(null);
@@ -612,6 +615,25 @@ public final class EscritorXmi {
                     x.cerrar("attribute");
                 }
                 x.cerrar("attributes");
+            }
+            // EA 16.1 guarda estatico y abstracto de la operacion en la Extension (`<type static isAbstract>`),
+            // no en la parte UML: en su propio export la `ownedOperation` no los lleva. Forma tomada del export
+            // real de la tanda 1.
+            List<UmlMethod> mets = metsPorClase.getOrDefault(c.getId(), List.of());
+            if (!mets.isEmpty()) {
+                x.abrir("operations");
+                int pos = 0;
+                for (UmlMethod m : mets) {
+                    x.abrir("operation", "xmi:idref", id("m", m.getId()), "name", m.getName(),
+                            "scope", m.getVisibility() == null ? "Public" : capital(m.getVisibility().name()));
+                    x.vacio("properties", "position", String.valueOf(pos++));
+                    x.vacio("type", "type", m.getReturnType() == null ? "void" : m.getReturnType(),
+                            "const", "false", "static", m.isStatic() ? "true" : "false",
+                            "isAbstract", m.isAbstract() ? "true" : "false", "synchronised", "0", "pure", "0",
+                            "isQuery", "false");
+                    x.cerrar("operation");
+                }
+                x.cerrar("operations");
             }
             x.cerrar("element");
         }

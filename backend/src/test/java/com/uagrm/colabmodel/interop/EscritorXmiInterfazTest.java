@@ -104,13 +104,24 @@ class EscritorXmiInterfazTest {
         return new Modelo(clases, atributos, metodos, relaciones);
     }
 
-    /** Lo anterior mas una interfaz `Pagable` que `Cliente` realiza. */
+    /**
+     * Lo anterior mas una interfaz `Pagable` que `Cliente` realiza, y la rebanada (b): `Pagable.pagar` y
+     * `Persona.describir` abstractos, `Pedido.crear` estatico. Es el modelo de los ejemplos de la tanda 2.
+     */
     static Modelo conInterfaz() {
         Modelo base = sinNovedades();
         List<UmlClass> clases = new ArrayList<>(base.clases());
         clases.add(clase(PAGABLE, "Pagable", "interface", false));
         List<UmlMethod> metodos = new ArrayList<>(base.metodos());
-        metodos.add(metodo(2, PAGABLE, "pagar", "boolean", "[{\"name\":\"monto\",\"type\":\"decimal\"}]"));
+        UmlMethod pagar = metodo(2, PAGABLE, "pagar", "boolean", "[{\"name\":\"monto\",\"type\":\"decimal\"}]");
+        pagar.setAbstract(true);
+        metodos.add(pagar);
+        UmlMethod crear = metodo(3, PEDIDO, "crear", "Pedido", "[]");
+        crear.setStatic(true);
+        metodos.add(crear);
+        UmlMethod describir = metodo(4, PERSONA, "describir", "string", "[]");
+        describir.setAbstract(true);
+        metodos.add(describir);
         List<UmlRelationship> relaciones = new ArrayList<>(base.relaciones());
         relaciones.add(relacion(5, CLIENTE, PAGABLE, RelationKind.REALIZATION, null));
         return new Modelo(clases, base.atributos(), metodos, relaciones);
