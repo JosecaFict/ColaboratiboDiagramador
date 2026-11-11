@@ -241,11 +241,16 @@ class LectorXmiToleranciaTest {
 
         // Se importa: 4 de las 5 clases y la unica asociacion sana.
         assertThat(p.clases()).extracting(PropuestaDeImportacion.ClasePropuesta::nombre)
-                .containsExactly("Libro", "Autor", "Socio", "Prestamo");
-        assertThat(p.relaciones()).singleElement().satisfies(r -> {
+                .containsExactly("Libro", "Autor", "Socio", "Prestamo", "Prestable");
+        // La asociacion sana y, desde M-EA-03 (a), la realizacion de Prestamo a la interfaz Prestable.
+        assertThat(p.relaciones()).hasSize(2);
+        assertThat(p.relaciones()).filteredOn(r -> r.tipo() == RelationKind.ASSOCIATION).singleElement().satisfies(r -> {
             assertThat(r.rolOrigen()).isEqualTo("libros");
             assertThat(r.multiplicidadOrigen()).isEqualTo("0..*");
         });
+        assertThat(p.relaciones()).filteredOn(r -> r.tipo() == RelationKind.REALIZATION).singleElement()
+                .satisfies(r -> assertThat(r.claveDestino()).isEqualTo("I"));
+        assertThat(p.clases().get(4).estereotipo()).isEqualTo("interface");
         assertThat(p.clases().get(0).atributos()).extracting(PropuestaDeImportacion.AtributoPropuesto::nombre)
                 .containsExactly("isbn", "paginas");
 
@@ -256,12 +261,12 @@ class LectorXmiToleranciaTest {
                 .anyMatch(a -> a.contains("une 3 clases") && a.contains("n-aria"))
                 .anyMatch(a -> a.contains("Quedaron afuera") && a.contains("1 StateMachine")
                         && a.contains("1 Component") && a.contains("1 ReglaDeNegocio"))
-                // La interfaz se nombra en su propio aviso, y su realizacion ya no cuenta como dependencia (T-05).
-                .anyMatch(a -> a.contains("La interfaz Prestable no entra como clase"))
-                .noneMatch(a -> a.contains("Interface") || a.contains("realiza la interfaz"))
+                // La interfaz ya entra como clase: no hay aviso de interfaz ni de dependencia (M-EA-03 a).
+                .noneMatch(a -> a.contains("Interface") || a.contains("realiza la interfaz")
+                        || a.contains("no entra como clase") || a.contains("dependencias o realizaciones"))
                 .anyMatch(a -> a.contains("tipo que no esta en el archivo") && a.contains("_a7Hk2PQzEe2x"))
                 .anyMatch(a -> a.contains("no escriben su multiplicidad"));
-        assertThat(p.advertencias().get(0)).contains("4 clases UML").contains("Herramienta Desconocida");
+        assertThat(p.advertencias().get(0)).contains("5 clases UML").contains("Herramienta Desconocida");
     }
 
     // ========================================= PERFIL POR CONTENIDO, NO POR ENCABEZADO

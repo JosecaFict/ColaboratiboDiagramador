@@ -123,17 +123,21 @@ class CorpusEnterpriseArchitectTest {
 
     @ParameterizedTest
     @ValueSource(strings = {XMI21, XMI251, XMI11})
-    void la_interfaz_no_entra_pero_su_operacion_pasa_a_la_clase_que_la_realiza(String archivo) {
+    void la_interfaz_entra_como_clase_interface_y_su_realizacion_va_de_la_clase_a_ella(String archivo) {
+        // M-EA-03 rebanada (a): antes la interfaz no entraba y su operacion se copiaba a Pedido.
         ModeloLeido m = leer(archivo);
-        assertThat(nombres(m)).doesNotContain("Pagable");
-        assertThat(clase(m, "Pedido").metodos()).extracting(ModeloLeido.MetodoLeido::nombre).contains("pagar");
-        String retorno = clase(m, "Pedido").metodos().stream().filter(x -> x.nombre().equals("pagar")).findFirst()
+        assertThat(nombres(m)).contains("Pagable");
+        assertThat(clase(m, "Pagable").estereotipo()).isEqualTo("interface");
+        assertThat(clase(m, "Pagable").metodos()).extracting(ModeloLeido.MetodoLeido::nombre).contains("pagar");
+        String retorno = clase(m, "Pagable").metodos().stream().filter(x -> x.nombre().equals("pagar")).findFirst()
                 .orElseThrow().tipoRetorno();
         assertThat(retorno).isIn("boolean", "Boolean");
-        assertThat(m.advertencias()).anyMatch(a -> a.contains("Pedido realiza la interfaz Pagable"));
-        assertThat(m.advertencias()).anyMatch(a -> a.contains("La interfaz Pagable no entra como clase"));
-        assertThat(m.advertencias()).noneMatch(a -> a.contains("Interface"));
-        assertThat(m.advertencias()).noneMatch(a -> a.contains("dependencias o realizaciones"));
+        // La clase que la realiza ya NO recibe la operacion copiada.
+        assertThat(clase(m, "Pedido").metodos()).extracting(ModeloLeido.MetodoLeido::nombre).doesNotContain("pagar");
+        relacion(m, "Pedido", "Pagable", RelationKind.REALIZATION);
+        assertThat(m.relaciones()).filteredOn(r -> r.tipo() == RelationKind.REALIZATION).hasSize(1);
+        assertThat(m.advertencias()).noneMatch(a -> a.contains("realiza la interfaz") || a.contains("no entra como clase"));
+        assertThat(m.advertencias()).noneMatch(a -> a.contains("Interface") || a.contains("dependencias o realizaciones"));
     }
 
     @ParameterizedTest
@@ -172,10 +176,10 @@ class CorpusEnterpriseArchitectTest {
     // ========================================================= XMI 2.1 de EA
 
     @Test
-    void xmi21_lee_las_diez_clases_y_el_datatype_como_valor_embebido() {
+    void xmi21_lee_las_diez_clases_la_interfaz_y_el_datatype_como_valor_embebido() {
         ModeloLeido m = leer(XMI21);
         assertThat(nombres(m)).containsExactlyInAnyOrder("Persona", "Cliente", "Pedido", "LíneaPedido",
-                "EstadoPedido", "Dirección", "Producto", "Categoría", "Stock", "Oferta");
+                "Pagable", "EstadoPedido", "Dirección", "Producto", "Categoría", "Stock", "Oferta");
         assertThat(clase(m, "Dirección").estereotipo()).isEqualTo("embeddable");
         assertThat(atributo(clase(m, "Cliente"), "domicilio").tipoLeido()).isEqualTo("Dirección");
         assertThat(atributo(clase(m, "Cliente"), "código").pk()).isTrue();
@@ -192,7 +196,7 @@ class CorpusEnterpriseArchitectTest {
         ModeloLeido m = leer(XMI21);
         assertThat(relaciones(m)).contains("Cliente -> Oferta ASSOCIATION", "Producto -> Oferta ASSOCIATION");
         assertThat(relaciones(m)).doesNotContain("Cliente -> Producto ASSOCIATION");
-        assertThat(m.relaciones()).hasSize(9);
+        assertThat(m.relaciones()).hasSize(10);
     }
 
     @Test
@@ -213,11 +217,11 @@ class CorpusEnterpriseArchitectTest {
     void xmi21_la_nota_no_cuenta_como_dependencia_y_el_diagrama_principal_da_las_posiciones() {
         ModeloLeido m = leer(XMI21);
         assertThat(m.advertencias()).noneMatch(a -> a.contains("Note") || a.contains("dependencia"));
-        assertThat(m.posiciones()).hasSize(9);
+        assertThat(m.posiciones()).hasSize(10);
         assertThat(m.posiciones().get(clase(m, "Pedido").clave()))
                 .isEqualTo(new ModeloLeido.Posicion(40, 200, 170, 130));
         assertThat(m.advertencias()).anyMatch(a -> a.contains("2 diagramas"));
-        assertThat(m.advertencias().get(0)).contains("10 clases UML", "Enterprise Architect", "XMI 2.1");
+        assertThat(m.advertencias().get(0)).contains("11 clases UML", "Enterprise Architect", "XMI 2.1");
     }
 
     // ================================================== XMI 2.5.1 sin extensiones
@@ -225,7 +229,7 @@ class CorpusEnterpriseArchitectTest {
     @Test
     void xmi251_sin_extensiones_usa_los_primitivos_de_la_omg_y_no_inventa_posiciones() {
         ModeloLeido m = leer(XMI251);
-        assertThat(nombres(m)).hasSize(10);
+        assertThat(nombres(m)).hasSize(11);
         assertThat(atributo(clase(m, "Pedido"), "número").tipoLeido()).isEqualTo("Integer");
         assertThat(atributo(clase(m, "Pedido"), "total").tipoLeido()).isEqualTo("Real");
         assertThat(m.posiciones()).isEmpty();
@@ -271,7 +275,7 @@ class CorpusEnterpriseArchitectTest {
     }
 
     @Test
-    void una_interfaz_con_una_sobrecarga_transfiere_las_dos_firmas() {
+    void una_interfaz_con_una_sobrecarga_conserva_las_dos_firmas_en_la_interfaz() {
         ModeloLeido m = leerTexto("""
             <uml:Model xmi:id="m">
               <packagedElement xmi:type="uml:Interface" xmi:id="i" name="Pagable">
@@ -286,9 +290,73 @@ class CorpusEnterpriseArchitectTest {
               <packagedElement xmi:type="uml:Realization" xmi:id="r" client="c" supplier="i"/>
             </uml:Model>
             """);
-        assertThat(m.clases()).hasSize(1);
-        assertThat(m.clases().get(0).metodos())
+        assertThat(m.clases()).hasSize(2);
+        assertThat(clase(m, "Pagable").estereotipo()).isEqualTo("interface");
+        assertThat(clase(m, "Pagable").metodos())
                 .extracting(x -> x.parametros().get(0).tipo()).containsExactly("int", "String");
-        assertThat(m.advertencias()).anyMatch(a -> a.contains("pagar(int), pagar(string)"));
+        assertThat(clase(m, "Pedido").metodos()).isEmpty();
+        relacion(m, "Pedido", "Pagable", RelationKind.REALIZATION);
+    }
+
+    @Test
+    void la_dependencia_entre_clases_se_emite_como_dependency_y_no_solo_se_cuenta() {
+        // P02 de la Etapa 0.
+        ModeloLeido m = leerTexto("""
+            <uml:Model xmi:id="m">
+              <packagedElement xmi:type="uml:Class" xmi:id="a" name="Pedido"/>
+              <packagedElement xmi:type="uml:Class" xmi:id="b" name="Cliente"/>
+              <packagedElement xmi:type="uml:Dependency" xmi:id="d" client="a" supplier="b"/>
+            </uml:Model>
+            """);
+        relacion(m, "Pedido", "Cliente", RelationKind.DEPENDENCY);
+        assertThat(m.advertencias()).noneMatch(a -> a.contains("dependencias o realizaciones")
+                || a.contains("dependencia o realizacion"));
+    }
+
+    @Test
+    void uml_realization_e_interfaceRealization_anidada_dan_REALIZATION_y_una_abstraction_sin_realize_es_dependencia() {
+        // La forma del conector Realisation de EA la cubre el test parametrizado del corpus (XMI 2.1).
+        ModeloLeido m = leerTexto("""
+            <uml:Model xmi:id="m">
+              <packagedElement xmi:type="uml:Interface" xmi:id="i1" name="I1"/>
+              <packagedElement xmi:type="uml:Interface" xmi:id="i2" name="I2"/>
+              <packagedElement xmi:type="uml:Interface" xmi:id="i3" name="I3"/>
+              <packagedElement xmi:type="uml:Class" xmi:id="c" name="Servicio">
+                <interfaceRealization xmi:type="uml:InterfaceRealization" xmi:id="ir" client="c" supplier="i2" contract="i2"/>
+              </packagedElement>
+              <packagedElement xmi:type="uml:Realization" xmi:id="r1" client="c" supplier="i1"/>
+              <packagedElement xmi:type="uml:Abstraction" xmi:id="r3" client="c" supplier="i3"/>
+            </uml:Model>
+            """);
+        relacion(m, "Servicio", "I1", RelationKind.REALIZATION);
+        relacion(m, "Servicio", "I2", RelationKind.REALIZATION);
+        // Sin «realize» no se adivina: es una dependencia.
+        relacion(m, "Servicio", "I3", RelationKind.DEPENDENCY);
+    }
+
+    @Test
+    void una_realizacion_que_no_apunta_a_una_interfaz_entra_como_dependencia_con_aviso() {
+        ModeloLeido m = leerTexto("""
+            <uml:Model xmi:id="m">
+              <packagedElement xmi:type="uml:Class" xmi:id="a" name="Uno"/>
+              <packagedElement xmi:type="uml:Class" xmi:id="b" name="Dos"/>
+              <packagedElement xmi:type="uml:Realization" xmi:id="r" client="a" supplier="b"/>
+            </uml:Model>
+            """);
+        relacion(m, "Uno", "Dos", RelationKind.DEPENDENCY);
+        assertThat(m.advertencias()).anyMatch(a -> a.contains("no va de una clase a una interfaz"));
+    }
+
+    @Test
+    void la_misma_realizacion_dicha_dos_veces_no_se_duplica() {
+        ModeloLeido m = leerTexto("""
+            <uml:Model xmi:id="m">
+              <packagedElement xmi:type="uml:Interface" xmi:id="i" name="Pagable"/>
+              <packagedElement xmi:type="uml:Class" xmi:id="c" name="Pedido"/>
+              <packagedElement xmi:type="uml:Realization" xmi:id="r1" client="c" supplier="i"/>
+              <packagedElement xmi:type="uml:Realization" xmi:id="r2" client="c" supplier="i"/>
+            </uml:Model>
+            """);
+        assertThat(m.relaciones()).filteredOn(r -> r.tipo() == RelationKind.REALIZATION).hasSize(1);
     }
 }
