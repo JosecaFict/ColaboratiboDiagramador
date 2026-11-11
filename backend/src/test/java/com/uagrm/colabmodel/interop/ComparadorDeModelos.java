@@ -202,6 +202,9 @@ final class ComparadorDeModelos {
 
     private void comparaMetodo(String ruta, MetodoLeido a, MetodoLeido b) {
         propiedad(ruta, "retorno", norm(a.tipoRetorno()), norm(b.tipoRetorno()));
+        propiedad(ruta, "visibilidad", norm(a.visibilidad()), norm(b.visibilidad()));
+        propiedad(ruta, "estatico", a.esEstatico(), b.esEstatico());
+        propiedad(ruta, "abstracto", a.esAbstracto(), b.esAbstracto());
         // Los tipos ya forman la firma; los NOMBRES de parametro y su orden si cuentan.
         for (int i = 0; i < Math.min(a.parametros().size(), b.parametros().size()); i++) {
             propiedad(ruta, "parametro[" + i + "].nombre", norm(a.parametros().get(i).nombre()),
