@@ -130,6 +130,10 @@ export interface UmlAttribute {
   derived: boolean
   partialKey: boolean
   parentAttributeId?: string | null
+  /** UML 2.5.1 isStatic: el atributo es de la clase. Ausente = false. */
+  isStatic?: boolean
+  /** UML 2.5.1 isReadOnly: no cambia tras la inicializacion. Ausente = false. */
+  readOnly?: boolean
   /** Regla 9: limites de un atributo numerico. null = sin limite de ese lado. */
   minValue?: number | null
   maxValue?: number | null

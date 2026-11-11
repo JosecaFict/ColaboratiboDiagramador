@@ -21,6 +21,12 @@ class UmlAttribute {
   bool get unique => datos['unique'] == true;
   int get ordinal => (datos['ordinal'] as num?)?.toInt() ?? 0;
 
+  /// UML 2.5.1 isStatic (D-15): el atributo es de la clase. Ausente = false (snapshots anteriores).
+  bool get isStatic => datos['isStatic'] == true;
+
+  /// UML 2.5.1 isReadOnly (D-15). Ausente = false.
+  bool get readOnly => datos['readOnly'] == true;
+
   UmlAttribute mezclar(Json cambios) => UmlAttribute({...datos, ...cambios});
 }
 
