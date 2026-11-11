@@ -4,6 +4,7 @@ import 'asistente/pantalla_asistente.dart';
 import 'editor/controlador_editor.dart';
 import 'editor/pantallas/entrada.dart';
 import 'sesion/entrada_sesion.dart';
+import 'tema.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,51 +20,18 @@ class ColabModelApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ColabModel Assistant',
-      theme: ThemeData(
-          colorSchemeSeed: const Color(0xFF1D4ED8), useMaterial3: true),
-      home: const PantallaInicio(),
+      // Claro u oscuro segun el telefono.
+      theme: temaClaro(),
+      darkTheme: temaOscuro(),
+      // Se entra por el login (los diagramas en vivo piden cuenta). El Asistente
+      // no la pide: se ofrece en el login y, ya adentro, en Mis proyectos.
+      home: const EntradaSesion(alAbrirAsistente: abrirAsistente),
     );
   }
 }
 
-/// Pantalla inicial: el Asistente (contra el backend generado) o los diagramas
-/// en vivo de la herramienta: los ve cualquiera y los edita un Editor o el
-/// Propietario (ADR-036, enmendado por D-12).
-class PantallaInicio extends StatelessWidget {
-  const PantallaInicio({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('ColabModel')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              FilledButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const PantallaAsistente()),
-                ),
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Asistente'),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                      builder: (_) => const EntradaSesion()),
-                ),
-                icon: const Icon(Icons.visibility_outlined),
-                label: const Text('Diagramas en vivo'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+/// Va por el navegador raiz: el Asistente no es parte de la sesion y sigue
+/// abierto aunque la sesion venza por debajo.
+void abrirAsistente(BuildContext context) =>
+    Navigator.of(context, rootNavigator: true).push(
+        MaterialPageRoute<void>(builder: (_) => const PantallaAsistente()));

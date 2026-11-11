@@ -14,13 +14,17 @@ class PantallaProyectos extends StatefulWidget {
   final String nombre;
   final VoidCallback? alCerrarSesion;
   final List<ProyectoResumen>? proyectosIniciales;
+
+  /// Si se pasa, la lista ofrece el Asistente con un boton flotante.
+  final void Function(BuildContext)? alAbrirAsistente;
   const PantallaProyectos(
       {super.key,
       required this.cliente,
       required this.almacen,
       required this.nombre,
       this.alCerrarSesion,
-      this.proyectosIniciales});
+      this.proyectosIniciales,
+      this.alAbrirAsistente});
 
   @override
   State<PantallaProyectos> createState() => _PantallaProyectosState();
@@ -55,6 +59,12 @@ class _PantallaProyectosState extends State<PantallaProyectos> {
               icon: const Icon(Icons.logout),
               onPressed: widget.alCerrarSesion)
       ]),
+      floatingActionButton: widget.alAbrirAsistente == null
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => widget.alAbrirAsistente!(context),
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Asistente')),
       body: FutureBuilder<List<ProyectoResumen>>(
         future: _proyectos,
         builder: (context, s) {
@@ -121,45 +131,59 @@ class PantallaDiagramas extends StatelessWidget {
           if (lista.isEmpty)
             return const Center(
                 child: Text('Este proyecto no tiene diagramas.'));
+          // Quien puede editar (Modelador o Propietario, con el editor instalado,
+          // T-15) entra al editor con el toque normal: asi no cree que la app es
+          // de solo lectura. El visor le queda en el ojo. El Observador va al visor.
+          final edita =
+              fabricaDeEditor != null && rolPuedeEditar(proyecto.miRol);
+          Future<void> ver(DiagramaResumen d) async {
+            await almacen.guardarUltimo(d.id, d.nombre);
+            if (!context.mounted) return;
+            await Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => PantallaVisor(
+                  cliente: cliente,
+                  almacen: almacen,
+                  diagramId: d.id,
+                  titulo: d.nombre),
+            ));
+          }
+
+          Future<void> editar(DiagramaResumen d) =>
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => PantallaEditor(
+                  titulo: d.nombre,
+                  alCerrarSesion: alCerrarSesion,
+                  editor: fabricaDeEditor!(
+                    cliente: cliente,
+                    diagramId: d.id,
+                    rol: proyecto.miRol,
+                    nombreUsuario: nombreUsuario,
+                  ),
+                ),
+              ));
+
           return ListView(
             children: [
               for (final d in lista)
                 ListTile(
                   leading: const Icon(Icons.account_tree_outlined),
                   title: Text(d.nombre),
-                  subtitle: Text('operacion ${d.currentSeq}'),
-                  // Editar: solo Modelador o Propietario, y solo si el editor esta instalado (T-15).
-                  trailing:
-                      fabricaDeEditor != null && rolPuedeEditar(proyecto.miRol)
-                          ? IconButton(
+                  subtitle: Text(edita
+                      ? 'operacion ${d.currentSeq} · tocá para editar'
+                      : 'operacion ${d.currentSeq} · solo lectura'),
+                  trailing: edita
+                      ? Row(mainAxisSize: MainAxisSize.min, children: [
+                          IconButton(
+                              tooltip: 'Ver sin editar',
+                              icon: const Icon(Icons.visibility_outlined),
+                              onPressed: () => ver(d)),
+                          IconButton(
                               tooltip: 'Editar diagrama',
                               icon: const Icon(Icons.edit_outlined),
-                              onPressed: () => Navigator.of(context)
-                                  .push(MaterialPageRoute<void>(
-                                builder: (_) => PantallaEditor(
-                                  titulo: d.nombre,
-                                  alCerrarSesion: alCerrarSesion,
-                                  editor: fabricaDeEditor!(
-                                    cliente: cliente,
-                                    diagramId: d.id,
-                                    rol: proyecto.miRol,
-                                    nombreUsuario: nombreUsuario,
-                                  ),
-                                ),
-                              )),
-                            )
-                          : null,
-                  onTap: () async {
-                    await almacen.guardarUltimo(d.id, d.nombre);
-                    if (!context.mounted) return;
-                    await Navigator.of(context).push(MaterialPageRoute<void>(
-                      builder: (_) => PantallaVisor(
-                          cliente: cliente,
-                          almacen: almacen,
-                          diagramId: d.id,
-                          titulo: d.nombre),
-                    ));
-                  },
+                              onPressed: () => editar(d)),
+                        ])
+                      : null,
+                  onTap: () => edita ? editar(d) : ver(d),
                 ),
             ],
           );
@@ -315,9 +339,9 @@ class _Aviso extends StatelessWidget {
         color: Colors.amber.shade200,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(children: [
-          const Icon(Icons.cloud_off, size: 16),
+          const Icon(Icons.cloud_off, size: 16, color: Colors.black87),
           const SizedBox(width: 8),
-          Expanded(child: Text(texto, style: const TextStyle(fontSize: 12))),
+          Expanded(child: Text(texto, style: const TextStyle(fontSize: 12, color: Colors.black87))),
         ]),
       );
 }

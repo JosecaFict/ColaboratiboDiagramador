@@ -10,7 +10,11 @@ import 'servicio_sesion.dart';
 class EntradaSesion extends StatefulWidget {
   final ServicioSesion? servicio;
   final AlmacenLocal? almacen;
-  const EntradaSesion({super.key, this.servicio, this.almacen});
+
+  /// Abre el Asistente (backend generado, sin cuenta). Lo instala `main.dart`.
+  final void Function(BuildContext)? alAbrirAsistente;
+  const EntradaSesion(
+      {super.key, this.servicio, this.almacen, this.alAbrirAsistente});
   @override
   State<EntradaSesion> createState() => _EntradaSesionState();
 }
@@ -76,13 +80,17 @@ class _EntradaSesionState extends State<EntradaSesion>
                           almacen: _almacen,
                           nombre: _s.datos!.fullName,
                           proyectosIniciales: _s.proyectosRestaurados,
+                          alAbrirAsistente: widget.alAbrirAsistente,
                           alCerrarSesion: () => unawaited(_cerrarSesion())))));
         }
         if (_s.estado == EstadoSesion.sinSesion)
-          return PantallaAcceso(servicio: _s, almacen: _almacen);
+          return PantallaAcceso(
+              servicio: _s,
+              almacen: _almacen,
+              alAbrirAsistente: widget.alAbrirAsistente);
         final espera = _s.ocupado || _s.estado == EstadoSesion.inicial;
         return Scaffold(
-            appBar: AppBar(title: const Text('Diagramas en vivo')),
+            appBar: AppBar(title: const Text('ColabModel')),
             body: Center(
                 child: Padding(
                     padding: const EdgeInsets.all(24),

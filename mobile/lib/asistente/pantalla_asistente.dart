@@ -384,6 +384,7 @@ class _Burbuja extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final asistente = mensaje.deAsistente;
+    final colores = Theme.of(context).colorScheme;
     return Align(
       alignment: asistente ? Alignment.centerLeft : Alignment.centerRight,
       child: Container(
@@ -391,14 +392,14 @@ class _Burbuja extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: const BoxConstraints(maxWidth: 320),
         decoration: BoxDecoration(
-          color: asistente ? const Color(0xFFE2E8F0) : const Color(0xFF1D4ED8),
+          color: asistente ? colores.surfaceContainerHigh : colores.primary,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(mensaje.texto, style: TextStyle(color: asistente ? Colors.black87 : Colors.white)),
+            Text(mensaje.texto, style: TextStyle(color: asistente ? colores.onSurface : colores.onPrimary)),
             if (mensaje.opciones.isNotEmpty && alElegir != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
