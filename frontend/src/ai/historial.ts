@@ -1,9 +1,48 @@
+import type { ImagenMeta } from '../contracts/imagenes'
 import type { EntradaHistorialIA, PropuestaIA } from './tipos'
 
-/** Lo que el servidor difunde por /topic/diagram/{id}/ai (AvisosDeIA). */
+/**
+ * Lo que el servidor difunde por /topic/diagram/{id}/ai (AvisosDeIA, contrato §6).
+ * NUEVA y APLICADA traen `entrada`; IMAGEN_SUBIDA e IMAGEN_ELIMINADA traen `imagen`.
+ * Llega de la red: no se asume nada (ver `clasificarAviso`).
+ */
 export interface AvisoIA {
-  tipo: 'NUEVA' | 'APLICADA'
-  entrada: EntradaHistorialIA
+  tipo: 'NUEVA' | 'APLICADA' | 'IMAGEN_SUBIDA' | 'IMAGEN_ELIMINADA'
+  entrada?: EntradaHistorialIA
+  imagen?: ImagenMeta
+}
+
+export type AvisoClasificado =
+  | { clase: 'turno'; entrada: EntradaHistorialIA }
+  | { clase: 'imagen-subida'; imagen: ImagenMeta }
+  | { clase: 'imagen-eliminada'; imagen: ImagenMeta }
+
+/**
+ * LA GUARDA del §6: un aviso de tipo desconocido, o sin lo que su tipo promete, se IGNORA
+ * (devuelve null) en vez de romper el chat. Un servidor mas nuevo puede mandar tipos que este
+ * cliente no conoce; una entrada ausente fusionada por id lanzaria una excepcion.
+ */
+export function clasificarAviso(aviso: unknown): AvisoClasificado | null {
+  if (!aviso || typeof aviso !== 'object') return null
+  const { tipo, entrada, imagen } = aviso as Partial<AvisoIA>
+  const hayEntrada = !!entrada && typeof entrada === 'object' && typeof entrada.id === 'string'
+  const hayImagen = !!imagen && typeof imagen === 'object' && typeof imagen.id === 'string'
+  if ((tipo === 'NUEVA' || tipo === 'APLICADA') && hayEntrada) return { clase: 'turno', entrada: entrada! }
+  if (tipo === 'IMAGEN_SUBIDA' && hayImagen) return { clase: 'imagen-subida', imagen: imagen! }
+  if (tipo === 'IMAGEN_ELIMINADA' && hayImagen) return { clase: 'imagen-eliminada', imagen: imagen! }
+  return null
+}
+
+/** Marca `imagen.eliminada` en todos los turnos que usaron esa imagen, sin pedir nada. */
+export function marcarImagenEliminada(entradas: EntradaHistorialIA[], eliminada: ImagenMeta): EntradaHistorialIA[] {
+  return entradas.map((e) => e.imagen?.id === eliminada.id
+    ? { ...e, imagen: { ...e.imagen, eliminada: true, eliminadaEn: eliminada.eliminadaEn ?? e.imagen.eliminadaEn } }
+    : e)
+}
+
+/** Tiene algo para revisar y aplicar: cambios propuestos por el modelo o una lectura de imagen con clases. */
+export function tieneCambiosParaAplicar(p: PropuestaIA): boolean {
+  return p.aceptados.length > 0 || (p.lecturaDeImagen?.deteccion?.clases?.length ?? 0) > 0
 }
 
 /**
@@ -51,11 +90,11 @@ function ordenarCronologicamente(entradas: EntradaHistorialIA[]): EntradaHistori
 
 /** La última entrada con cambios para revisar: es la que se muestra en el panel derecho. */
 export function ultimaConCambios(entradas: EntradaHistorialIA[]): EntradaHistorialIA | undefined {
-  for (let i = entradas.length - 1; i >= 0; i--) if (entradas[i].propuesta.aceptados.length) return entradas[i]
+  for (let i = entradas.length - 1; i >= 0; i--) if (tieneCambiosParaAplicar(entradas[i].propuesta)) return entradas[i]
   return undefined
 }
 
-/** El BATCH sale con el origen del pedido: un pedido dictado se aplica como VOICE. */
-export function origenDelLote(propuesta: PropuestaIA): 'TEXT' | 'VOICE' {
-  return propuesta.origin === 'VOICE' ? 'VOICE' : 'TEXT'
+/** El BATCH sale con el origen del pedido: un pedido dictado se aplica como VOICE, una lectura de imagen como IMAGE. */
+export function origenDelLote(propuesta: PropuestaIA): 'TEXT' | 'VOICE' | 'IMAGE' {
+  return propuesta.origin === 'VOICE' || propuesta.origin === 'IMAGE' ? propuesta.origin : 'TEXT'
 }
