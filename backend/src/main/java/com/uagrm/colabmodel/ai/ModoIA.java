@@ -9,5 +9,7 @@ public enum ModoIA {
     /** Revisa el diagrama real y devuelve recomendaciones aplicables, sin cambiar nada. */
     RECOMENDAR,
     /** Uso interno de RECOMENDAR: verifica UNA regla del requisito contra el diagrama. */
-    VERIFICAR
+    VERIFICAR,
+    /** Lee una imagen del chat: no lo resuelve ServicioDeIA sino ProcesadorDeImagenDelChat (sin modelo de texto). */
+    IMAGEN
 }

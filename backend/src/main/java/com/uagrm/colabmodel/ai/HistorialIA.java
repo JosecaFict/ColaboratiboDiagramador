@@ -71,7 +71,15 @@ public class HistorialIA {
     @Transactional
     Entrada registrar(UUID diagramId, UUID userId, ModoIA modo, String prompt,
                       PropuestaDeIA propuesta) {
+        return registrar(diagramId, userId, modo, prompt, propuesta, null);
+    }
+
+    /** Un turno IMAGEN guarda ademas `image_id`: la imagen sobre la que trabajo (docs/DISENO-CHAT-IMAGENES.md, 5.3). */
+    @Transactional
+    Entrada registrar(UUID diagramId, UUID userId, ModoIA modo, String prompt,
+                      PropuestaDeIA propuesta, UUID imagenId) {
         InteraccionIA fila = new InteraccionIA();
+        fila.setImageId(imagenId);
         fila.setDiagramId(diagramId);
         fila.setUserId(userId);
         fila.setMode(modo);
@@ -105,7 +113,7 @@ public class HistorialIA {
     /**
      * Marca el turno como aplicado SOLO si el bus ya aceptó el BATCH que lo
      * aplica. La prueba es el log: una operación con ese opId, en este
-     * diagrama, que sea un BATCH de texto o voz del mismo usuario y que diga
+     * diagrama, que sea un BATCH de texto, voz o imagen del mismo usuario y que diga
      * qué turno aplica. Un lote rechazado no deja fila en el log, así que no
      * hay forma de marcarlo.
      *
@@ -117,7 +125,7 @@ public class HistorialIA {
                 .filter(i -> i.getDiagramId().equals(diagramId))
                 .orElseThrow(() -> new IllegalArgumentException("La interaccion de IA no pertenece al diagrama"));
         if (fila.getAppliedAt() == null) {
-            verificarLote(diagramId, interactionId, userId, opId);
+            verificarLote(diagramId, interactionId, userId, opId, fila.getMode());
             fila.setAppliedAt(OffsetDateTime.now());
             fila.setAppliedBy(userId);
             fila = interactions.save(fila);
@@ -125,14 +133,15 @@ public class HistorialIA {
         return entradaDe(fila, nombreDe(fila.getUserId()));
     }
 
-    private void verificarLote(UUID diagramId, UUID interactionId, UUID userId, UUID opId) {
+    void verificarLote(UUID diagramId, UUID interactionId, UUID userId, UUID opId, ModoIA modoDelTurno) {
         if (opId == null) throw new IllegalArgumentException("Falta el opId del lote que aplica la propuesta");
         DiagramOperation op = operations.findByOpId(opId)
                 .filter(o -> diagramId.equals(o.getDiagramId()))
                 .orElseThrow(() -> new LoteNoConfirmadoException(
                         "El lote no figura como aceptado en este diagrama: la propuesta no se marca como aplicada"));
-        boolean deTextoOVoz = op.getOrigin() == Origin.TEXT || op.getOrigin() == Origin.VOICE;
-        if (op.getOpType() != CommandType.BATCH || !deTextoOVoz) {
+        boolean deLaIA = op.getOrigin() == Origin.TEXT || op.getOrigin() == Origin.VOICE
+                || op.getOrigin() == Origin.IMAGE;
+        if (op.getOpType() != CommandType.BATCH || !deLaIA) {
             throw new LoteNoConfirmadoException("La operacion indicada no es un lote de la IA");
         }
         if (!userId.equals(op.getUserId())) {
@@ -140,6 +149,10 @@ public class HistorialIA {
         }
         if (!interactionId.toString().equals(interaccionDelPayload(op.getPayload()))) {
             throw new LoteNoConfirmadoException("El lote no aplica esta propuesta");
+        }
+        // Un lote de imagen solo marca un turno IMAGEN y viceversa: tienen topes distintos (Lote.java).
+        if ((op.getOrigin() == Origin.IMAGE) != (modoDelTurno == ModoIA.IMAGEN)) {
+            throw new LoteNoConfirmadoException("La operacion indicada no corresponde a esta propuesta");
         }
     }
 

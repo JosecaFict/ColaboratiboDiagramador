@@ -33,6 +33,8 @@ public class MemoriaDeConversacion {
     static final int MAX_PEDIDO = 500;
     static final int MAX_RESPUESTA = 600;
     static final int MAX_PROPUESTA = 300;
+    /** El resumen de la lectura de la ultima imagen: nombres de clases y relaciones, y cuantas dudas. */
+    static final int MAX_LECTURA_DE_IMAGEN = 800;
 
     private final InteraccionIARepository interacciones;
     private final AppUserRepository usuarios;
@@ -70,13 +72,17 @@ public class MemoriaDeConversacion {
         Map<UUID, String> nombres = usuarios.findAllById(recientes.stream().map(InteraccionIA::getUserId)
                         .filter(Objects::nonNull).collect(Collectors.toSet())).stream()
                 .collect(Collectors.toMap(AppUser::getId, AppUser::getFullName));
+        // Solo la ULTIMA lectura de imagen de la ventana lleva su resumen: las anteriores ya fueron superadas.
+        InteraccionIA ultimaImagen = recientes.stream().filter(f -> f.getMode() == ModoIA.IMAGEN)
+                .reduce((a, b) -> b).orElse(null);
         List<ContextoDeEquipo.Turno> turnos = recientes.stream().map(f -> new ContextoDeEquipo.Turno(
                 f.getUserId() == null ? USUARIO_ELIMINADO : nombres.getOrDefault(f.getUserId(), USUARIO_ELIMINADO),
                 quien.userId().equals(f.getUserId()),
                 f.getMode(),
                 recortar(f.getPrompt(), MAX_PEDIDO),
                 recortar(f.getResponse(), MAX_RESPUESTA),
-                recortar(resumenDePropuesta(f), MAX_PROPUESTA))).toList();
+                f == ultimaImagen ? recortar(resumenDeLaLectura(f), MAX_LECTURA_DE_IMAGEN)
+                        : recortar(resumenDePropuesta(f), MAX_PROPUESTA))).toList();
         return new ContextoDeEquipo(quien, configuracion, turnos, hayMas ? 1 : 0);
     }
 
@@ -98,6 +104,35 @@ public class MemoriaDeConversacion {
         String estado = f.getAppliedAt() != null ? "se aplico en su momento" : "pendiente, no se aplico";
         return total + (total == 1 ? " cambio (" : " cambios (") + estado + "): " + String.join("; ", resumenes)
                 + (total > resumenes.size() ? "; ..." : "");
+    }
+
+    /**
+     * Lo que leyo la IA de una imagen: nombres de las clases, relaciones con su tipo y cuantas dudas. Sale de
+     * `lecturaDeImagen`; el llamador lo recorta a una linea sin comillas dobles.
+     */
+    private String resumenDeLaLectura(InteraccionIA f) {
+        PropuestaDeIA p;
+        try {
+            p = mapper.readValue(f.getProposal(), PropuestaDeIA.class);
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            return "";
+        }
+        PropuestaDeIA.LecturaDeImagen lectura = p.lecturaDeImagen();
+        if (lectura == null || lectura.deteccion() == null) return "";
+        var d = lectura.deteccion();
+        Map<String, String> nombreDe = new java.util.HashMap<>();
+        d.clases().forEach(c -> nombreDe.put(c.ref(), c.nombre() == null || c.nombre().isBlank()
+                ? "(sin nombre, " + c.ref() + ")" : c.nombre()));
+        String clases = d.clases().isEmpty() ? "ninguna"
+                : d.clases().stream().map(c -> nombreDe.get(c.ref())).collect(Collectors.joining(", "));
+        String relaciones = d.relaciones().isEmpty() ? "ninguna" : d.relaciones().stream()
+                .map(r -> nombreDe.getOrDefault(r.origenRef(), r.origenRef()) + " -> "
+                        + nombreDe.getOrDefault(r.destinoRef(), r.destinoRef()) + " (" + r.kind() + ")")
+                .collect(Collectors.joining("; "));
+        int dudas = (lectura.dudas() == null ? 0 : lectura.dudas().size()) + lectura.dudasOmitidas();
+        String estado = f.getAppliedAt() != null ? "se aplico en su momento" : "pendiente, no se aplico";
+        return "lectura de la imagen (" + estado + "). Clases: " + clases + ". Relaciones: " + relaciones
+                + ". Dudas: " + dudas;
     }
 
     /**

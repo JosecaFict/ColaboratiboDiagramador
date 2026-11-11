@@ -64,6 +64,8 @@ final class PromptDeSistema {
             case MODIFICAR -> EDICION;
             case RECOMENDAR -> RECOMENDACION;
             case VERIFICAR -> VERIFICACION;
+            // La imagen no pasa por el proveedor de texto (ProcesadorDeImagenDelChat); no hay prompt que armar.
+            case IMAGEN -> throw new IllegalArgumentException("El modo IMAGEN no usa el proveedor de texto");
         };
     }
 
