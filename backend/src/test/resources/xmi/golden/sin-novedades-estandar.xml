@@ -21,7 +21,7 @@
       <ownedOperation xmi:type="uml:Operation" xmi:id="me0000000-0000-4000-8000-000000000001" name="calcular" visibility="public">
         <ownedParameter xmi:type="uml:Parameter" xmi:id="mpe0000000-0000-4000-8000-000000000001-0" name="descuento" direction="in" type="t-decimal">
         </ownedParameter>
-        <ownedParameter xmi:type="uml:Parameter" xmi:id="mre0000000-0000-4000-8000-000000000001" direction="return" type="t-decimal">
+        <ownedParameter xmi:type="uml:Parameter" xmi:id="mre0000000-0000-4000-8000-000000000001" name="return" direction="return" type="t-decimal">
         </ownedParameter>
       </ownedOperation>
     </packagedElement>

@@ -258,6 +258,20 @@ class EscritorXmiInterfazTest {
         assertThat(propiedades.hasAttribute("stereotype")).as("el estereotipo ya es la metaclase").isFalse();
     }
 
+    @ParameterizedTest
+    @EnumSource(EscritorXmi.Perfil.class)
+    void el_parametro_de_retorno_se_llama_return_en_los_dos_perfiles(EscritorXmi.Perfil perfil) {
+        // EA 16.1 mostraba el retorno sin nombre como un parametro mas, y una operacion cuyo unico parametro era
+        // ese retorno no aparecia en la caja.
+        Document doc = parsear(conInterfaz().exportar(perfil).xmi());
+        List<Element> retornos = elementos(doc, "ownedParameter").stream()
+                .filter(p -> "return".equals(p.getAttribute("direction"))).toList();
+        assertThat(retornos).isNotEmpty().allSatisfy(p -> assertThat(p.getAttribute("name")).isEqualTo("return"));
+        assertThat(new LectorXmi().leer(conInterfaz().exportar(perfil).xmi()).clases().stream()
+                .flatMap(c -> c.metodos().stream()).flatMap(m -> m.parametros().stream()))
+                .as("el lector no toma el retorno por un parametro").noneMatch(p -> "return".equals(p.nombre()));
+    }
+
     @Test
     void el_perfil_estandar_no_lleva_extension_ni_conector() {
         String xmi = texto(conInterfaz().exportar(EscritorXmi.Perfil.ESTANDAR));

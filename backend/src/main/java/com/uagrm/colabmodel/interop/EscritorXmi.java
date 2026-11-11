@@ -355,8 +355,9 @@ public final class EscritorXmi {
             parametro(x, ea ? idm + "_P" + (i++) : "mp" + m.getId() + "-" + (i++), nombre, "in", p.path("type").asText("string"), idTipo);
         }
         if (m.getReturnType() != null && !"void".equalsIgnoreCase(m.getReturnType())) {
-            // EA nombra "return" al parametro de retorno; sin nombre lo importa como `DuplicateParam_1`.
-            parametro(x, ea ? idm + "_RET" : "mr" + m.getId(), ea ? "return" : null, "return", m.getReturnType(), idTipo);
+            // El parametro de retorno se llama "return" (UML 2.5.1 lo permite): sin nombre, EA 16.1 lo muestra como un
+            // parametro mas y, si es el unico de la operacion, la operacion no aparece en la caja.
+            parametro(x, ea ? idm + "_RET" : "mr" + m.getId(), "return", "return", m.getReturnType(), idTipo);
         }
         x.cerrar("ownedOperation");
     }
