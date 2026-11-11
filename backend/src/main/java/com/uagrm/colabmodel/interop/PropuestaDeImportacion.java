@@ -41,13 +41,23 @@ public record PropuestaDeImportacion(String formato, String fuente, List<ClasePr
     public record AtributoPropuesto(String nombre, String tipoLeido, String tipo, boolean pk, boolean requerido,
                                     boolean unico, boolean multivaluado, boolean derivado, boolean claveParcial,
                                     boolean yaExiste, InferenciaDeAtributos.Sugerencia sugerencia,
-                                    String visibilidad, String valorPorDefecto) {
+                                    String visibilidad, String valorPorDefecto, boolean esEstatico,
+                                    boolean soloLectura) {
+        /** Con visibilidad y valor por defecto, sin isStatic ni isReadOnly (rebanada c: false). */
+        public AtributoPropuesto(String nombre, String tipoLeido, String tipo, boolean pk, boolean requerido,
+                                 boolean unico, boolean multivaluado, boolean derivado, boolean claveParcial,
+                                 boolean yaExiste, InferenciaDeAtributos.Sugerencia sugerencia,
+                                 String visibilidad, String valorPorDefecto) {
+            this(nombre, tipoLeido, tipo, pk, requerido, unico, multivaluado, derivado, claveParcial, yaExiste,
+                    sugerencia, visibilidad, valorPorDefecto, false, false);
+        }
+
         /** Sin visibilidad ni valor por defecto: la IA y los formatos que no los traen. */
         public AtributoPropuesto(String nombre, String tipoLeido, String tipo, boolean pk, boolean requerido,
                                  boolean unico, boolean multivaluado, boolean derivado, boolean claveParcial,
                                  boolean yaExiste, InferenciaDeAtributos.Sugerencia sugerencia) {
             this(nombre, tipoLeido, tipo, pk, requerido, unico, multivaluado, derivado, claveParcial, yaExiste,
-                    sugerencia, null, null);
+                    sugerencia, null, null, false, false);
         }
     }
 
