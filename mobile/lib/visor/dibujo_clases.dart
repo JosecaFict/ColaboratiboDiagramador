@@ -159,7 +159,7 @@ class DibujoClases extends CustomPainter {
     for (final p in puntos.skip(1)) {
       camino.lineTo(p.dx, p.dy);
     }
-    final punteada = r.kind == 'DEPENDENCY';
+    final punteada = r.kind == 'DEPENDENCY' || r.kind == 'REALIZATION';
     canvas.drawPath(punteada ? _punteado(camino) : camino, linea);
 
     final inicio = puntos.first;
@@ -172,7 +172,7 @@ class DibujoClases extends CustomPainter {
         _rombo(canvas, inicio, haciaInicio, relleno: false);
       case 'COMPOSITION':
         _rombo(canvas, inicio, haciaInicio, relleno: true);
-      case 'GENERALIZATION':
+      case 'GENERALIZATION' || 'REALIZATION':
         _triangulo(canvas, fin, haciaFin);
       case 'DEPENDENCY':
         _flecha(canvas, fin, haciaFin);

@@ -32,6 +32,9 @@ enum TipoDeElemento {
   /// `isAbstract: true`.
   abstracta,
 
+  /// `stereotype: 'interface'`.
+  interfaz,
+
   /// `stereotype: 'enumeration'`.
   enumeracion,
 
@@ -39,13 +42,16 @@ enum TipoDeElemento {
   valor,
 }
 
-/// Los cinco tipos de relacion del metamodelo (RelationKind en Java).
+/// Los tipos de relacion del metamodelo (RelationKind en Java).
 enum TipoRelacion {
   asociacion('ASSOCIATION'),
   agregacion('AGGREGATION'),
   composicion('COMPOSITION'),
   herencia('GENERALIZATION'),
-  dependencia('DEPENDENCY');
+  dependencia('DEPENDENCY'),
+
+  /// De la clase hacia la interfaz (UML 2.5.1).
+  realizacion('REALIZATION');
 
   /// El valor que viaja en el payload (`kind`).
   final String clave;
