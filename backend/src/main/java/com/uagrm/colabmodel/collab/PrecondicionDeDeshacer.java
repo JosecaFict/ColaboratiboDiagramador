@@ -276,6 +276,8 @@ final class PrecondicionDeDeshacer {
         n.put("multivalued", a.isMultivalued());
         n.put("derived", a.isDerived());
         n.put("partialKey", a.isPartialKey());
+        n.put("isStatic", a.isStatic());
+        n.put("readOnly", a.isReadOnly());
         n.put("minValue", a.getMinValue());
         n.put("maxValue", a.getMaxValue());
         return n;

@@ -213,6 +213,8 @@ public class CommandApplier {
                 a.setMultivalued(bool(p, "multivalued", false));
                 a.setDerived(bool(p, "derived", false));
                 a.setPartialKey(bool(p, "partialKey", false));
+                a.setStatic(bool(p, "isStatic", false));
+                a.setReadOnly(bool(p, "readOnly", false));
                 String parent = text(p, "parentAttributeId");
                 a.setParentAttributeId(parent == null ? null : UUID.fromString(parent));
                 if (p.has("minValue")) a.setMinValue(decimalOrNull(command, p.get("minValue")));
@@ -237,6 +239,8 @@ public class CommandApplier {
                 if (p.has("multivalued")) a.setMultivalued(p.get("multivalued").asBoolean());
                 if (p.has("derived")) a.setDerived(p.get("derived").asBoolean());
                 if (p.has("partialKey")) a.setPartialKey(p.get("partialKey").asBoolean());
+                if (p.has("isStatic")) a.setStatic(p.get("isStatic").asBoolean());
+                if (p.has("readOnly")) a.setReadOnly(p.get("readOnly").asBoolean());
                 if (p.has("minValue")) a.setMinValue(decimalOrNull(command, p.get("minValue")));
                 if (p.has("maxValue")) a.setMaxValue(decimalOrNull(command, p.get("maxValue")));
                 validarRango(command, a);

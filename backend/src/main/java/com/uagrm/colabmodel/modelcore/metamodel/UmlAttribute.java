@@ -89,6 +89,14 @@ public class UmlAttribute implements Persistable<UUID> {
     @Column(name = "max_value", precision = 19, scale = 4)
     private BigDecimal maxValue;
 
+    /** UML isStatic: el atributo es de la clase, no de la instancia (D-15). Es notacion: no llega al DDL. */
+    @Column(name = "is_static", nullable = false)
+    private boolean isStatic = false;
+
+    /** UML isReadOnly: el valor no cambia tras la inicializacion (D-15). Es notacion: no llega al DDL. */
+    @Column(name = "is_read_only", nullable = false)
+    private boolean readOnly = false;
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
     public UUID getClassId() { return classId; }
@@ -123,6 +131,10 @@ public class UmlAttribute implements Persistable<UUID> {
     public void setMinValue(BigDecimal minValue) { this.minValue = minValue; }
     public BigDecimal getMaxValue() { return maxValue; }
     public void setMaxValue(BigDecimal maxValue) { this.maxValue = maxValue; }
+    public boolean isStatic() { return isStatic; }
+    public void setStatic(boolean isStatic) { this.isStatic = isStatic; }
+    public boolean isReadOnly() { return readOnly; }
+    public void setReadOnly(boolean readOnly) { this.readOnly = readOnly; }
 
     @Override
     public boolean equals(Object o) {
