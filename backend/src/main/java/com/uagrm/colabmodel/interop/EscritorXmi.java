@@ -67,9 +67,12 @@ public final class EscritorXmi {
             "string", "String", "int", "Integer", "integer", "Integer", "boolean", "Boolean");
 
     private final boolean ea;
+    /** Solo para las fechas `created`/`modified` que EA escribe en su Extension; fijo en las pruebas. */
+    private final java.time.Clock reloj;
 
-    private EscritorXmi(Perfil perfil) {
+    private EscritorXmi(Perfil perfil, java.time.Clock reloj) {
         this.ea = perfil == Perfil.ENTERPRISE_ARCHITECT;
+        this.reloj = reloj;
     }
 
     /** @param perdidas lo que este modelo tenia y el XMI no pudo llevarse, para mostrarlo ANTES de bajar el archivo */
@@ -85,7 +88,13 @@ public final class EscritorXmi {
     public static Exportado exportar(List<UmlClass> clases, List<UmlAttribute> atributos, List<UmlMethod> metodos,
                                      List<UmlRelationship> relaciones, List<DiagramLayout> disposicion,
                                      Perfil perfil) {
-        return new EscritorXmi(perfil).escribir(clases, atributos, metodos, relaciones, disposicion);
+        return exportar(clases, atributos, metodos, relaciones, disposicion, perfil, java.time.Clock.systemDefaultZone());
+    }
+
+    static Exportado exportar(List<UmlClass> clases, List<UmlAttribute> atributos, List<UmlMethod> metodos,
+                              List<UmlRelationship> relaciones, List<DiagramLayout> disposicion, Perfil perfil,
+                              java.time.Clock reloj) {
+        return new EscritorXmi(perfil, reloj).escribir(clases, atributos, metodos, relaciones, disposicion);
     }
 
     private Exportado escribir(List<UmlClass> clases, List<UmlAttribute> atributos, List<UmlMethod> metodos,
@@ -107,7 +116,7 @@ public final class EscritorXmi {
         // Se calculan ANTES de escribir: asi viajan en el propio archivo, en
         // el `xmi:Documentation` del principio, y no solo en la respuesta HTTP.
         List<String> perdidas = perdidasDe(clases, atributos, generalizaciones);
-        Map<String, String> idTipo = ea ? new HashMap<>() : tiposPrimitivos(atributos, metodos);
+        Map<String, String> idTipo = ea ? tiposEa(clases, atributos, metodos) : tiposPrimitivos(atributos, metodos);
         String paquete = "EAPK_" + guid(UUID.nameUUIDFromBytes(("paquete" + clases.stream().map(UmlClass::getId)
                 .map(UUID::toString).sorted().toList()).getBytes(StandardCharsets.UTF_8)));
 
@@ -136,12 +145,13 @@ public final class EscritorXmi {
             x.vacio("packagedElement", "xmi:type", "uml:Dependency", "xmi:id", id("r", r.getId()), "name", r.getName(),
                     "client", id("c", r.getSourceClassId()), "supplier", id("c", r.getTargetClassId()));
         }
-        idTipo.forEach((nombre, id) -> x.vacio("packagedElement", "xmi:type", "uml:PrimitiveType", "xmi:id", id,
-                "name", nombre));
+        // En EA los tipos primitivos NO van en el modelo: los define la Extension (`primitivetypes`).
+        if (!ea) idTipo.forEach((nombre, id) -> x.vacio("packagedElement", "xmi:type", "uml:PrimitiveType",
+                "xmi:id", id, "name", nombre));
 
         if (ea) x.cerrar("packagedElement");
         x.cerrar("uml:Model");
-        if (ea) extensionEa(x, paquete, clases, atrsPorClase, metsPorClase, disposicion, realizaciones);
+        if (ea) extensionEa(x, paquete, clases, atrsPorClase, metsPorClase, disposicion, relaciones, idTipo);
         x.cerrar("xmi:XMI");
 
         return new Exportado(x.toString().getBytes(StandardCharsets.UTF_8), perdidas);
@@ -249,11 +259,14 @@ public final class EscritorXmi {
             String ida = id("a", a.getId());
             x.abrir("ownedAttribute", "xmi:type", "uml:Property", "xmi:id", ida, "name", a.getName(),
                     "visibility", visibilidad(a.getVisibility()),
-                    "type", idTipo.get(a.getDataType()),
+                    "type", ea ? null : idTipo.get(a.getDataType()),   // EA tipa con un hijo <type>, no con atributo
                     "isID", a.isPk() ? "true" : null,
                     "isDerived", a.isDerived() ? "true" : null);
-            tipoOmg(x, a.getDataType());
+            if (!ea) tipoOmg(x, a.getDataType());
             multiplicidad(x, ida, a.isRequired() || a.isPk() ? "1" : "0", a.isMultivalued() ? "*" : "1");
+            // EA escribe el tipo DESPUES de lowerValue/upperValue y lo referencia por idref a un tipo definido
+            // en la Extension (`primitivetypes`) o a una clase del modelo.
+            if (ea && idTipo.containsKey(a.getDataType())) x.vacio("type", "xmi:idref", idTipo.get(a.getDataType()));
             if (a.getDefaultValue() != null && !a.getDefaultValue().isBlank()) {
                 if (ea) {
                     // EA 2.1 guarda el valor inicial como LiteralString.
@@ -293,7 +306,8 @@ public final class EscritorXmi {
             parametro(x, ea ? idm + "_P" + (i++) : "mp" + m.getId() + "-" + (i++), nombre, "in", p.path("type").asText("string"), idTipo);
         }
         if (m.getReturnType() != null && !"void".equalsIgnoreCase(m.getReturnType())) {
-            parametro(x, ea ? idm + "_RET" : "mr" + m.getId(), null, "return", m.getReturnType(), idTipo);
+            // EA nombra "return" al parametro de retorno; sin nombre lo importa como `DuplicateParam_1`.
+            parametro(x, ea ? idm + "_RET" : "mr" + m.getId(), ea ? "return" : null, "return", m.getReturnType(), idTipo);
         }
         x.cerrar("ownedOperation");
     }
@@ -302,8 +316,34 @@ public final class EscritorXmi {
                                   Map<String, String> idTipo) {
         x.abrir("ownedParameter", "xmi:type", "uml:Parameter", "xmi:id", id, "name", nombre, "direction", direccion,
                 "type", idTipo.get(tipo));
-        tipoOmg(x, tipo);
+        if (!ea) tipoOmg(x, tipo);
         x.cerrar("ownedParameter");
+    }
+
+    /**
+     * Perfil EA: el id de cada tipo usado. Si el nombre es el de una clase del
+     * modelo (una enumeracion, una entidad), se refiere a esa clase; si no, a un
+     * `uml:PrimitiveType` de `EA_Java_Types_Package` con el id `EAJava_<nombre>`,
+     * que es como EA define y referencia los suyos. Antes se referenciaba
+     * `EAnone_<nombre>` SIN definirlo y EA descartaba todos los tipos.
+     */
+    private static Map<String, String> tiposEa(List<UmlClass> clases, List<UmlAttribute> atributos,
+                                               List<UmlMethod> metodos) {
+        Map<String, UUID> clasePorNombre = new HashMap<>();
+        for (UmlClass c : clases) clasePorNombre.putIfAbsent(c.getName(), c.getId());
+        Map<String, String> idTipo = new LinkedHashMap<>();
+        List<String> usados = new ArrayList<>();
+        for (UmlAttribute a : atributos) usados.add(a.getDataType());
+        for (UmlMethod m : metodos) {
+            if (m.getReturnType() != null && !"void".equalsIgnoreCase(m.getReturnType())) usados.add(m.getReturnType());
+            for (JsonNode p : parametros(m)) usados.add(p.path("type").asText("string"));
+        }
+        for (String t : usados) {
+            if (t == null || t.isBlank()) continue;
+            UUID clase = clasePorNombre.get(t);
+            idTipo.putIfAbsent(t, clase != null ? "EAID_" + guid(clase) : "EAJava_" + t.trim().replace(' ', '_'));
+        }
+        return idTipo;
     }
 
     /**
@@ -312,12 +352,7 @@ public final class EscritorXmi {
      * como atributo `type` apuntando al `uml:PrimitiveType` local.
      */
     private void tipoOmg(Xml x, String tipo) {
-        if (ea) {
-            // Como lo escribe EA con el lenguaje "<none>": un idref que no se
-            // define en ningun lado y que EA (y LectorXmi) leen como el nombre.
-            if (tipo != null && !tipo.isBlank()) x.vacio("type", "xmi:idref", "EAnone_" + tipo.trim().replace(' ', '_'));
-            return;
-        }
+        if (ea) return;   // EA: ver tiposEa y el tipo de ownedAttribute; los parametros llevan el atributo `type`
         String omg = tipo == null ? null : PRIMITIVOS_OMG.get(tipo.toLowerCase(Locale.ROOT));
         if (omg != null) x.vacio("type", "xmi:type", "uml:PrimitiveType", "href", NS_UML + "/PrimitiveTypes.xmi#" + omg);
     }
@@ -425,35 +460,102 @@ public final class EscritorXmi {
     /** Ancho minimo de una clase en EA: por debajo corta los nombres. */
     private static final int ANCHO_MINIMO = 110;
 
+    /** Los bloques de configuracion de un diagrama, copiados tal cual de un export de EA 16.1 (build 1625). */
+    private static final String SW = "orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;"
+            + "ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-13,lfw:0,lfi:0,lfu:0,lfs:0,"
+            + "lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;";
+    private static final String DIAGRAMA_STYLE1 = "ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;"
+            + "Locked=0;Border=1;HighlightForeign=1;PackageContents=1;SequenceNotes=0;ScalePrintImage=0;PPgs.cx=0;"
+            + "PPgs.cy=0;DocSize.cx=850;DocSize.cy=1098;ShowDetails=0;Orientation=P;Zoom=100;ShowTags=0;OpParams=1;"
+            + "VisibleAttributeDetail=0;ShowOpRetType=1;ShowIcons=1;CollabNums=0;HideProps=0;ShowReqs=0;ShowCons=0;"
+            + "PaperSize=1;HideParents=0;UseAlias=0;HideAtts=0;HideOps=0;HideStereo=0;HideElemStereo=0;ShowTests=0;"
+            + "ShowMaint=0;ConnectorNotation=UML 2.1;ExplicitNavigability=0;ShowShape=1;AllDockable=0;"
+            + "AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;"
+            + "ShowNotes=0;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;";
+    private static final String DIAGRAMA_STYLE2 = "ExcludeRTF=0;DocAll=0;HideQuals=0;AttPkg=1;ShowTests=0;ShowMaint=0;"
+            + "SuppressFOC=1;MatrixActive=0;SwimlanesActive=1;KanbanActive=0;MatrixLineWidth=1;MatrixLineClr=0;"
+            + "MatrixLocked=0;TConnectorNotation=UML 2.1;TExplicitNavigability=0;AdvancedElementProps=1;"
+            + "AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;MDGDgm=;STBLDgm=;"
+            + "ShowNotes=0;VisibleAttributeDetail=0;ShowOpRetType=1;SuppressBrackets=0;SuppConnectorLabels=0;"
+            + "PrintPageHeadFoot=0;ShowAsList=0;SuppressedCompartments=;Theme=:119;SaveTag=FB9A30B1;";
+    private static final String DIAGRAMA_SWIMLANES = "locked=false;" + SW;
+    private static final String DIAGRAMA_MATRIZ = "locked=false;matrixactive=false;swimlanesactive=true;"
+            + "kanbanactive=false;width=1;clrLine=0;";
+    private static final String DIAGRAMA_PERSISTENTE = "DGS=On=0:CNT=8:W=120:H=40:SG=0:SGH=0:AEB=0:;AR=0;DCL=0;"
+            + SW + ";" + SW + ";" + SW + ";" + SW + ";Swimlanes=locked=false;" + SW + ";";
+    private static final String ESTILO_CAJA = "NSL=0;BCol=-1;BFol=-1;LCol=-1;LWth=-1;fontsz=0;bold=0;black=0;"
+            + "italic=0;ul=0;charset=0;pitch=0;";
+
     /**
-     * La parte que UML no tiene y EA si: el estereotipo y el tipo de cada
-     * atributo tal como los muestra EA, y el diagrama con la caja de cada
-     * clase. Los conectores no se listan en el diagrama: EA dibuja todos los
-     * que unen dos elementos presentes (`diagramlinks` es para ocultarlos o
-     * darles estilo, no para mostrarlos).
+     * La parte que UML no tiene y EA si, en el orden y con los nodos con que EA 16.1 la escribe de si mismo:
+     * `elements` (el paquete y cada clase), `connectors` (TODAS las relaciones), `primitivetypes` (los tipos
+     * que referencian los atributos y parametros), `profiles` y `diagrams`. La forma sale de un export real de
+     * EA (docs/MesaDeTrabajo/pruebas-ea/tanda-1-linea-base/exportado-desde-EA), no de memoria.
+     *
+     * Corrige dos cosas que EA 16.1 real rechazo con el archivo anterior: los tipos (se referenciaban
+     * `EAnone_x` sin definirlos) y el diagrama (faltaban `connectors`, `primitivetypes`, `profiles`, los nodos de
+     * configuracion del diagrama y la entrada de cada conector en el diagrama).
      */
     private void extensionEa(Xml x, String paquete, List<UmlClass> clases,
                              Map<UUID, List<UmlAttribute>> atrsPorClase, Map<UUID, List<UmlMethod>> metsPorClase,
-                             List<DiagramLayout> disposicion, List<UmlRelationship> realizaciones) {
+                             List<DiagramLayout> disposicion, List<UmlRelationship> relaciones,
+                             Map<String, String> idTipo) {
+        String ahora = java.time.LocalDateTime.now(reloj).withNano(0).toString().replace('T', ' ');
+        Map<UUID, UmlClass> porId = new HashMap<>();
+        Map<UUID, Integer> localId = new HashMap<>();
+        int n = 1;   // el paquete es el 1
+        for (UmlClass c : clases) {
+            porId.put(c.getId(), c);
+            localId.put(c.getId(), ++n);
+        }
+        // Solo los conectores cuyos dos extremos estan en el diagrama.
+        List<UmlRelationship> conectores = relaciones.stream()
+                .filter(r -> porId.containsKey(r.getSourceClassId()) && porId.containsKey(r.getTargetClassId()))
+                .toList();
+
         x.abrir("xmi:Extension", "extender", "Enterprise Architect", "extenderID", "6.5");
 
         x.abrir("elements");
+        x.abrir("element", "xmi:idref", paquete, "xmi:type", "uml:Package", "name", "ColabModel", "scope", "public");
+        x.vacio("model", "package2", "EAID_" + paquete.substring("EAPK_".length()), "package", "EAPK_MODELO",
+                "tpos", "0", "ea_localid", "1", "ea_eleType", "package");
+        x.vacio("properties", "isSpecification", "false", "sType", "Package", "nType", "0", "scope", "public");
+        x.vacio("project", "author", "ColabModel", "version", "1.0", "phase", "1.0", "created", ahora,
+                "modified", ahora, "complexity", "1", "status", "Proposed");
+        x.vacio("code", "gentype", "Java");
+        x.vacio("style", "appearance", "BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;"
+                + "HSwimLanes=1;BorderStyle=0;");
+        x.vacio("tags");
+        x.vacio("xrefs");
+        x.vacio("extendedProperties", "tagged", "0", "package_name", "EA_Model");
+        x.vacio("packageproperties", "version", "1.0");
+        x.vacio("paths");
+        x.vacio("times", "created", ahora, "modified", ahora);
+        x.vacio("flags", "iscontrolled", "0", "isprotected", "0", "usedtd", "0", "logxml", "0");
+        x.cerrar("element");
+
         for (UmlClass c : clases) {
             List<UmlAttribute> atrs = atrsPorClase.getOrDefault(c.getId(), List.of());
             String metaclase = metaclase(c, atrs);
             x.abrir("element", "xmi:idref", id("c", c.getId()), "xmi:type", metaclase, "name", c.getName(),
                     "scope", "public");
-            x.vacio("model", "package", paquete, "ea_eleType", "element");
+            x.vacio("model", "package", paquete, "tpos", "0", "ea_localid", String.valueOf(localId.get(c.getId())),
+                    "ea_eleType", "element");
             x.vacio("properties", "isSpecification", "false", "sType", metaclase.substring("uml:".length()),
                     "nType", "0", "scope", "public",
                     "isAbstract", c.isAbstract() || metaclase.equals("uml:Interface") ? "true" : "false",
                     // En una uml:Interface el estereotipo ya ES la metaclase: repetirlo mostraria «interface» dos veces.
                     "stereotype", metaclase.equals("uml:Interface") ? null : c.getStereotype());
+            x.vacio("project", "author", "ColabModel", "version", "1.0", "phase", "1.0", "created", ahora,
+                    "modified", ahora, "complexity", "1", "status", "Proposed");
+            x.vacio("code", "gentype", "Java");
+            x.vacio("extendedProperties", "tagged", "0", "package_name", "ColabModel");
             if (!atrs.isEmpty()) {
                 x.abrir("attributes");
                 for (UmlAttribute a : atrs) {
                     x.abrir("attribute", "xmi:idref", id("a", a.getId()), "name", a.getName(),
                             "scope", a.getVisibility() == null ? "Private" : capital(a.getVisibility().name()));
+                    // `type` es el nombre del tipo, como lo muestra EA (en un export real: type="date").
                     x.vacio("properties", "type", a.getDataType(), "derived", a.isDerived() ? "1" : "0",
                             "collection", a.isMultivalued() ? "true" : "false", "changeability", "changeable");
                     x.vacio("bounds", "lower", a.isRequired() || a.isPk() ? "1" : "0",
@@ -466,30 +568,49 @@ public final class EscritorXmi {
         }
         x.cerrar("elements");
 
-        if (!realizaciones.isEmpty()) {
-            // Solo si hay realizaciones: un diagrama sin ellas sale igual que antes.
-            Map<UUID, UmlClass> porId = new HashMap<>();
-            clases.forEach(c -> porId.put(c.getId(), c));
-            x.abrir("connectors");
-            for (UmlRelationship r : realizaciones) {
-                UmlClass origen = porId.get(r.getSourceClassId());
-                UmlClass destino = porId.get(r.getTargetClassId());
-                if (origen == null || destino == null) continue;
-                x.abrir("connector", "xmi:idref", id("r", r.getId()));
-                conectorExtremo(x, "source", origen);
-                conectorExtremo(x, "target", destino);
-                // EA escribe `Realisation`, con «s» (forma del corpus).
-                x.vacio("properties", "ea_type", "Realisation", "direction", "Source -> Destination");
-                x.cerrar("connector");
-            }
-            x.cerrar("connectors");
+        x.abrir("connectors");
+        int idConector = 0;
+        for (UmlRelationship r : conectores) {
+            escribirConector(x, r, porId.get(r.getSourceClassId()), porId.get(r.getTargetClassId()),
+                    localId.get(r.getSourceClassId()), localId.get(r.getTargetClassId()), ++idConector);
         }
+        x.cerrar("connectors");
+
+        // Los tipos que no son clases del modelo: EA los define aca y los referencia por `EAJava_<nombre>`.
+        List<String> primitivos = idTipo.values().stream().filter(v -> v.startsWith("EAJava_")).distinct().toList();
+        Map<String, String> nombrePorId = new LinkedHashMap<>();
+        idTipo.forEach((nombre, v) -> {
+            if (v.startsWith("EAJava_")) nombrePorId.putIfAbsent(v, nombre);
+        });
+        x.abrir("primitivetypes");
+        x.abrir("packagedElement", "xmi:type", "uml:Package", "xmi:id", "EAPrimitiveTypesPackage",
+                "name", "EA_PrimitiveTypes_Package", "visibility", "public");
+        if (!primitivos.isEmpty()) {
+            x.abrir("packagedElement", "xmi:type", "uml:Package", "xmi:id", "EAJavaTypesPackage",
+                    "name", "EA_Java_Types_Package", "visibility", "public");
+            for (String v : primitivos) {
+                x.vacio("packagedElement", "xmi:type", "uml:PrimitiveType", "xmi:id", v,
+                        "name", nombrePorId.get(v), "visibility", "public");
+            }
+            x.cerrar("packagedElement");
+        }
+        x.cerrar("packagedElement");
+        x.cerrar("primitivetypes");
+        x.vacio("profiles");
 
         x.abrir("diagrams");
         x.abrir("diagram", "xmi:id", "EAID_" + guid(UUID.nameUUIDFromBytes(("diagrama" + paquete)
                 .getBytes(StandardCharsets.UTF_8))));
         x.vacio("model", "package", paquete, "localID", "1", "owner", paquete);
         x.vacio("properties", "name", "Diagrama de clases", "type", "Logical");
+        x.vacio("project", "author", "ColabModel", "version", "1.0", "created", ahora, "modified", ahora);
+        x.vacio("style1", "value", DIAGRAMA_STYLE1);
+        x.vacio("style2", "value", DIAGRAMA_STYLE2);
+        x.vacio("swimlanes", "value", DIAGRAMA_SWIMLANES);
+        x.vacio("matrixitems", "value", DIAGRAMA_MATRIZ);
+        x.vacio("extendedProperties");
+        x.vacio("persistentstyle", "value", DIAGRAMA_PERSISTENTE);
+        x.vacio("xrefs");
         x.abrir("elements");
         Map<UUID, DiagramLayout> donde = new HashMap<>();
         for (DiagramLayout l : disposicion) donde.put(l.getElementId(), l);
@@ -525,7 +646,15 @@ public final class EscritorXmi {
             double alto = 30 + filas * 18 + 8 + (ops > 0 ? 6 + ops * 18 : 0) + (c.getStereotype() != null ? 14 : 0);
             x.vacio("element", "geometry", "Left=" + entero(izq) + ";Top=" + entero(arriba) + ";Right="
                             + entero(izq + ancho) + ";Bottom=" + entero(arriba + alto) + ";",
-                    "subject", id("c", c.getId()), "seqno", String.valueOf(seq++));
+                    "subject", id("c", c.getId()), "seqno", String.valueOf(seq++),
+                    "style", "DUID=" + duid(c.getId()) + ";" + ESTILO_CAJA);
+        }
+        // EA tambien lista cada conector en el diagrama, con los DUID de sus dos cajas (EOID = destino, SOID = origen).
+        for (UmlRelationship r : conectores) {
+            x.vacio("element", "geometry", "EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;",
+                    "subject", id("r", r.getId()),
+                    "style", "Mode=3;EOID=" + duid(r.getTargetClassId()) + ";SOID=" + duid(r.getSourceClassId())
+                            + ";Color=-1;LWidth=0;Hidden=0;");
         }
         x.cerrar("elements");
         x.cerrar("diagram");
@@ -534,11 +663,68 @@ public final class EscritorXmi {
         x.cerrar("xmi:Extension");
     }
 
-    private void conectorExtremo(Xml x, String lado, UmlClass c) {
+    /** Los 8 primeros digitos hexadecimales del id: el `DUID` que EA le da a la caja de un elemento en un diagrama. */
+    private static String duid(UUID id) {
+        return id.toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * El conector de la Extension, con la forma de los de un export real de EA. Asociacion, agregacion y
+     * composicion salen todas como `ea_type="Association"`, con el rombo en el atributo `aggregation` del extremo
+     * del todo (asi las guardo EA al importar nuestro archivo y asi las dibujo).
+     */
+    private void escribirConector(Xml x, UmlRelationship r, UmlClass origen, UmlClass destino, int localOrigen,
+                                  int localDestino, int localConector) {
+        RelationKind k = r.getKind();
+        boolean asociativa = k == RelationKind.ASSOCIATION || k == RelationKind.AGGREGATION
+                || k == RelationKind.COMPOSITION;
+        String tipoEa = switch (k) {
+            case GENERALIZATION -> "Generalization";
+            case DEPENDENCY -> "Dependency";
+            case REALIZATION -> "Realisation";   // EA la escribe con «s»
+            default -> "Association";
+        };
+        x.abrir("connector", "xmi:idref", id("r", r.getId()), "name", asociativa ? r.getName() : null);
+        extremoDeConector(x, "source", origen, localOrigen, asociativa, r.getSourceRole(), r.getSourceMultiplicity(),
+                "none", false);
+        extremoDeConector(x, "target", destino, localDestino, asociativa, r.getTargetRole(), r.getTargetMultiplicity(),
+                k == RelationKind.COMPOSITION ? "composite" : k == RelationKind.AGGREGATION ? "shared" : "none", true);
+        x.vacio("model", "ea_localid", String.valueOf(localConector));
+        x.vacio("properties", "ea_type", tipoEa, "direction", "Source -> Destination");
+        if (asociativa) {
+            x.vacio("modifiers", "isRoot", "false", "isLeaf", "false");
+            x.vacio("parameterSubstitutions");
+            x.vacio("documentation");
+            x.vacio("appearance", "linemode", "3", "linecolor", "-1", "linewidth", "0", "seqno", "0",
+                    "headStyle", "0", "lineStyle", "0");
+            x.vacio("labels", "mt", r.getName());
+            x.vacio("extendedProperties", "virtualInheritance", "0");
+            x.vacio("style");
+        }
+        x.vacio("xrefs");
+        x.vacio("tags");
+        x.cerrar("connector");
+    }
+
+    private void extremoDeConector(Xml x, String lado, UmlClass c, int localId, boolean asociativa, String rol,
+                                   String multiplicidad, String agregacion, boolean navegable) {
         x.abrir(lado, "xmi:idref", id("c", c.getId()));
-        x.vacio("model", "type", metaclase(c, List.of()).substring("uml:".length()), "name", c.getName());
-        x.vacio("role", "visibility", "Public", "targetScope", "instance");
-        x.vacio("type", "aggregation", "none", "containment", "Unspecified");
+        x.vacio("model", "ea_localid", String.valueOf(localId), "type",
+                metaclase(c, List.of()).substring("uml:".length()), "name", c.getName());
+        x.vacio("role", "name", asociativa && rol != null && !rol.isBlank() ? rol : null, "visibility", "Public",
+                "targetScope", "instance");
+        x.vacio("type", "multiplicity", asociativa && multiplicidad != null && !multiplicidad.isBlank()
+                ? multiplicidad : null, "aggregation", agregacion, "containment", "Unspecified");
+        if (asociativa) {
+            x.vacio("constraints");
+            x.vacio("modifiers", "isOrdered", "false", "changeable", "none", "isNavigable",
+                    navegable ? "true" : "false");
+            x.vacio("style", "value", "Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable="
+                    + (navegable ? "Navigable" : "Non-Navigable") + ";");
+            x.vacio("documentation");
+            x.vacio("xrefs");
+            x.vacio("tags");
+        }
         x.cerrar(lado);
     }
 

@@ -130,7 +130,9 @@ class EscritorXmiInterfazTest {
                 l.setHeight(60);
                 layout.add(l);
             }
-            return EscritorXmi.exportar(clases, atributos, metodos, relaciones, layout, perfil);
+            // Reloj fijo: EA escribe fechas `created`/`modified` y el archivo tiene que ser reproducible.
+            return EscritorXmi.exportar(clases, atributos, metodos, relaciones, layout, perfil,
+                    java.time.Clock.fixed(java.time.Instant.parse("2026-11-10T12:00:00Z"), java.time.ZoneOffset.UTC));
         }
     }
 
@@ -270,6 +272,7 @@ class EscritorXmiInterfazTest {
     }
 
     /** Atributos que son referencias (valor = uno o varios xmi:id). `type` solo cuando es atributo de un extremo, atributo o parametro. */
+    // `xmi:id` de los tipos primitivos de EA vive en `primitivetypes` (dentro de la Extension): se cuenta como definido.
     private static final Set<String> REFERENCIAS = Set.of("xmi:idref", "client", "supplier", "general", "contract",
             "memberEnd", "navigableOwnedEnd", "association", "subject", "package", "owner");
     private static final Set<String> CON_TYPE_DE_REFERENCIA = Set.of("ownedAttribute", "ownedEnd", "ownedParameter");
@@ -285,7 +288,7 @@ class EscritorXmiInterfazTest {
                         || (nombre.equals("type") && CON_TYPE_DE_REFERENCIA.contains(e.getTagName()));
                 if (!esRef) continue;
                 for (String valor : e.getAttribute(nombre).trim().split("\\s+")) {
-                    if (valor.isEmpty() || esExterna(valor)) continue;
+                    if (valor.isEmpty()) continue;
                     if (!ids.contains(valor)) {
                         rotas.add("<" + e.getTagName() + " " + nombre + "=\"" + valor + "\"> no existe como xmi:id");
                     }
@@ -295,10 +298,7 @@ class EscritorXmiInterfazTest {
         return rotas;
     }
 
-    /** Tipos de EA que no se definen en el archivo (`EAnone_*`, `EAJava_*`): se resuelven por nombre. */
-    private static boolean esExterna(String valor) {
-        return valor.startsWith("EAnone_") || valor.startsWith("EAJava_");
-    }
+    // Sin excepciones: un tipo `EAJava_x` TIENE que estar definido (EA 16.1 descarta los que no lo estan).
 
     private record NamedNodeMapView(Element e) {
         List<String> nombres() {

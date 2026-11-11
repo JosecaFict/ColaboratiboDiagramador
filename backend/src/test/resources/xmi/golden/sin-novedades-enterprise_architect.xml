@@ -7,31 +7,29 @@
     <packagedElement xmi:type="uml:Package" xmi:id="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" name="ColabModel" visibility="public">
       <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000001" name="Persona" visibility="public" isAbstract="true">
         <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000001" name="nombre" visibility="private">
-          <type xmi:idref="EAnone_string"/>
           <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000001_LO" value="0"/>
           <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000001_UP" value="1"/>
+          <type xmi:idref="EAJava_string"/>
         </ownedAttribute>
       </packagedElement>
       <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000002" name="Cliente" visibility="public" isAbstract="false">
         <generalization xmi:type="uml:Generalization" xmi:id="EAID_F0000000_0000_4000_8000_000000000001" general="EAID_C0000000_0000_4000_8000_000000000001"/>
         <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000002" name="codigo" visibility="private" isID="true">
-          <type xmi:idref="EAnone_int"/>
           <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000002_LO" value="1"/>
           <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000002_UP" value="1"/>
+          <type xmi:idref="EAJava_int"/>
         </ownedAttribute>
       </packagedElement>
       <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000003" name="Pedido" visibility="public" isAbstract="false">
         <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000003" name="total" visibility="private">
-          <type xmi:idref="EAnone_decimal"/>
           <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000003_LO" value="0"/>
           <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000003_UP" value="1"/>
+          <type xmi:idref="EAJava_decimal"/>
         </ownedAttribute>
         <ownedOperation xmi:type="uml:Operation" xmi:id="EAID_E0000000_0000_4000_8000_000000000001" name="calcular" visibility="public">
-          <ownedParameter xmi:type="uml:Parameter" xmi:id="EAID_E0000000_0000_4000_8000_000000000001_P0" name="descuento" direction="in">
-            <type xmi:idref="EAnone_decimal"/>
+          <ownedParameter xmi:type="uml:Parameter" xmi:id="EAID_E0000000_0000_4000_8000_000000000001_P0" name="descuento" direction="in" type="EAJava_decimal">
           </ownedParameter>
-          <ownedParameter xmi:type="uml:Parameter" xmi:id="EAID_E0000000_0000_4000_8000_000000000001_RET" direction="return">
-            <type xmi:idref="EAnone_decimal"/>
+          <ownedParameter xmi:type="uml:Parameter" xmi:id="EAID_E0000000_0000_4000_8000_000000000001_RET" name="return" direction="return" type="EAJava_decimal">
           </ownedParameter>
         </ownedOperation>
       </packagedElement>
@@ -60,9 +58,26 @@
   </uml:Model>
   <xmi:Extension extender="Enterprise Architect" extenderID="6.5">
     <elements>
+      <element xmi:idref="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" xmi:type="uml:Package" name="ColabModel" scope="public">
+        <model package2="EAID_F7050F0E_7962_34C7_A45F_D628950C56A7" package="EAPK_MODELO" tpos="0" ea_localid="1" ea_eleType="package"/>
+        <properties isSpecification="false" sType="Package" nType="0" scope="public"/>
+        <project author="ColabModel" version="1.0" phase="1.0" created="2026-11-10 12:00" modified="2026-11-10 12:00" complexity="1" status="Proposed"/>
+        <code gentype="Java"/>
+        <style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>
+        <tags/>
+        <xrefs/>
+        <extendedProperties tagged="0" package_name="EA_Model"/>
+        <packageproperties version="1.0"/>
+        <paths/>
+        <times created="2026-11-10 12:00" modified="2026-11-10 12:00"/>
+        <flags iscontrolled="0" isprotected="0" usedtd="0" logxml="0"/>
+      </element>
       <element xmi:idref="EAID_C0000000_0000_4000_8000_000000000001" xmi:type="uml:Class" name="Persona" scope="public">
-        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" ea_eleType="element"/>
+        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" tpos="0" ea_localid="2" ea_eleType="element"/>
         <properties isSpecification="false" sType="Class" nType="0" scope="public" isAbstract="true"/>
+        <project author="ColabModel" version="1.0" phase="1.0" created="2026-11-10 12:00" modified="2026-11-10 12:00" complexity="1" status="Proposed"/>
+        <code gentype="Java"/>
+        <extendedProperties tagged="0" package_name="ColabModel"/>
         <attributes>
           <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000001" name="nombre" scope="Private">
             <properties type="string" derived="0" collection="false" changeability="changeable"/>
@@ -71,8 +86,11 @@
         </attributes>
       </element>
       <element xmi:idref="EAID_C0000000_0000_4000_8000_000000000002" xmi:type="uml:Class" name="Cliente" scope="public">
-        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" ea_eleType="element"/>
+        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" tpos="0" ea_localid="3" ea_eleType="element"/>
         <properties isSpecification="false" sType="Class" nType="0" scope="public" isAbstract="false"/>
+        <project author="ColabModel" version="1.0" phase="1.0" created="2026-11-10 12:00" modified="2026-11-10 12:00" complexity="1" status="Proposed"/>
+        <code gentype="Java"/>
+        <extendedProperties tagged="0" package_name="ColabModel"/>
         <attributes>
           <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000002" name="codigo" scope="Private">
             <properties type="int" derived="0" collection="false" changeability="changeable"/>
@@ -81,8 +99,11 @@
         </attributes>
       </element>
       <element xmi:idref="EAID_C0000000_0000_4000_8000_000000000003" xmi:type="uml:Class" name="Pedido" scope="public">
-        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" ea_eleType="element"/>
+        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" tpos="0" ea_localid="4" ea_eleType="element"/>
         <properties isSpecification="false" sType="Class" nType="0" scope="public" isAbstract="false"/>
+        <project author="ColabModel" version="1.0" phase="1.0" created="2026-11-10 12:00" modified="2026-11-10 12:00" complexity="1" status="Proposed"/>
+        <code gentype="Java"/>
+        <extendedProperties tagged="0" package_name="ColabModel"/>
         <attributes>
           <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000003" name="total" scope="Private">
             <properties type="decimal" derived="0" collection="false" changeability="changeable"/>
@@ -91,14 +112,140 @@
         </attributes>
       </element>
     </elements>
+    <connectors>
+      <connector xmi:idref="EAID_F0000000_0000_4000_8000_000000000001">
+        <source xmi:idref="EAID_C0000000_0000_4000_8000_000000000002">
+          <model ea_localid="3" type="Class" name="Cliente"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type aggregation="none" containment="Unspecified"/>
+        </source>
+        <target xmi:idref="EAID_C0000000_0000_4000_8000_000000000001">
+          <model ea_localid="2" type="Class" name="Persona"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type aggregation="none" containment="Unspecified"/>
+        </target>
+        <model ea_localid="1"/>
+        <properties ea_type="Generalization" direction="Source -&gt; Destination"/>
+        <xrefs/>
+        <tags/>
+      </connector>
+      <connector xmi:idref="EAID_F0000000_0000_4000_8000_000000000002" name="hace">
+        <source xmi:idref="EAID_C0000000_0000_4000_8000_000000000003">
+          <model ea_localid="4" type="Class" name="Pedido"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type multiplicity="0..*" aggregation="none" containment="Unspecified"/>
+          <constraints/>
+          <modifiers isOrdered="false" changeable="none" isNavigable="false"/>
+          <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Non-Navigable;"/>
+          <documentation/>
+          <xrefs/>
+          <tags/>
+        </source>
+        <target xmi:idref="EAID_C0000000_0000_4000_8000_000000000002">
+          <model ea_localid="3" type="Class" name="Cliente"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type multiplicity="1" aggregation="none" containment="Unspecified"/>
+          <constraints/>
+          <modifiers isOrdered="false" changeable="none" isNavigable="true"/>
+          <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Navigable;"/>
+          <documentation/>
+          <xrefs/>
+          <tags/>
+        </target>
+        <model ea_localid="2"/>
+        <properties ea_type="Association" direction="Source -&gt; Destination"/>
+        <modifiers isRoot="false" isLeaf="false"/>
+        <parameterSubstitutions/>
+        <documentation/>
+        <appearance linemode="3" linecolor="-1" linewidth="0" seqno="0" headStyle="0" lineStyle="0"/>
+        <labels mt="hace"/>
+        <extendedProperties virtualInheritance="0"/>
+        <style/>
+        <xrefs/>
+        <tags/>
+      </connector>
+      <connector xmi:idref="EAID_F0000000_0000_4000_8000_000000000003">
+        <source xmi:idref="EAID_C0000000_0000_4000_8000_000000000003">
+          <model ea_localid="4" type="Class" name="Pedido"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type multiplicity="0..*" aggregation="none" containment="Unspecified"/>
+          <constraints/>
+          <modifiers isOrdered="false" changeable="none" isNavigable="false"/>
+          <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Non-Navigable;"/>
+          <documentation/>
+          <xrefs/>
+          <tags/>
+        </source>
+        <target xmi:idref="EAID_C0000000_0000_4000_8000_000000000002">
+          <model ea_localid="3" type="Class" name="Cliente"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type multiplicity="1" aggregation="composite" containment="Unspecified"/>
+          <constraints/>
+          <modifiers isOrdered="false" changeable="none" isNavigable="true"/>
+          <style value="Union=0;Derived=0;AllowDuplicates=0;Owned=0;Navigable=Navigable;"/>
+          <documentation/>
+          <xrefs/>
+          <tags/>
+        </target>
+        <model ea_localid="3"/>
+        <properties ea_type="Association" direction="Source -&gt; Destination"/>
+        <modifiers isRoot="false" isLeaf="false"/>
+        <parameterSubstitutions/>
+        <documentation/>
+        <appearance linemode="3" linecolor="-1" linewidth="0" seqno="0" headStyle="0" lineStyle="0"/>
+        <labels/>
+        <extendedProperties virtualInheritance="0"/>
+        <style/>
+        <xrefs/>
+        <tags/>
+      </connector>
+      <connector xmi:idref="EAID_F0000000_0000_4000_8000_000000000004">
+        <source xmi:idref="EAID_C0000000_0000_4000_8000_000000000003">
+          <model ea_localid="4" type="Class" name="Pedido"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type aggregation="none" containment="Unspecified"/>
+        </source>
+        <target xmi:idref="EAID_C0000000_0000_4000_8000_000000000001">
+          <model ea_localid="2" type="Class" name="Persona"/>
+          <role visibility="Public" targetScope="instance"/>
+          <type aggregation="none" containment="Unspecified"/>
+        </target>
+        <model ea_localid="4"/>
+        <properties ea_type="Dependency" direction="Source -&gt; Destination"/>
+        <xrefs/>
+        <tags/>
+      </connector>
+    </connectors>
+    <primitivetypes>
+      <packagedElement xmi:type="uml:Package" xmi:id="EAPrimitiveTypesPackage" name="EA_PrimitiveTypes_Package" visibility="public">
+        <packagedElement xmi:type="uml:Package" xmi:id="EAJavaTypesPackage" name="EA_Java_Types_Package" visibility="public">
+          <packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_string" name="string" visibility="public"/>
+          <packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_int" name="int" visibility="public"/>
+          <packagedElement xmi:type="uml:PrimitiveType" xmi:id="EAJava_decimal" name="decimal" visibility="public"/>
+        </packagedElement>
+      </packagedElement>
+    </primitivetypes>
+    <profiles/>
     <diagrams>
       <diagram xmi:id="EAID_3DBB54A5_6BB1_3E72_8623_EF27CD620D26">
         <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" localID="1" owner="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7"/>
         <properties name="Diagrama de clases" type="Logical"/>
+        <project author="ColabModel" version="1.0" created="2026-11-10 12:00" modified="2026-11-10 12:00"/>
+        <style1 value="ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;Locked=0;Border=1;HighlightForeign=1;PackageContents=1;SequenceNotes=0;ScalePrintImage=0;PPgs.cx=0;PPgs.cy=0;DocSize.cx=850;DocSize.cy=1098;ShowDetails=0;Orientation=P;Zoom=100;ShowTags=0;OpParams=1;VisibleAttributeDetail=0;ShowOpRetType=1;ShowIcons=1;CollabNums=0;HideProps=0;ShowReqs=0;ShowCons=0;PaperSize=1;HideParents=0;UseAlias=0;HideAtts=0;HideOps=0;HideStereo=0;HideElemStereo=0;ShowTests=0;ShowMaint=0;ConnectorNotation=UML 2.1;ExplicitNavigability=0;ShowShape=1;AllDockable=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;ShowNotes=0;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;"/>
+        <style2 value="ExcludeRTF=0;DocAll=0;HideQuals=0;AttPkg=1;ShowTests=0;ShowMaint=0;SuppressFOC=1;MatrixActive=0;SwimlanesActive=1;KanbanActive=0;MatrixLineWidth=1;MatrixLineClr=0;MatrixLocked=0;TConnectorNotation=UML 2.1;TExplicitNavigability=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;MDGDgm=;STBLDgm=;ShowNotes=0;VisibleAttributeDetail=0;ShowOpRetType=1;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;SuppressedCompartments=;Theme=:119;SaveTag=FB9A30B1;"/>
+        <swimlanes value="locked=false;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-13,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;"/>
+        <matrixitems value="locked=false;matrixactive=false;swimlanesactive=true;kanbanactive=false;width=1;clrLine=0;"/>
+        <extendedProperties/>
+        <persistentstyle value="DGS=On=0:CNT=8:W=120:H=40:SG=0:SGH=0:AEB=0:;AR=0;DCL=0;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-13,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-13,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-13,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-13,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;Swimlanes=locked=false;orientation=0;width=0;inbar=false;names=false;color=-1;bold=false;fcol=0;tcol=-1;ofCol=-1;ufCol=-1;hl=1;ufh=0;hh=0;cls=0;bw=0;hli=0;bro=0;SwimlaneFont=lfh:-13,lfw:0,lfi:0,lfu:0,lfs:0,lfface:Calibri,lfe:0,lfo:0,lfchar:1,lfop:0,lfcp:0,lfq:0,lfpf=0,lfWidth=0;;"/>
+        <xrefs/>
         <elements>
-          <element geometry="Left=40;Top=40;Right=210;Bottom=96;" subject="EAID_C0000000_0000_4000_8000_000000000001" seqno="1"/>
-          <element geometry="Left=290;Top=240;Right=460;Bottom=296;" subject="EAID_C0000000_0000_4000_8000_000000000002" seqno="2"/>
-          <element geometry="Left=540;Top=40;Right=710;Bottom=120;" subject="EAID_C0000000_0000_4000_8000_000000000003" seqno="3"/>
+          <element geometry="Left=40;Top=40;Right=210;Bottom=96;" subject="EAID_C0000000_0000_4000_8000_000000000001" seqno="1" style="DUID=C0000000;NSL=0;BCol=-1;BFol=-1;LCol=-1;LWth=-1;fontsz=0;bold=0;black=0;italic=0;ul=0;charset=0;pitch=0;"/>
+          <element geometry="Left=290;Top=240;Right=460;Bottom=296;" subject="EAID_C0000000_0000_4000_8000_000000000002" seqno="2" style="DUID=C0000000;NSL=0;BCol=-1;BFol=-1;LCol=-1;LWth=-1;fontsz=0;bold=0;black=0;italic=0;ul=0;charset=0;pitch=0;"/>
+          <element geometry="Left=540;Top=40;Right=710;Bottom=120;" subject="EAID_C0000000_0000_4000_8000_000000000003" seqno="3" style="DUID=C0000000;NSL=0;BCol=-1;BFol=-1;LCol=-1;LWth=-1;fontsz=0;bold=0;black=0;italic=0;ul=0;charset=0;pitch=0;"/>
+          <element geometry="EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;" subject="EAID_F0000000_0000_4000_8000_000000000001" style="Mode=3;EOID=C0000000;SOID=C0000000;Color=-1;LWidth=0;Hidden=0;"/>
+          <element geometry="EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;" subject="EAID_F0000000_0000_4000_8000_000000000002" style="Mode=3;EOID=C0000000;SOID=C0000000;Color=-1;LWidth=0;Hidden=0;"/>
+          <element geometry="EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;" subject="EAID_F0000000_0000_4000_8000_000000000003" style="Mode=3;EOID=C0000000;SOID=C0000000;Color=-1;LWidth=0;Hidden=0;"/>
+          <element geometry="EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;" subject="EAID_F0000000_0000_4000_8000_000000000004" style="Mode=3;EOID=C0000000;SOID=C0000000;Color=-1;LWidth=0;Hidden=0;"/>
         </elements>
       </diagram>
     </diagrams>
