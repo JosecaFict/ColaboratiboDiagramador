@@ -79,7 +79,8 @@ public class LectorXmi implements LectorDeModelo {
     /** El estado de UNA lectura. */
     private static final class Lectura {
 
-        private static final Set<String> CLASIFICADORES = Set.of("Class", "AssociationClass", "Enumeration", "DataType");
+        private static final Set<String> CLASIFICADORES = Set.of("Class", "AssociationClass", "Interface", "Enumeration",
+                "DataType");
         private static final Set<String> FRONTERAS = Set.of("Class", "AssociationClass", "Enumeration", "DataType",
                 "Interface", "Association", "Package", "Model", "Component", "Signal", "PrimitiveType", "Actor",
                 "UseCase", "StateMachine", "Activity", "Collaboration", "Interaction", "Node", "Artifact");
@@ -128,7 +129,6 @@ public class LectorXmi implements LectorDeModelo {
          */
         private final Map<Nodo, Map<String, ModeloLeido.Posicion>> dibujos = new LinkedHashMap<>();
         /** Las interfaces que realiza cada clase (por id de clase), para copiarle sus operaciones. */
-        private final Map<String, List<Nodo>> interfacesDe = new HashMap<>();
 
         Lectura(Nodo raiz, List<String> advertencias) {
             this.raiz = raiz;
@@ -461,15 +461,6 @@ public class LectorXmi implements LectorDeModelo {
 
             List<Enlace> enlaces = enlaces();
             Set<String> idsDeClase = clasificadores.stream().map(Nodo::id).collect(Collectors.toSet());
-            for (Enlace e : enlaces) {
-                if (!e.tipo.equals("Dependency") || !esRealizacion(e)) continue;
-                Nodo destino = porId.get(e.b);
-                if (destino != null && destino.es("Interface") && idsDeClase.contains(e.a)) {
-                    interfacesDe.computeIfAbsent(e.a, k -> new ArrayList<>()).add(destino);
-                    e.consumido = true;
-                }
-            }
-
             // --- UML y entidades ERD
             Map<String, List<ModeloLeido.AtributoLeido>> extrasErd = atributosDeErd(atributosErd, enlaces);
             for (Nodo c : clasificadores) {
@@ -494,8 +485,11 @@ public class LectorXmi implements LectorDeModelo {
             }
             for (Nodo r : relacionesErd) aislado(r, () -> relacionErd(r, enlaces, idsDeClase, extrasErd, clases, relaciones));
 
+            Set<String> realizaciones = new HashSet<>();
             for (Enlace e : enlaces) {
                 if (e.consumido || !idsDeClase.contains(e.a) || !idsDeClase.contains(e.b)) continue;
+                // El mismo par puede venir como uml:Realization y como conector de EA: una sola relacion.
+                if (e.tipo.equals("Dependency") && esRealizacion(e) && !realizaciones.add(e.a + ">" + e.b)) continue;
                 if (e.nodo.es("AssociationClass") && idsDeClase.contains(e.nodo.id())) {
                     aislado(e.nodo, () -> reificar(e, relaciones));
                 } else {
@@ -551,7 +545,8 @@ public class LectorXmi implements LectorDeModelo {
             }
 
             String estereotipo = null;
-            if (c.es("DataType") || tieneEst(c, "embeddable", "valueobject")) {
+            if (esInterfaz(c)) estereotipo = "interface";   // opcion A del contrato v1: la interfaz es una clase con este estereotipo
+            else if (c.es("DataType") || tieneEst(c, "embeddable", "valueobject")) {
                 estereotipo = "embeddable";
                 if (c.es("DataType")) {
                     advertencias.add(nombre + " es un DataType de UML (un valor sin identidad): se leyo como"
@@ -585,7 +580,7 @@ public class LectorXmi implements LectorDeModelo {
                         valorPorDefectoDe(p)));
             }
             return new ModeloLeido.ClaseLeida(c.id(), nombre, estereotipo, abstracta, List.copyOf(atributos),
-                    conOperacionesDeSusInterfaces(c, nombre, metodosDe(c)));
+                    metodosDe(c));
         }
 
         private static final Map<String, String> VISIBILIDADES = Map.of("public", "PUBLIC", "private", "PRIVATE",
@@ -671,43 +666,8 @@ public class LectorXmi implements LectorDeModelo {
             return false;
         }
 
-        /**
-         * ColabModel no modela interfaces, pero lo que una interfaz promete lo
-         * tiene que cumplir la clase que la realiza: sus operaciones pasan a ser
-         * metodos de esa clase (REGLA 6: el Service generado las emite como stub).
-         */
-        private List<ModeloLeido.MetodoLeido> conOperacionesDeSusInterfaces(Nodo c, String nombre,
-                                                                         List<ModeloLeido.MetodoLeido> metodos) {
-            List<Nodo> interfaces = interfacesDe.getOrDefault(c.id(), List.of());
-            if (interfaces.isEmpty()) return metodos;
-            List<ModeloLeido.MetodoLeido> r = new ArrayList<>(metodos);
-            // Por FIRMA (nombre + tipos de los parametros), como el backend: una
-            // sobrecarga pagar(int) / pagar(String) son dos metodos, no uno repetido.
-            Set<String> tiene = new HashSet<>();
-            metodos.forEach(m -> tiene.add(firma(m)));
-            for (Nodo i : interfaces) {
-                List<ModeloLeido.MetodoLeido> prometidas = metodosDe(i);
-                if (prometidas.isEmpty()) continue;   // nada que copiar: el aviso de la interfaz alcanza
-                List<String> agregadas = new ArrayList<>();
-                for (ModeloLeido.MetodoLeido m : prometidas) {
-                    if (tiene.add(firma(m))) {
-                        r.add(m);
-                        agregadas.add(firma(m));
-                    }
-                }
-                advertencias.add(nombre + " realiza la interfaz " + nombreDe(i) + (agregadas.isEmpty()
-                        ? ": ya tenia sus operaciones."
-                        : ": se le agregaron sus operaciones (" + String.join(", ", agregadas) + ") como metodos,"
-                          + " porque ColabModel no modela interfaces."));
-            }
-            return r;
-        }
-
-        /** "pagar(int, string)": la misma identidad que usa el backend para sobrecargar. */
-        private static String firma(ModeloLeido.MetodoLeido m) {
-            return m.nombre().toLowerCase(Locale.ROOT) + "(" + m.parametros().stream()
-                    .map(p -> p.tipo() == null ? "string" : p.tipo().toLowerCase(Locale.ROOT))
-                    .collect(Collectors.joining(", ")) + ")";
+        private boolean esInterfaz(Nodo c) {
+            return c.es("Interface") || tieneEst(c, "interface");
         }
 
         private static ModeloLeido.AtributoLeido atributoSimple(String nombre) {
@@ -1230,6 +1190,19 @@ public class LectorXmi implements LectorDeModelo {
                         false);
             }
             if (e.tipo.equals("Dependency")) {
+                // Una realizacion va de la clase a la interfaz (V1 del contrato v1). Si el archivo la dibuja
+                // al reves o apunta a algo que no es interfaz, no se inventa: entra como dependencia, con aviso.
+                if (esRealizacion(e)) {
+                    Nodo cliente = porId.get(e.a);
+                    Nodo proveedor = porId.get(e.b);
+                    if (proveedor != null && esInterfaz(proveedor) && cliente != null && !esInterfaz(cliente)
+                            && !cliente.es("Enumeration") && !tieneEst(cliente, "enumeration", "enum")) {
+                        return new ModeloLeido.RelacionLeida(e.a, e.b, RelationKind.REALIZATION, nombreDe(e.nodo), null,
+                                null, null, null, false);
+                    }
+                    advertencias.add("La realizacion entre " + nombreDe(cliente) + " y " + nombreDe(proveedor)
+                            + " no va de una clase a una interfaz: entra como dependencia.");
+                }
                 return new ModeloLeido.RelacionLeida(e.a, e.b, RelationKind.DEPENDENCY, nombreDe(e.nodo), null, null,
                         null, null, false);
             }
@@ -1530,19 +1503,6 @@ public class LectorXmi implements LectorDeModelo {
         // ============================================================ INFORME
 
         private void reportarLoQueQuedoAfuera(List<Enlace> enlaces, Set<String> idsDeClase, int vistas) {
-            List<String> interfaces = new ArrayList<>();
-            for (Nodo d : definiciones) {
-                if (!d.es("Interface") || consumidos.contains(d.id())) continue;
-                consumidos.add(d.id());
-                if (nombreDe(d) != null) interfaces.add(nombreDe(d));
-            }
-            if (!interfaces.isEmpty()) {
-                boolean realizadas = !interfacesDe.isEmpty();
-                advertencias.add((interfaces.size() == 1 ? "La interfaz " + interfaces.get(0) + " no entra como clase"
-                        : "Las interfaces " + String.join(", ", interfaces) + " no entran como clases")
-                        + ": ColabModel no modela interfaces"
-                        + (realizadas ? " (sus operaciones se copiaron a las clases que las realizan)." : "."));
-            }
             Map<String, Integer> ignorados = new TreeMap<>();
             for (Nodo d : definiciones) {
                 if (consumidos.contains(d.id())) continue;
@@ -1560,8 +1520,8 @@ public class LectorXmi implements LectorDeModelo {
             long dependencias = enlaces.stream().filter(e -> e.tipo.equals("Dependency") && !e.consumido).count();
             if (vistas > 0) advertencias.add(vistas + (vistas == 1 ? " vista («view») no se importa" : " vistas («view») no se importan") + ": no son tablas.");
             if (dependencias > 0) {
-                advertencias.add(dependencias + (dependencias == 1 ? " dependencia o realizacion no genera" : " dependencias o realizaciones no generan")
-                        + " nada en el esquema y no se importan.");
+                advertencias.add(dependencias + (dependencias == 1 ? " dependencia o realizacion no se importa" : " dependencias o realizaciones no se importan")
+                        + ": une una clase con algo que no es una clase ni una interfaz del archivo.");
             }
             if (!ignorados.isEmpty()) {
                 advertencias.add("Quedaron afuera elementos que no son parte de un modelo de datos: "
