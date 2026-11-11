@@ -157,7 +157,7 @@ function firmaDeAtributo(a: UmlAttribute): string {
   const derivado = a.derived ? '/' : ''
   const multiplicidad = a.multivalued ? ' [*]' : a.required ? '' : ' [0..1]'
   const porDefecto = a.defaultValue ? ` = ${a.defaultValue}` : ''
-  const modificadores = a.pk ? ' {id}' : ''
+  const modificadores = (a.pk ? ' {id}' : '') + (a.readOnly ? ' {readOnly}' : '')
   return `${visibilidad} ${derivado}${a.name}: ${a.dataType}`
        + `${multiplicidad}${porDefecto}${modificadores}`
 }
@@ -987,7 +987,8 @@ export function Canvas({
                     className={c.isAbstract ? 'txt-entidad abstracta' : 'txt-entidad'}>{c.name}</text>
               <line x1={l.x} y1={l.y + 28} x2={l.x + l.width} y2={l.y + 28} stroke="var(--secundario)" />
               {c.attributes.map((a, i) => (
-                <text key={a.id} x={l.x + 10} y={l.y + 46 + i * 18} className="txt-attr">
+                <text key={a.id} x={l.x + 10} y={l.y + 46 + i * 18}
+                      className={a.isStatic && !esEnum ? 'txt-attr txt-estatico' : 'txt-attr'}>
                   {/* Un literal de enumeracion no lleva visibilidad ni tipo. */}
                   {esEnum ? a.name : firmaDeAtributo(a)}
                 </text>
@@ -998,7 +999,8 @@ export function Canvas({
                   {c.methods.map((m, i) => {
                     const firma = firmaDeMetodo(m)
                     return (
-                      <text key={m.id} x={l.x + 10} y={yMetodos + 18 + i * 18} className="txt-metodo">
+                      <text key={m.id} x={l.x + 10} y={yMetodos + 18 + i * 18}
+                            className={'txt-metodo' + (m.isStatic ? ' txt-estatico' : '') + (m.isAbstract ? ' abstracta' : '')}>
                         {recortar(firma, l.width)}
                         <title>{firma}</title>
                       </text>

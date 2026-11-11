@@ -1274,6 +1274,7 @@ export default function App({ token, usuario, proyecto, diagrama, rol, alVolver,
                 ordinal: claseSeleccionada.methods.length,
               })}
               onQuitarMetodo={(methodId) => enviar('REMOVE_METHOD', { methodId })}
+              onActualizarMetodo={(methodId, cambios) => enviar('UPDATE_METHOD', { methodId, ...cambios })}
               onBorrarClase={() => {
                 enviar('DELETE_CLASS', { classId: claseSeleccionada.id })
                 seleccionar(null)

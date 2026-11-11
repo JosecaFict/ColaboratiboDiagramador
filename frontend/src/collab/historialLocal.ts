@@ -72,7 +72,7 @@ type Pendiente =
  */
 const EN_SITIO: ReadonlySet<CommandType> = new Set<CommandType>([
   'MOVE_ELEMENT', 'RESIZE_ELEMENT',
-  'RENAME_CLASS', 'UPDATE_ATTRIBUTE', 'UPDATE_RELATION', 'SET_ER_FLAG', 'SET_MODELING_DECISION',
+  'RENAME_CLASS', 'UPDATE_ATTRIBUTE', 'UPDATE_METHOD', 'UPDATE_RELATION', 'SET_ER_FLAG', 'SET_MODELING_DECISION',
 ])
 export const editaEnSitio = (t: CommandType) => EN_SITIO.has(t)
 
@@ -82,8 +82,11 @@ export const editaEnSitio = (t: CommandType) => EN_SITIO.has(t)
  * `esperado` con otra clave no coincidiria nunca.
  */
 const CAMPOS_ATRIBUTO = ['name', 'dataType', 'visibility', 'length', 'pk', 'required', 'unique',
-  'defaultValue', 'ordinal', 'multivalued', 'derived', 'partialKey', 'minValue', 'maxValue'] as const
-const CAMPOS_METODO = ['name', 'returnType', 'visibility'] as const
+  'defaultValue', 'ordinal', 'multivalued', 'derived', 'partialKey', 'isStatic', 'readOnly',
+  'minValue', 'maxValue'] as const
+const CAMPOS_METODO = ['name', 'returnType', 'visibility', 'isStatic', 'isAbstract'] as const
+/** Banderas UML que un snapshot anterior no trae: ausente = false, como las lee el servidor. */
+const BANDERAS_FALSAS = ['isStatic', 'isAbstract', 'readOnly'] as const
 const CAMPOS_RELACION = ['kind', 'name', 'sourceRole', 'targetRole', 'sourceMultiplicity',
   'targetMultiplicity', 'identifying', 'sourceParticipation', 'targetParticipation'] as const
 
@@ -148,7 +151,8 @@ export function entradaDe(
       const encontrado = atributo(p.attributeId)
       if (!encontrado) return null
       const [a, c] = encontrado
-      const { antes, despues } = soloLoCambiado(p, 'attributeId', a as unknown as Record<string, unknown>)
+      const vigente = { ...a, ...Object.fromEntries(BANDERAS_FALSAS.filter((k) => !(k in a)).map((k) => [k, false])) }
+      const { antes, despues } = soloLoCambiado(p, 'attributeId', vigente as unknown as Record<string, unknown>)
       return enSitio(type, `editar ${c.name}.${a.name}`, { attributeId: p.attributeId }, antes, despues)
     }
 
@@ -301,8 +305,15 @@ export function entradaDe(
       }
     }
 
-    // D-15: el cliente web todavia no edita metodos (UPDATE_METHOD); su deshacer lo arma Pedro.
-    case 'UPDATE_METHOD':
+    case 'UPDATE_METHOD': {
+      const encontrado = metodo(p.methodId)
+      if (!encontrado) return null
+      const [m, c] = encontrado
+      const vigente = { ...m, ...Object.fromEntries(BANDERAS_FALSAS.filter((k) => !(k in m)).map((k) => [k, false])) }
+      const { antes, despues } = soloLoCambiado(p, 'methodId', vigente as unknown as Record<string, unknown>)
+      return enSitio(type, `editar ${c.name}.${m.name}()`, { methodId: p.methodId }, antes, despues)
+    }
+
     // Necesita la decision vigente: entradaDeDecision.
     case 'SET_MODELING_DECISION':
     // Confirmar la base deja constancia de que en ESE momento se reviso ESE
@@ -399,6 +410,7 @@ function agregarAtributo(a: UmlAttribute): Paso {
     defaultValue: a.defaultValue ?? null, ordinal: a.ordinal, multivalued: a.multivalued,
     derived: a.derived, partialKey: a.partialKey, parentAttributeId: a.parentAttributeId ?? null,
     minValue: a.minValue ?? null, maxValue: a.maxValue ?? null,
+    ...(a.isStatic ? { isStatic: true } : {}), ...(a.readOnly ? { readOnly: true } : {}),
     esperado: { existe: false },
   } }
 }
@@ -407,6 +419,7 @@ function agregarMetodo(m: UmlMethod): Paso {
   return { type: 'ADD_METHOD', payload: {
     classId: m.classId, methodId: m.id, name: m.name, returnType: m.returnType, params: m.params,
     visibility: m.visibility, ordinal: m.ordinal,
+    ...(m.isStatic ? { isStatic: true } : {}), ...(m.isAbstract ? { isAbstract: true } : {}),
     esperado: { existe: false },
   } }
 }

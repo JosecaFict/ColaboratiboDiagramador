@@ -116,6 +116,12 @@ const CAMPO_DE_ATRIBUTO: Record<string, string> = {
   unique: 'si es único', length: 'el largo', visibility: 'la visibilidad',
   defaultValue: 'el valor por defecto', minValue: 'el mínimo', maxValue: 'el máximo',
   multivalued: 'si es multivaluado', derived: 'si es derivado', partialKey: 'la clave parcial',
+  isStatic: 'si es estático', readOnly: 'si es de solo lectura',
+}
+
+const CAMPO_DE_METODO: Record<string, string> = {
+  name: 'el nombre', returnType: 'el tipo de retorno', visibility: 'la visibilidad', params: 'los parámetros',
+  isStatic: 'si es estático', isAbstract: 'si es abstracto', ordinal: 'el orden',
 }
 
 const CAMPO_DE_RELACION: Record<string, string> = {
@@ -191,6 +197,12 @@ export function describir(op: Pick<AppliedOperation, 'opId' | 'type' | 'origin' 
       return `quitó el atributo ${atributo(p.attributeId)}`
     case 'ADD_METHOD':
       return `agregó el método ${comillas(String(p.name) + '()')} a ${claseO(p.classId)}`
+    case 'UPDATE_METHOD': {
+      const m = indice.metodos.get(String(p.methodId))
+      const campos = camposCambiados(p, CAMPO_DE_METODO)
+      const cual = m ? `método ${comillas(m.nombre + '()')}` : 'método'
+      return campos ? `cambió ${campos} del ${cual}` : `editó el ${cual}`
+    }
     case 'REMOVE_METHOD': {
       const m = indice.metodos.get(String(p.methodId))
       return m ? `quitó el método ${comillas(m.nombre + '()')} de ${claseO(m.claseId)}` : 'quitó un método'
@@ -253,7 +265,7 @@ export function tocaClase(op: Pick<AppliedOperation, 'type' | 'payload'>, claseI
       return p.classId === claseId
     case 'UPDATE_ATTRIBUTE': case 'REMOVE_ATTRIBUTE':
       return de(p.attributeId, indice.atributos)
-    case 'REMOVE_METHOD':
+    case 'UPDATE_METHOD': case 'REMOVE_METHOD':
       return de(p.methodId, indice.metodos)
     case 'CREATE_RELATION':
       return p.sourceClassId === claseId || p.targetClassId === claseId
