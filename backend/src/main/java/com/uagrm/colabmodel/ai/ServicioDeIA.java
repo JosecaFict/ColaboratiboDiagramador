@@ -147,6 +147,8 @@ public class ServicioDeIA {
             case MODIFICAR -> EsquemaDeComandos.herramientas();
             case RECOMENDAR, VERIFICAR -> throw new IllegalArgumentException(
                     "RECOMENDAR no produce una propuesta de cambios; usa el endpoint de recomendaciones");
+            case IMAGEN -> throw new IllegalArgumentException(
+                    "IMAGEN no pasa por ServicioDeIA: lo resuelve ProcesadorDeImagenDelChat");
         };
         // T-09 (Diego): la IA recibe la conversacion del equipo y el pedido se ajusta al contexto del modelo.
         ContextoDeEquipo equipo = memoria != null && quien != null ? memoria.para(diagramId, quien) : null;
