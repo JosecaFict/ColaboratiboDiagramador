@@ -108,6 +108,7 @@ const TIPO_DE_RELACION: Record<RelationKind, string> = {
   COMPOSITION: 'composición',
   GENERALIZATION: 'herencia',
   DEPENDENCY: 'dependencia',
+  REALIZATION: 'realización',
 }
 
 const CAMPO_DE_ATRIBUTO: Record<string, string> = {

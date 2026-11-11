@@ -47,6 +47,12 @@ class UmlClass {
   final List<UmlAttribute> attributes;
   final List<UmlMethod> methods;
 
+  /// Estereotipo de una interfaz UML (D-15, opcion A). Espejo de `Interfaces.ESTEREOTIPO` en el backend.
+  static const estereotipoInterfaz = 'interface';
+
+  /// Una interfaz es un contrato, no una entidad. Se compara sin distinguir mayusculas ni espacios.
+  bool get esInterfaz => (stereotype ?? '').trim().toLowerCase() == estereotipoInterfaz;
+
   const UmlClass({
     required this.id,
     required this.diagramId,

@@ -102,6 +102,8 @@ export interface LockMessage {
 // ---------------------------------------------------------------- METAMODELO
 export type RelationKind =
   | 'ASSOCIATION' | 'AGGREGATION' | 'COMPOSITION' | 'GENERALIZATION' | 'DEPENDENCY'
+  /** UML 2.5.1 InterfaceRealization: va de la clase a la interfaz que cumple (D-15). */
+  | 'REALIZATION'
 
 export type ErKind = 'STRONG' | 'WEAK' | 'ASSOCIATIVE'
 /** Regla 4: como se mapea una jerarquia. Se fija en la clase raiz. */
@@ -141,6 +143,16 @@ export interface UmlAttribute {
 export const ESTEREOTIPO_ENUM = 'enumeration'
 export const esEnumeracion = (c: { stereotype?: string | null }) =>
   (c.stereotype ?? '').toLowerCase() === ESTEREOTIPO_ENUM
+
+/**
+ * Estereotipo de una interfaz UML (D-15, opcion A). Es un contrato y no una
+ * entidad: no genera tabla. Las clases lo cumplen con una relacion REALIZATION.
+ * Espejo de Interfaces.ESTEREOTIPO en el backend; se compara sin distinguir
+ * mayusculas ni espacios, como alla.
+ */
+export const ESTEREOTIPO_INTERFAZ = 'interface'
+export const esInterfaz = (c: { stereotype?: string | null }) =>
+  (c.stereotype ?? '').trim().toLowerCase() === ESTEREOTIPO_INTERFAZ
 
 /**
  * Regla 5: clase de VALOR. No tiene tabla ni identidad; vive en las columnas de
