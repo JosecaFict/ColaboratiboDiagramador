@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuid } from 'uuid'
 import type { EstadoModelo } from '../canvas/applyOperation'
+import type { CommandType } from '../contracts/command'
 import type { CambioDelLote } from '../importacion/propuesta'
 import type { ResultadoDeLote } from './esperaDeLotes'
 import { aplicarPropuesta, pedirMarcaDeAplicada } from './aplicacion'
 import { arreglosDirectos, pendienteVigente } from './arreglosDirectos'
 import { inicialDe, mensajeDeFalloDePropuesta, mensajesDeChat, textoTrasFallo, type MensajeDeChat, type PedidoEnCurso } from './chat'
-import { fusionarEntrada, origenDelLote, reconciliarHistorial, type AvisoIA } from './historial'
+import type { ImagenMeta, RecorteDeImagen } from '../contracts/imagenes'
+import { clasificarAviso, fusionarEntrada, marcarImagenEliminada, origenDelLote, reconciliarHistorial, tieneCambiosParaAplicar, type AvisoIA } from './historial'
+import { agregarImagen, borrarImagen, listarImagenes, marcarEliminadaEnGaleria, pedirBytesDeImagen, subirImagen, validarArchivoDeImagen, validarReproceso, type EstadoDeGaleria } from './imagenes'
+import { comandosDeLectura, resumenDeLectura, SIN_CORRECCIONES, type CorreccionesDeLectura } from './lecturaDeImagen'
 import { revisarParaGenerar, type AmbiguedadPendiente, type ResumenCodegen } from './listoParaGenerar'
 import { elegidas, ordenarRecomendaciones, pendientesComoRecomendaciones, seleccionInicial, textoDeRecomendaciones } from './recomendaciones'
 import type { EntradaHistorialIA, EstadoIA, ModoIA, PropuestaIA, RecomendacionesIA } from './tipos'
@@ -23,7 +27,7 @@ import { AVISO_SIN_VOZ, idiomaDeDictado, mensajeDeErrorDeVoz, reconocedorDisponi
  */
 
 export interface OpcionesDeLoteIA {
-  origin: 'TEXT' | 'VOICE'
+  origin: 'TEXT' | 'VOICE' | 'IMAGE'
   /** El turno del historial que aplica el lote: viaja en el payload como `interaccionIA`. */
   interaccionId?: string
 }
@@ -51,6 +55,8 @@ export function textoDeRespuesta(propuesta: PropuestaIA, modo: ModoIA) {
     ? `Preparé ${propuesta.aceptados.length} cambio${propuesta.aceptados.length === 1 ? '' : 's'} para revisar.`
     : 'No encontré cambios aplicables para este pedido.'
   const respuesta = propuesta.notaDelModelo?.trim()
+  // Un turno IMAGEN no trae comandos: trae una lectura. Si el servidor no mando resumen, se arma uno.
+  if (propuesta.lecturaDeImagen) return respuesta || resumenDeLectura(propuesta.lecturaDeImagen)
   const esperabaCambios = (modo === 'DISENAR' || modo === 'MODIFICAR') && !propuesta.aceptados.length
   return esperabaCambios
     ? `La IA respondió, pero no generó cambios aplicables. Vuelve a intentarlo con una instrucción más concreta.${respuesta ? `\n\nRespuesta recibida:\n${respuesta}` : ''}`
@@ -101,6 +107,10 @@ export function useAsistenteIA({ diagramId, token, modelo, conectado, usuarioId,
   const [origenPedido, setOrigenPedido] = useState<'TEXT' | 'VOICE'>('TEXT')
   const [dictando, setDictando] = useState(false)
   const [recargas, setRecargas] = useState(0)
+  /** La galeria de imagenes del diagrama (contrato §2.2) y su uso frente al tope. */
+  const [galeria, setGaleria] = useState<EstadoDeGaleria>({ imagenes: [], uso: null })
+  /** Correcciones del usuario sobre la lectura de cada turno IMAGEN (por id de turno). */
+  const [correcciones, setCorrecciones] = useState<Record<string, CorreccionesDeLectura>>({})
   const [seleccionRec, setSeleccionRec] = useState<Set<number>>(new Set())
   const [panel, setPanel] = useState<'cambios' | 'recomendaciones'>('cambios')
   const [accionesEditadas, setAccionesEditadas] = useState<Record<number, string>>({})
@@ -159,10 +169,29 @@ export function useAsistenteIA({ diagramId, token, modelo, conectado, usuarioId,
     return () => { vivo = false }
   }, [diagramId, token, recargas])
 
+  // La galeria se pide al abrir el diagrama y al reconectar (durante el corte pudieron perderse avisos).
+  useEffect(() => {
+    let vivo = true
+    listarImagenes(diagramId, token)
+      .then((g) => { if (vivo) setGaleria({ imagenes: g.imagenes, uso: g.uso }) })
+      .catch(() => undefined)
+    return () => { vivo = false }
+  }, [diagramId, token, recargas])
+
   // Sincronia entre pestañas y usuarios (T-04): lo que otro pide o aplica llega por el topico.
+  // La guarda del §6 va primero: un aviso de tipo desconocido o sin `entrada` se ignora.
   useEffect(() => {
     if (!suscribirAvisos) return
-    return suscribirAvisos((aviso) => setEntradas((actuales) => fusionarEntrada(actuales, aviso.entrada)))
+    return suscribirAvisos((aviso) => {
+      const a = clasificarAviso(aviso)
+      if (!a) return
+      if (a.clase === 'turno') setEntradas((actuales) => fusionarEntrada(actuales, a.entrada))
+      else if (a.clase === 'imagen-subida') setGaleria((g) => agregarImagen(g, a.imagen))
+      else {
+        setGaleria((g) => marcarEliminadaEnGaleria(g, a.imagen))
+        setEntradas((actuales) => marcarImagenEliminada(actuales, a.imagen))
+      }
+    })
   }, [suscribirAvisos])
 
   // La conversacion: el historial del equipo y, intercalados por fecha, los mensajes locales.
@@ -174,14 +203,15 @@ export function useAsistenteIA({ diagramId, token, modelo, conectado, usuarioId,
       ...locales.map((l, i) => ({ m: l.mensaje, t: l.creadoEn, i: delHistorial.length + i })),
     ].sort((a, b) => a.t - b.t || a.i - b.i).map((x) => x.m)
     if (pendiente) todos.push({ id: pendiente.id, autor: 'usuario', propio: true, nombre: usuario, etiqueta: `${usuario} · vos`,
-      inicial: inicialDe(usuario), texto: pendiente.texto, modo: pendiente.modo, enviando: true })
+      inicial: inicialDe(usuario), texto: pendiente.texto, modo: pendiente.modo, enviando: true,
+      ...(pendiente.imagen ? { imagen: pendiente.imagen } : {}) })
     return todos
   }, [entradas, locales, pendiente, usuarioId, usuario])
 
   /** La propuesta que se muestra para aplicar: la mas reciente con cambios, del historial o local. */
   const ultima = useMemo(() => {
     let mejor: { propuesta: PropuestaIA; modo: ModoIA; entrada?: EntradaHistorialIA; t: number } | undefined
-    for (const e of entradas) if (e.propuesta.aceptados.length && (!mejor || tiempo(e.creadaEn) >= mejor.t))
+    for (const e of entradas) if (tieneCambiosParaAplicar(e.propuesta) && (!mejor || tiempo(e.creadaEn) >= mejor.t))
       mejor = { propuesta: e.propuesta, modo: e.modo, entrada: e, t: tiempo(e.creadaEn) }
     for (const l of locales) if (l.mensaje.propuesta?.aceptados.length && (!mejor || l.creadoEn >= mejor.t))
       mejor = { propuesta: l.mensaje.propuesta, modo: l.mensaje.modo, t: l.creadoEn }
@@ -231,11 +261,11 @@ export function useAsistenteIA({ diagramId, token, modelo, conectado, usuarioId,
   }
 
   /** Un turno nuevo del historial: el aviso del topico trae la misma entrada y la que llegue segunda la reemplaza. */
-  const registrarTurno = (prompt: string, modoTurno: ModoIA, propuesta: PropuestaIA) =>
+  const registrarTurno = (prompt: string, modoTurno: ModoIA, propuesta: PropuestaIA, imagen?: ImagenMeta) =>
     setEntradas((actuales) => fusionarEntrada(actuales, {
       id: propuesta.interaccionId ?? uuid(), userId: usuarioId, userName: usuario, modo: modoTurno,
       modelo: propuesta.modelo, prompt, respuesta: propuesta.notaDelModelo, propuesta,
-      aplicada: false, creadaEn: new Date().toISOString(),
+      aplicada: false, creadaEn: new Date().toISOString(), ...(imagen ? { imagen } : {}),
     }))
 
   /** Se preelige el arreglo cuando es la unica respuesta o la opcion sugerida; el usuario la revisa antes de aplicar. */
@@ -326,6 +356,68 @@ export function useAsistenteIA({ diagramId, token, modelo, conectado, usuarioId,
       setConsultando(false)
     }
   }
+
+  /**
+   * Leer una imagen (contrato §5.2). Con `archivo` primero se sube (POST /ai/imagenes; si ya estaba,
+   * el servidor devuelve la existente) y despues se pide el turno `modo: IMAGEN`. Con `imagen` ya
+   * guardada ("usar en el chat", reprocesar) solo se pide el turno. El resultado se guarda como un turno
+   * mas del historial; el aviso NUEVA trae la misma entrada y la que llegue segunda la reemplaza.
+   * @returns true si el turno salio; false si hubo un error (ya mostrado).
+   */
+  const leerImagen = async (
+    origen: { archivo: File } | { imagen: ImagenMeta },
+    opciones: { prompt?: string; giroGrados?: number; recorte?: RecorteDeImagen } = {},
+  ): Promise<boolean> => {
+    if (consultando) return false
+    setError(null)
+    const problema = 'archivo' in origen
+      ? validarArchivoDeImagen(origen.archivo)
+      : validarReproceso(origen.imagen, opciones.giroGrados, opciones.recorte)
+    if (problema) { setError(problema); return false }
+    const prompt = opciones.prompt?.trim() ?? ''
+    setConsultando(true)
+    try {
+      const meta = 'archivo' in origen ? await subirImagen(diagramId, token, origen.archivo) : origen.imagen
+      if (!montadoRef.current) return false
+      setGaleria((g) => agregarImagen(g, meta))
+      setPendiente({ id: uuid(), texto: prompt || 'Leer la imagen', modo: 'IMAGEN', imagen: meta })
+      const propuesta = await pedirIA('propuestas', {
+        modo: 'IMAGEN', imagenId: meta.id, prompt: prompt || undefined,
+        giroGrados: opciones.giroGrados, recorte: opciones.recorte,
+      }) as PropuestaIA
+      registrarTurno(prompt || 'Leer la imagen', 'IMAGEN', propuesta, meta)
+      return true
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo leer la imagen.')
+      return false
+    } finally {
+      setPendiente(null)
+      setConsultando(false)
+    }
+  }
+
+  /** Elimina una imagen (solo quien la subio o el OWNER; el servidor decide). Los avisos actualizan a todos. */
+  const eliminarImagen = async (imagen: ImagenMeta) => {
+    setError(null)
+    try {
+      const eliminada = await borrarImagen(diagramId, token, imagen.id)
+      setGaleria((g) => marcarEliminadaEnGaleria(g, eliminada))
+      setEntradas((actuales) => marcarImagenEliminada(actuales, eliminada))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar la imagen.')
+    }
+  }
+
+  /** Corregir una duda (nombre, tipo, descarte) no bloquea aplicar: solo cambia lo que se aplica. */
+  const corregirLectura = (turno: string, cambio: Partial<CorreccionesDeLectura>) =>
+    setCorrecciones((c) => {
+      const previa = c[turno] ?? SIN_CORRECCIONES
+      return { ...c, [turno]: {
+        nombres: { ...previa.nombres, ...cambio.nombres },
+        tipos: { ...previa.tipos, ...cambio.tipos },
+        descartados: { ...previa.descartados, ...cambio.descartados },
+      } }
+    })
 
   /** Las recomendaciones elegidas pasan a una propuesta MODIFICAR; nada se aplica sin confirmar. */
   const convertirRecomendaciones = async () => {
@@ -420,14 +512,21 @@ export function useAsistenteIA({ diagramId, token, modelo, conectado, usuarioId,
     const propuesta = ultimaPropuesta
     const turno = propuesta.interaccionId
     const confirmada = turno ? marcaPendiente[turno] : undefined
-    const comandos = propuesta.aceptados
-      .map((c, i) => ({ c, i }))
-      .filter(({ i }) => seleccion[String(i)] !== false)
-      .map(({ c, i }) => ({ type: c.tipo, payload: ediciones[String(i)] ?? c.payload }))
-    if (!confirmada && !comandos.length) return
+    // Un turno IMAGEN no trae comandos: se arman aqui con traductor.ts a partir de la lectura corregida.
+    const comandos = propuesta.lecturaDeImagen
+      ? comandosDeLectura(propuesta.lecturaDeImagen, turno ? correcciones[turno] : undefined).comandos
+          .map((c) => ({ type: c.type as CommandType, payload: c.payload }))
+      : propuesta.aceptados
+          .map((c, i) => ({ c, i }))
+          .filter(({ i }) => seleccion[String(i)] !== false)
+          .map(({ c, i }) => ({ type: c.tipo, payload: ediciones[String(i)] ?? c.payload }))
+    if (!confirmada && !comandos.length) {
+      if (propuesta.lecturaDeImagen) setError('No queda nada para aplicar: ninguna clase tiene nombre. Escribí el nombre de las clases que quieras agregar.')
+      return
+    }
     setAplicando(claveUltima)
     setError(null)
-    const nombreModo = MODOS.find((m) => m.id === ultima?.modo)?.nombre ?? 'cambios'
+    const nombreModo = ultima?.modo === 'IMAGEN' ? 'Imagen' : MODOS.find((m) => m.id === ultima?.modo)?.nombre ?? 'cambios'
     const resultado = await aplicarPropuesta({
       interaccionId: turno,
       confirmada,
@@ -486,6 +585,8 @@ export function useAsistenteIA({ diagramId, token, modelo, conectado, usuarioId,
     ultimaPropuesta, ultimasRecomendaciones, recomendacionesOrdenadas, opcionesPorRecomendacion, pendientesVigentes,
     enviar, convertirRecomendaciones, corregirPendientes, revisarGeneracion, aplicar, yaAplicada, soloFaltaLaMarca,
     enviandoLote, editar, nombreDeClase, dictar, dictando, vozDisponible, origenPedido,
+    galeria, leerImagen, eliminarImagen, correcciones, corregirLectura, usuarioId,
+    bytesDeImagen: (id: string, miniatura: boolean) => pedirBytesDeImagen(diagramId, token, id, miniatura),
   }
 }
 

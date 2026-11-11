@@ -43,6 +43,7 @@ const INICIALES: Record<ModoIA, string[]> = {
   DISENAR: ['Diseña el núcleo de una biblioteca', 'Propón clases para registrar préstamos'],
   MODIFICAR: ['Agrega una clase Pago relacionada con Pedido', 'Añade fechas de auditoría'],
   RECOMENDAR: [REVISION_SIN_REQUISITO],
+  IMAGEN: [],
 }
 
 export function IconoIA() {
@@ -125,7 +126,7 @@ function ContenidoVistaIA({ asistente, modelo, conectado, puedeEditar, proyectoI
             <div className="ia-avatar" aria-hidden="true">{m.autor === 'usuario' ? m.inicial : <IconoIA/>}</div>
             <div><div className="ia-autor">{m.etiqueta}
               {m.respondeA && <span className="ia-destinatario">{textoDeDestinatario(m.respondeA)}</span>}
-              <span>{MODOS.find((x) => x.id === m.modo)?.nombre}</span>{m.propuesta?.modelo && <span>{m.propuesta.modelo}</span>}</div><p>{m.texto}</p>
+              <span>{m.modo === 'IMAGEN' ? 'Imagen' : MODOS.find((x) => x.id === m.modo)?.nombre}</span>{m.propuesta?.modelo && <span>{m.propuesta.modelo}</span>}</div><p>{m.texto}</p>
               {!!m.propuesta?.rechazados.length && <small className="ia-advertencia">{m.propuesta.rechazados.length} sugerencia(s) no pasaron la validación del servidor.</small>}
               {!!m.propuesta?.advertencias?.length && <small className="ia-advertencia">La auditoría automática encontró {m.propuesta.advertencias.length} punto(s) para revisar.</small>}
             </div>

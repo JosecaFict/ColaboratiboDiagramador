@@ -1,3 +1,4 @@
+import type { ImagenMeta } from '../contracts/imagenes'
 import type { EntradaHistorialIA, ModoIA, PropuestaIA } from './tipos'
 
 /**
@@ -25,12 +26,15 @@ export interface MensajeDeChat {
   respondeA?: { nombre: string; tuyo: boolean }
   /** El pedido propio que todavía espera respuesta. */
   enviando?: boolean
+  /** La imagen de un turno IMAGEN (o de su pedido en curso): la miniatura va en el mensaje del usuario. */
+  imagen?: ImagenMeta
 }
 
 export interface PedidoEnCurso {
   id: string
   texto: string
   modo: ModoIA
+  imagen?: ImagenMeta
 }
 
 export const NOMBRE_DE_USUARIO_ELIMINADO = 'Usuario eliminado'
@@ -75,7 +79,7 @@ export function mensajesDeChat(
     return [
       {
         id: `${e.id}-usuario`, autor: 'usuario', propio, nombre, etiqueta: etiquetaDe(e), inicial: inicialDe(nombre),
-        texto: e.prompt, modo: e.modo,
+        texto: e.prompt, modo: e.modo, ...(e.imagen ? { imagen: e.imagen } : {}),
       },
       {
         id: `${e.id}-asistente`, autor: 'asistente', propio, nombre: 'ColabModel IA', etiqueta: 'ColabModel IA',
@@ -89,6 +93,7 @@ export function mensajesDeChat(
     mensajes.push({
       id: pedidoEnCurso.id, autor: 'usuario', propio: true, nombre: miNombre, etiqueta: `${miNombre} · vos`,
       inicial: inicialDe(miNombre), texto: pedidoEnCurso.texto, modo: pedidoEnCurso.modo, enviando: true,
+      ...(pedidoEnCurso.imagen ? { imagen: pedidoEnCurso.imagen } : {}),
     })
   }
   return mensajes

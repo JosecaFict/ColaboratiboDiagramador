@@ -4,7 +4,7 @@ import type { ModoIA } from './tipos'
  * CORREGIR y GENERAR no son modos del backend: el chat los resuelve con los pendientes del
  * ultimo diseño y con la revision previa al generador de Spring Boot.
  */
-export type Intencion = ModoIA | 'CORREGIR' | 'GENERAR'
+export type Intencion = Exclude<ModoIA, 'IMAGEN'> | 'CORREGIR' | 'GENERAR'
 
 const normal = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
 

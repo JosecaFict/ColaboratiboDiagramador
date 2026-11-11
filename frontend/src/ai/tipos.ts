@@ -1,6 +1,7 @@
 import type { CommandType } from '../contracts/command'
+import type { ImagenMeta, LecturaDeImagen } from '../contracts/imagenes'
 
-export type ModoIA = 'CONSULTAR' | 'REVISAR' | 'DISENAR' | 'MODIFICAR' | 'RECOMENDAR'
+export type ModoIA = 'CONSULTAR' | 'REVISAR' | 'DISENAR' | 'MODIFICAR' | 'RECOMENDAR' | 'IMAGEN'
 
 /** Respuesta de POST /ai/recomendaciones (RecomendacionesIA en el backend). */
 export interface RecomendacionIA {
@@ -48,7 +49,7 @@ export interface ComandoAceptadoIA {
 
 export interface PropuestaIA {
   diagramId: string
-  origin: 'TEXT' | 'VOICE'
+  origin: 'TEXT' | 'VOICE' | 'IMAGE'
   aceptados: ComandoAceptadoIA[]
   rechazados: { posicion: number; tipoCrudo: string; motivo: string }[]
   descartadosPorTope: string[]
@@ -57,6 +58,8 @@ export interface PropuestaIA {
   notaDelModelo: string | null
   modelo: string
   interaccionId?: string
+  /** Solo en un turno IMAGEN: lo que se leyo de la foto. */
+  lecturaDeImagen?: LecturaDeImagen
 }
 
 export interface EntradaHistorialIA {
@@ -70,6 +73,8 @@ export interface EntradaHistorialIA {
   propuesta: PropuestaIA
   aplicada: boolean
   creadaEn: string
+  /** Falta en un turno sin imagen. Con `eliminada: true` el turno muestra "imagen eliminada". */
+  imagen?: ImagenMeta
 }
 
 export interface EstadoIA {
