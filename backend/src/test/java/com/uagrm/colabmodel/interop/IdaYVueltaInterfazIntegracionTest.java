@@ -155,40 +155,20 @@ class IdaYVueltaInterfazIntegracionTest {
         System.out.println("M-QA-05 integracion · ida y vuelta " + perfil + ": " + r.comoTexto()
                 + "\n  avisos del lector: " + leido.advertencias());
         assertThat(r.diferencias().stream().map(ComparadorDeModelos.Diferencia::toString).toList())
-                .as(r.comoTexto()).containsExactlyInAnyOrderElementsOf(perfil == EscritorXmi.Perfil.ENTERPRISE_ARCHITECT
-                        ? concat(DIFERENCIAS_CONOCIDAS_METODO, DIFERENCIAS_CONOCIDAS_EA) : DIFERENCIAS_CONOCIDAS_METODO);
-    }
-
-    static List<String> concat(List<String> a, List<String> b) {
-        List<String> r = new ArrayList<>(a);
-        r.addAll(b);
-        return r;
+                .as(r.comoTexto()).containsExactlyInAnyOrderElementsOf(DIFERENCIAS_ACEPTADAS);
     }
 
     /**
-     * HALLAZGO M-QA-05 (sin corregir; pendiente de las rebanadas de importacion y exportacion de metodos): el metodo
-     * pierde visibilidad, `static` y `abstract` en la ida y vuelta, en los DOS perfiles.
-     *  - LectorXmi:646 crea `MetodoLeido` con el constructor de 3 argumentos: nunca lee visibilidad, ownerScope/isStatic
-     *    ni isAbstract de una operacion (dueno: Rodolfo).
-     *  - EscritorXmi:288 escribe la visibilidad de la operacion pero no isStatic ni isAbstract (dueno: Steven).
-     * Se fijan aqui para que el test falle (y se actualice) cuando se cierren.
+     * Integracion de la mesa (2026-11-11): las perdidas de metodos y la de la interfaz abstracta en EA ya se cerraron
+     * (rebanada b de Rodolfo y Steven). Quedan dos diferencias que el usuario acepto, iguales en los dos perfiles:
+     *  - un atributo opcional se relee como obligatorio (1..1);
+     *  - el escritor omite los roles que repiten el nombre de la clase ("cliente", "pedidos").
      */
-    static final List<String> DIFERENCIAS_CONOCIDAS_METODO = List.of(
-            "DISTINTO  Persona.describir() · visibilidad: esperado=PROTECTED obtenido=null",
-            "DISTINTO  Persona.describir() · abstracto: esperado=true obtenido=false",
-            "DISTINTO  Pedido.calcular(double) · visibilidad: esperado=PUBLIC obtenido=null",
-            "DISTINTO  Pedido.crear() · visibilidad: esperado=PUBLIC obtenido=null",
-            "DISTINTO  Pedido.crear() · estatico: esperado=true obtenido=false",
-            "DISTINTO  Pagable.pagar(double) · visibilidad: esperado=PUBLIC obtenido=null");
-
-    /**
-     * HALLAZGO M-QA-05 (sin corregir): en el perfil EA la interfaz se escribe con isAbstract="true" (a proposito, como
-     * EA; EscritorXmi:218) y LectorXmi:534 la lee como `abstracta` sin descontar las interfaces. Al reimportar, una
-     * interfaz creada con abstracta=false vuelve con abstracta=true. Este caso se fija aqui para que falle (y se
-     * actualice) cuando alguien lo corrija.
-     */
-    static final List<String> DIFERENCIAS_CONOCIDAS_EA = List.of(
-            "DISTINTO  Pagable · abstracta: esperado=false obtenido=true");
+    static final List<String> DIFERENCIAS_ACEPTADAS = List.of(
+            "DISTINTO  Persona.nombre · requerido: esperado=false obtenido=true",
+            "DISTINTO  Pedido.total · requerido: esperado=false obtenido=true",
+            "DISTINTO  Pedido -> Cliente ASSOCIATION · rolOrigen: esperado=pedidos obtenido=null",
+            "DISTINTO  Pedido -> Cliente ASSOCIATION · rolDestino: esperado=cliente obtenido=null");
 
     // ---------------------------------------------------------------- los ejemplos de Steven
     static final Path CARPETA = Path.of("C:/Users/DIEGO/PROYECTOS/ColaboratiboDiagramador/docs/MesaDeTrabajo/pruebas-ea/"
@@ -230,12 +210,9 @@ class IdaYVueltaInterfazIntegracionTest {
             informe.append(archivo).append(": ").append(r.comoTexto()).append("\n  avisos: ").append(leido.advertencias()).append('\n');
         }
         System.out.println("M-QA-05 integracion · ejemplos de Steven:\n" + informe);
-        // Los ejemplos de Steven no traen static ni abstract en metodos y su visibilidad es siempre `public`, que el lector
-        // todavia no lee (hallazgo de metodos): se conocen esas diferencias de visibilidad y la de la interfaz en EA.
-        assertThat(informe.toString()).contains("interfaz-realizacion-estandar.xmi: 2 diferencia(s):\n"
-                        + "DISTINTO  Pedido.calcular(decimal) · visibilidad: esperado=PUBLIC obtenido=null\n"
-                        + "DISTINTO  Pagable.pagar(decimal) · visibilidad: esperado=PUBLIC obtenido=null")
-                .contains("interfaz-realizacion-ea.xml: 3 diferencia(s):")
-                .contains(DIFERENCIAS_CONOCIDAS_EA.get(0));
+        // Integracion de la mesa: con la rebanada (b) el lector ya trae la visibilidad de los metodos y la interfaz
+        // ya no vuelve abstracta en EA, asi que los dos ejemplos se leen sin diferencias.
+        assertThat(informe.toString()).contains("interfaz-realizacion-estandar.xmi: Sin diferencias.")
+                .contains("interfaz-realizacion-ea.xml: Sin diferencias.");
     }
 }

@@ -231,13 +231,20 @@ class EscritorXmiInterfazTest {
             assertThat(real.getParentNode()).isEqualTo(cliente.getParentNode());
             assertThat(referenciasRotas(doc)).isEmpty();
             ModeloLeido leido = new LectorXmi().leer(ex.xmi());
-            // El lector reconoce uml:Realization hacia una interfaz y la consume (diseno existente): las
-            // operaciones de la interfaz pasan a ser metodos del cliente, y no queda como relacion suelta.
+            // Con el lector de Rodolfo (rebanada a) la realizacion vuelve como REALIZATION de Cliente a Pagable y
+            // las operaciones de la interfaz ya no se copian a la clase.
+            String clienteLeido = leido.clases().stream().filter(c -> c.nombre().equals("Cliente")).findFirst()
+                    .orElseThrow().clave();
+            String pagableLeido = leido.clases().stream().filter(c -> c.nombre().equals("Pagable")).findFirst()
+                    .orElseThrow().clave();
+            assertThat(leido.relaciones()).filteredOn(r -> r.tipo() == RelationKind.REALIZATION).singleElement()
+                    .satisfies(r -> {
+                        assertThat(r.claveOrigen()).isEqualTo(clienteLeido);
+                        assertThat(r.claveDestino()).isEqualTo(pagableLeido);
+                    });
             assertThat(leido.clases()).filteredOn(c -> c.nombre().equals("Cliente")).singleElement()
                     .satisfies(c -> assertThat(c.metodos()).extracting(ModeloLeido.MetodoLeido::nombre)
-                            .contains("pagar"));
-            assertThat(leido.relaciones()).noneMatch(r -> r.tipo() == RelationKind.DEPENDENCY
-                    && "pagar".equals(r.nombre()));
+                            .doesNotContain("pagar"));
         } else {
             Element real = hijos(cliente, "interfaceRealization").stream().findFirst().orElseThrow();
             assertThat(real.getAttribute("xmi:type")).isEqualTo("uml:InterfaceRealization");
