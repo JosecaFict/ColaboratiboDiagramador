@@ -67,7 +67,8 @@ final class Foto {
             "name", "stereotype", "isAbstract", "weak", "erKind", "inheritanceStrategy");
     static final List<String> CAMPOS_ATRIBUTO = List.of(
             "classId", "name", "dataType", "visibility", "length", "pk", "required", "unique", "ordinal",
-            "multivalued", "derived", "partialKey", "parentAttributeId", "defaultValue", "minValue", "maxValue");
+            "multivalued", "derived", "partialKey", "parentAttributeId", "defaultValue", "minValue", "maxValue",
+            "isStatic", "readOnly");
     static final List<String> CAMPOS_METODO = List.of(
             "classId", "name", "returnType", "params", "visibility", "ordinal", "isStatic", "isAbstract");
     static final List<String> CAMPOS_RELACION = List.of(
@@ -87,7 +88,7 @@ final class Foto {
      */
     private static final Set<String> BANDERAS = Set.of(
             "isAbstract", "weak", "pk", "required", "unique", "multivalued", "derived", "partialKey",
-            "identifying", "isStatic");
+            "identifying", "isStatic", "readOnly");
     private static final Set<String> DECIMALES = Set.of("minValue", "maxValue");
     private static final JsonNodeFactory JSON = JsonNodeFactory.instance;
 
@@ -180,6 +181,8 @@ final class Foto {
                 ca.put("defaultValue", texto(a.defaultValue()));
                 ca.put("minValue", decimal(a.minValue()));
                 ca.put("maxValue", decimal(a.maxValue()));
+                ca.put("isStatic", JSON.booleanNode(a.isStatic()));
+                ca.put("readOnly", JSON.booleanNode(a.readOnly()));
                 atributos.put(a.id(), new Elemento(a.id(), Tipo.ATRIBUTO, ca));
             }
             for (DiagramSnapshot.Metodo m : c.methods()) {

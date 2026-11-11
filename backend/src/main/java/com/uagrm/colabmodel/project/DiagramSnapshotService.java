@@ -502,7 +502,7 @@ public class DiagramSnapshotService {
         return new DiagramSnapshot.Atributo(a.getId(), a.getClassId(), a.getName(), a.getDataType(),
                 a.getVisibility(), a.getLength(), a.isPk(), a.isRequired(), a.isUnique(), a.getOrdinal(),
                 a.isMultivalued(), a.isDerived(), a.isPartialKey(), a.getParentAttributeId(),
-                a.getDefaultValue(), a.getMinValue(), a.getMaxValue());
+                a.getDefaultValue(), a.getMinValue(), a.getMaxValue(), a.isStatic(), a.isReadOnly());
     }
 
     private static DiagramSnapshot.Relacion aDto(UmlRelationship r) {

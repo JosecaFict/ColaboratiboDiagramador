@@ -80,7 +80,9 @@ public record DiagramSnapshot(
             UUID parentAttributeId,
             String defaultValue,
             java.math.BigDecimal minValue,
-            java.math.BigDecimal maxValue
+            java.math.BigDecimal maxValue,
+            boolean isStatic,
+            boolean readOnly
     ) {}
 
     public record Relacion(
