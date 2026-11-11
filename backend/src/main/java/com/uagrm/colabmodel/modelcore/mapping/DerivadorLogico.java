@@ -62,6 +62,20 @@ public final class DerivadorLogico {
                         + " componela 1..1 (Regla 5).");
                 continue;
             }
+            if (r.getKind() == RelationKind.REALIZATION) {
+                // Cumplir una interfaz es un contrato de codigo: no hay fila ni FK que lo represente.
+                advertencias.add("La realizacion de " + nombre(porId, r.getTargetClassId()) + " por "
+                        + nombre(porId, r.getSourceClassId()) + " no genera nada en el esquema.");
+                continue;
+            }
+            if (Interfaces.es(porId.get(r.getSourceClassId()))
+                    || Interfaces.es(porId.get(r.getTargetClassId()))) {
+                advertencias.add("La relacion entre " + nombre(porId, r.getSourceClassId()) + " y "
+                        + nombre(porId, r.getTargetClassId()) + " toca una interfaz y se ignora:"
+                        + " una interfaz es un contrato, no una entidad con filas. Unila a sus clases"
+                        + " con una realizacion.");
+                continue;
+            }
             if (Enumeraciones.es(porId.get(r.getSourceClassId()))
                     || Enumeraciones.es(porId.get(r.getTargetClassId()))) {
                 advertencias.add("La relacion entre " + nombre(porId, r.getSourceClassId()) + " y "
@@ -93,6 +107,7 @@ public final class DerivadorLogico {
         for (UmlClass c : vivas) {
             if (partesDe(plan).contains(c.getId())) continue;   // vive dentro de su duenio
             if (Enumeraciones.es(c)) continue;                      // es un tipo, no una tabla
+            if (Interfaces.es(c)) continue;                         // es un contrato, no una tabla
             if (Incrustables.es(c)) continue;                       // vive dentro de su duenio
             Borrador t = new Borrador(Nombres.tabla(c.getName()), c.getName(), c.getId());
             tablas.put(c.getId(), t);

@@ -40,11 +40,13 @@ public final class Ambiguedades {
         for (UmlRelationship r : relaciones) {
             if (r.getDeletedAt() != null) continue;
             if (r.getDegree() > 2) continue;
-            if (r.getKind() == RelationKind.DEPENDENCY || r.getKind() == RelationKind.GENERALIZATION) continue;
+            if (r.getKind() == RelationKind.DEPENDENCY || r.getKind() == RelationKind.GENERALIZATION
+                    || r.getKind() == RelationKind.REALIZATION) continue;
             UmlClass origen = porId.get(r.getSourceClassId());
             UmlClass destino = porId.get(r.getTargetClassId());
             if (origen == null || destino == null) continue;
             if (Enumeraciones.es(origen) || Enumeraciones.es(destino)) continue;
+            if (Interfaces.es(origen) || Interfaces.es(destino)) continue;
             // Componer una clase «embeddable» ya esta decidido en el modelo.
             if (Incrustables.es(origen) || Incrustables.es(destino)) continue;
 
@@ -97,7 +99,7 @@ public final class Ambiguedades {
         for (UmlAttribute a : atributos) {
             if (!a.isMultivalued()) continue;
             UmlClass duenio = porId.get(a.getClassId());
-            if (duenio == null || Enumeraciones.es(duenio)) continue;   // un literal no es un atributo
+            if (duenio == null || Enumeraciones.es(duenio) || Interfaces.es(duenio)) continue;   // un literal o un contrato: sin tabla
             if (Incrustables.es(duenio)) continue;   // se reporta al incrustar, no como A-3
             encontradas.add(new Ambiguedad(a.getId(), TipoAmbiguedad.MULTIVALUED,
                     duenio.getName() + "." + a.getName() + " [0..*]",

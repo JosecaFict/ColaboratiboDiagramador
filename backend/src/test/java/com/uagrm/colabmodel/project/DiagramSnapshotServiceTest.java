@@ -150,6 +150,29 @@ class DiagramSnapshotServiceTest {
         assertThat(service.codigoDe(UUID.randomUUID())).isEmpty();
     }
 
+    @Test
+    void una_interfaz_y_su_realizacion_salen_en_el_snapshot_con_su_estereotipo_y_su_tipo() {
+        UmlClass interfaz = clase(libroId, "Repositorio");
+        interfaz.setStereotype("interface");
+        when(classes.findByDiagramIdAndDeletedAtIsNullOrderByNameAsc(diagramId))
+                .thenReturn(List.of(interfaz, clase(socioId, "RepoLibros")));
+        when(attributes.findByClassIdInOrderByOrdinalAsc(anyCollection())).thenReturn(List.of());
+        UmlRelationship r = new UmlRelationship();
+        r.setId(UUID.randomUUID());
+        r.setDiagramId(diagramId);
+        r.setSourceClassId(socioId);
+        r.setTargetClassId(libroId);
+        r.setKind(RelationKind.REALIZATION);
+        when(relationships.findByDiagramIdAndDeletedAtIsNull(diagramId)).thenReturn(List.of(r));
+
+        DiagramSnapshot snapshot = service.de(diagramId).orElseThrow();
+
+        assertThat(snapshot.classes()).filteredOn(c -> c.name().equals("Repositorio"))
+                .extracting(DiagramSnapshot.Clase::stereotype).containsExactly("interface");
+        assertThat(snapshot.relationships()).extracting(DiagramSnapshot.Relacion::kind)
+                .containsExactly(RelationKind.REALIZATION);
+    }
+
     private UmlClass clase(UUID id, String nombre) {
         UmlClass c = new UmlClass();
         c.setId(id);

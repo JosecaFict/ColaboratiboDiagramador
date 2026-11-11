@@ -223,7 +223,7 @@ public class DiagramSnapshotService {
      */
     static String nombreSugerido(String actual, String kind, String destino, String multiplicidadDestino,
                                  String rolDestino) {
-        if ("GENERALIZATION".equals(kind) || "DEPENDENCY".equals(kind)) return null;
+        if ("GENERALIZATION".equals(kind) || "DEPENDENCY".equals(kind) || "REALIZATION".equals(kind)) return null;
         if (!nombreDeRelleno(actual) || destino == null || destino.isBlank()) return null;
         String sugerido;
         if (rolDestino != null && !rolDestino.isBlank()) {
