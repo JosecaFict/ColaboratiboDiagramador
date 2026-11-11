@@ -301,6 +301,8 @@ export function entradaDe(
       }
     }
 
+    // D-15: el cliente web todavia no edita metodos (UPDATE_METHOD); su deshacer lo arma Pedro.
+    case 'UPDATE_METHOD':
     // Necesita la decision vigente: entradaDeDecision.
     case 'SET_MODELING_DECISION':
     // Confirmar la base deja constancia de que en ESE momento se reviso ESE

@@ -60,6 +60,14 @@ public class UmlMethod implements Persistable<UUID> {
     @Column(name = "ordinal", nullable = false)
     private int ordinal = 0;
 
+    /** UML 2.5.1: BehavioralFeature.isStatic. Un metodo de clase, no de instancia. */
+    @Column(name = "is_static", nullable = false)
+    private boolean isStatic = false;
+
+    /** UML 2.5.1: BehavioralFeature.isAbstract. Sin cuerpo; lo implementa una subclase. */
+    @Column(name = "is_abstract", nullable = false)
+    private boolean isAbstract = false;
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
     public UUID getClassId() { return classId; }
@@ -74,6 +82,10 @@ public class UmlMethod implements Persistable<UUID> {
     public void setVisibility(Visibility visibility) { this.visibility = visibility; }
     public int getOrdinal() { return ordinal; }
     public void setOrdinal(int ordinal) { this.ordinal = ordinal; }
+    public boolean isStatic() { return isStatic; }
+    public void setStatic(boolean isStatic) { this.isStatic = isStatic; }
+    public boolean isAbstract() { return isAbstract; }
+    public void setAbstract(boolean isAbstract) { this.isAbstract = isAbstract; }
 
     @Override
     public boolean equals(Object o) {

@@ -16,7 +16,7 @@ export type Origin = 'MOUSE' | 'TEXT' | 'VOICE' | 'IMAGE' | 'XMI_IMPORT'
 export type CommandType =
   | 'CREATE_CLASS' | 'RENAME_CLASS' | 'DELETE_CLASS'
   | 'ADD_ATTRIBUTE' | 'UPDATE_ATTRIBUTE' | 'REMOVE_ATTRIBUTE'
-  | 'ADD_METHOD' | 'REMOVE_METHOD'
+  | 'ADD_METHOD' | 'UPDATE_METHOD' | 'REMOVE_METHOD'
   | 'CREATE_RELATION' | 'UPDATE_RELATION' | 'DELETE_RELATION'
   | 'SET_ER_FLAG' | 'SET_MODELING_DECISION'
   /** Confirma el esquema fisico revisado (ADR-032). No toca el modelo. */
@@ -187,6 +187,10 @@ export interface UmlMethod {
   params: UmlParametro[]
   visibility: Visibility
   ordinal: number
+  /** UML 2.5.1 isStatic (D-15). Ausente = false: asi lo leen los snapshots y versiones anteriores. */
+  isStatic?: boolean
+  /** UML 2.5.1 isAbstract (D-15). Ausente = false. Solo en una clase abstracta o una interfaz. */
+  isAbstract?: boolean
 }
 
 export interface UmlClass {

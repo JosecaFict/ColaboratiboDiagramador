@@ -33,6 +33,14 @@ class UmlMethod {
   String get returnType => (datos['returnType'] ?? 'void') as String;
   String get visibility => (datos['visibility'] ?? 'PUBLIC') as String;
   List<dynamic> get params => (datos['params'] as List?) ?? const [];
+
+  /// UML 2.5.1 isStatic (D-15). Ausente = false: asi lo leen los snapshots anteriores.
+  bool get isStatic => datos['isStatic'] == true;
+
+  /// UML 2.5.1 isAbstract (D-15). Ausente = false.
+  bool get isAbstract => datos['isAbstract'] == true;
+
+  UmlMethod mezclar(Json cambios) => UmlMethod({...datos, ...cambios});
 }
 
 class UmlClass {
