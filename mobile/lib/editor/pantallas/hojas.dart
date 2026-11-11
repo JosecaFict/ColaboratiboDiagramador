@@ -15,6 +15,7 @@ import 'interaccion.dart';
 String nombreDeTipo(TipoDeElemento t) => switch (t) {
       TipoDeElemento.clase => 'Clase',
       TipoDeElemento.abstracta => 'Clase abstracta',
+      TipoDeElemento.interfaz => 'Interfaz',
       TipoDeElemento.enumeracion => 'Enumeración',
       TipoDeElemento.valor => 'Valor embebido',
     };
@@ -22,6 +23,7 @@ String nombreDeTipo(TipoDeElemento t) => switch (t) {
 String tituloParaCrear(TipoDeElemento t) => switch (t) {
       TipoDeElemento.clase => 'Nombre de la clase',
       TipoDeElemento.abstracta => 'Nombre de la clase abstracta',
+      TipoDeElemento.interfaz => 'Nombre de la interfaz',
       TipoDeElemento.enumeracion => 'Nombre de la enumeración',
       TipoDeElemento.valor => 'Nombre del valor (ej. Direccion)',
     };
@@ -32,12 +34,14 @@ String nombreDeRelacion(TipoRelacion t) => switch (t) {
       TipoRelacion.composicion => 'composición',
       TipoRelacion.herencia => 'herencia',
       TipoRelacion.dependencia => 'dependencia',
+      TipoRelacion.realizacion => 'realización',
     };
 
 TipoDeElemento tipoDeClase(UmlClass c) {
   final e = (c.stereotype ?? '').toLowerCase();
   if (e == 'enumeration') return TipoDeElemento.enumeracion;
   if (e == 'embeddable') return TipoDeElemento.valor;
+  if (c.esInterfaz) return TipoDeElemento.interfaz;
   return c.isAbstract ? TipoDeElemento.abstracta : TipoDeElemento.clase;
 }
 
@@ -61,6 +65,7 @@ class ElegirElemento extends EleccionDePaleta {
 const _iconoDeElemento = {
   TipoDeElemento.clase: Icons.crop_square,
   TipoDeElemento.abstracta: Icons.crop_free,
+  TipoDeElemento.interfaz: Icons.radio_button_unchecked,
   TipoDeElemento.enumeracion: Icons.format_list_bulleted,
   TipoDeElemento.valor: Icons.inventory_2_outlined,
 };
@@ -133,8 +138,10 @@ class NotacionDeRelacion extends CustomPainter {
     final blanco = Paint()..color = Colors.white;
     final conRombo = tipo == TipoRelacion.agregacion || tipo == TipoRelacion.composicion;
     final x0 = conRombo ? 16.0 : 2.0;
-    final x1 = tipo == TipoRelacion.herencia || tipo == TipoRelacion.dependencia ? size.width - 12 : size.width - 2;
-    if (tipo == TipoRelacion.dependencia) {
+    final x1 = tipo == TipoRelacion.herencia || tipo == TipoRelacion.dependencia || tipo == TipoRelacion.realizacion
+        ? size.width - 12
+        : size.width - 2;
+    if (tipo == TipoRelacion.dependencia || tipo == TipoRelacion.realizacion) {
       for (var x = x0; x < x1; x += 7) {
         canvas.drawLine(Offset(x, y), Offset((x + 4).clamp(x0, x1), y), trazo);
       }
@@ -151,7 +158,7 @@ class NotacionDeRelacion extends CustomPainter {
       canvas.drawPath(rombo, tipo == TipoRelacion.composicion ? relleno : blanco);
       canvas.drawPath(rombo, trazo);
     }
-    if (tipo == TipoRelacion.herencia) {
+    if (tipo == TipoRelacion.herencia || tipo == TipoRelacion.realizacion) {
       final t = Path()
         ..moveTo(x1, y - 5)
         ..lineTo(size.width - 2, y)
@@ -716,7 +723,7 @@ class HojaDeRelacion extends StatelessWidget {
     final origen = _nombre(relacion.sourceClassId);
     final destino = _nombre(relacion.targetClassId);
     final tipo = TipoRelacion.desdeClave(relacion.kind);
-    final esHerencia = tipo == TipoRelacion.herencia;
+    final esHerencia = tipo == TipoRelacion.herencia || tipo == TipoRelacion.realizacion;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -433,6 +433,7 @@ class ControladorEditor extends ChangeNotifier implements EditorDeDiagrama {
           'classId': id,
           'name': nombre.trim(),
           'stereotype': switch (tipo) {
+            TipoDeElemento.interfaz => 'interface',
             TipoDeElemento.enumeracion => 'enumeration',
             TipoDeElemento.valor => 'embeddable',
             _ => null

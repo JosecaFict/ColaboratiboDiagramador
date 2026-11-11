@@ -25,6 +25,21 @@ describe('arbol del proyecto', () => {
     expect([pedido, persona, estado, direccion].map(tipoDe)).toEqual(['CLASE', 'ABSTRACTA', 'ENUM', 'VALOR'])
   })
 
+  it('una clase con estereotipo interface es una INTERFAZ y se lista como tal', () => {
+    const repo = clase('r', 'Repositorio', { stereotype: 'interface' })
+    expect(tipoDe(repo)).toBe('INTERFAZ')
+    expect(tipoDe(clase('r2', 'Otra', { stereotype: ' Interface ' }))).toBe('INTERFAZ')
+    expect(nodosDeClases([repo])[0].tipo).toBe('INTERFAZ')
+  })
+
+  it('una realizacion se lista con sus extremos y conserva su tipo', () => {
+    const repo = clase('r', 'Repositorio', { stereotype: 'interface' })
+    const r = { id: 'z', diagramId: 'd', sourceClassId: 'p', targetClassId: 'r', kind: 'REALIZATION' } as UmlRelationship
+    const [nodo] = nodosDeRelaciones([r], [pedido, repo])
+    expect(nodo.kind).toBe('REALIZATION')
+    expect(nodo.texto).toBe('Pedido — Repositorio')
+  })
+
   it('ordena por nombre sin mirar mayusculas y lista los miembros en su orden', () => {
     const nodos = nodosDeClases([pedido, persona, estado, direccion])
     expect(nodos.map((n) => n.nombre)).toEqual(['Direccion', 'Estado', 'Pedido', 'persona'])
