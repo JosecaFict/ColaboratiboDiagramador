@@ -59,6 +59,21 @@ El dictado por voz del navegador **solo funciona con HTTPS**, y el HTTPS necesit
 2. Crear un subdominio, por ejemplo `colabmodel` → queda `colabmodel.duckdns.org`.
 3. En **current ip** poner la IP elástica del paso 1 → **update ip**.
 
+**Sin IP elástica** (la IP cambia cada vez que se detiene y arranca la instancia): la EC2
+le avisa sola su IP a DuckDNS al arrancar y cada 5 minutos. Va en `~/duckdns/actualizar.sh`
+(con el token de DuckDNS, solo legible por `ubuntu`) y en el `crontab` de `ubuntu`:
+
+```bash
+mkdir -p ~/duckdns && chmod 700 ~/duckdns
+cat > ~/duckdns/actualizar.sh <<'EOF'
+#!/bin/sh
+curl -s -m 20 "https://www.duckdns.org/update?domains=<SUBDOMINIO>&token=<TOKEN>&ip=" -o "$HOME/duckdns/ultimo.log"
+EOF
+chmod 700 ~/duckdns/actualizar.sh
+printf '%s\n' '*/5 * * * * $HOME/duckdns/actualizar.sh' '@reboot sleep 30 && $HOME/duckdns/actualizar.sh' | crontab -
+cat ~/duckdns/ultimo.log   # OK = actualizado
+```
+
 ## 3 · Entrar a la EC2
 
 Desde PowerShell, en la carpeta donde está el `.pem`:
