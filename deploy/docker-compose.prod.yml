@@ -1,0 +1,66 @@
+# Despliegue de produccion: web + backend + PostgreSQL en una sola maquina.
+# Guia paso a paso: docs/DESPLIEGUE-AWS.md
+#
+#   cd deploy
+#   cp .env.example .env      # y completarlo
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Solo la web (Caddy) publica puertos. El backend y la base quedan en la red
+# interna de Docker: desde Internet no se llega a ellos.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: colabmodel
+      POSTGRES_USER: colabmodel
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Falta DB_PASSWORD en deploy/.env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U colabmodel"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/colabmodel
+      SPRING_DATASOURCE_USERNAME: colabmodel
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      COLABMODEL_JWT_SECRET: ${JWT_SECRET:?Falta JWT_SECRET en deploy/.env}
+      # IA (ver deploy/.env.example)
+      COLABMODEL_AI_PROVEEDOR: ${IA_PROVEEDOR:-ollama}
+      COLABMODEL_AI_OLLAMA_BASE_URL: ${OLLAMA_URL:-http://localhost:11434}
+      COLABMODEL_VISION_NIVEL2_PROVEEDOR: ${VISION_PROVEEDOR:-claude}
+      COLABMODEL_VISION_NIVEL2_URL: ${OLLAMA_URL:-http://localhost:11434}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      JAVA_OPTS: "-XX:MaxRAMPercentage=60 -Djava.awt.headless=true"
+
+  web:
+    build: ../frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      DOMINIO: ${DOMINIO:?Falta DOMINIO en deploy/.env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificados HTTPS: no se pierden al reiniciar
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
