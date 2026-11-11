@@ -5,10 +5,10 @@ import com.uagrm.colabmodel.iam.AppUserRepository;
 import com.uagrm.colabmodel.vision.ImagenDeEntrada;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.MessageDigest;
@@ -55,10 +55,12 @@ public class ImagenesDelChat {
     private final int maxPorDiagrama;
     private final long maxBytesPorDiagrama;
     private final ImagenDeEntrada.Limites limites;
+    private final TransactionOperations transaccion;
 
     public ImagenesDelChat(ImagenesRepository imagenes, AppUserRepository usuarios,
                            ObjectProvider<AlmacenDeImagenes> almacen,
                            ObjectProvider<ReencodadorDeImagen> reencodador,
+                           TransactionOperations transaccion,
                            @Value("${colabmodel.ai.imagenes.max-por-diagrama:100}") int maxPorDiagrama,
                            @Value("${colabmodel.ai.imagenes.max-bytes-por-diagrama:209715200}") long maxBytesPorDiagrama,
                            @Value("${colabmodel.vision.max-bytes:8388608}") long maxBytes,
@@ -71,6 +73,7 @@ public class ImagenesDelChat {
         this.usuarios = usuarios;
         this.almacen = almacen;
         this.reencodador = reencodador;
+        this.transaccion = transaccion;
         this.maxPorDiagrama = maxPorDiagrama;
         this.maxBytesPorDiagrama = maxBytesPorDiagrama;
         // Los mismos limites que la vision: una imagen guardada y una leida valen lo mismo.
@@ -84,7 +87,6 @@ public class ImagenesDelChat {
      * @throws TopeDeImagenesExcedido             413: el diagrama llego a su tope
      * @throws ResponseStatusException            503: todavia no esta conectado el almacen o el reencodador
      */
-    @Transactional
     public ResultadoDeSubida subir(UUID diagramId, UUID userId, byte[] bytes, String contentType) {
         if (bytes == null || bytes.length == 0) {
             throw new ImagenDeEntrada.ImagenInvalida("No llego ninguna imagen");
@@ -95,12 +97,19 @@ public class ImagenesDelChat {
         Optional<ImagenDelChat> yaEsta = imagenes.findByDiagramIdAndSha256AndDeletedAtIsNull(diagramId, sha);
         if (yaEsta.isPresent()) return new ResultadoDeSubida(meta(yaEsta.get()), false);
 
+        // Lo caro (decodificar y reencodar, mucha CPU) va FUERA de la transaccion: no ocupa una conexion del pool.
         ImagenDeEntrada.desde(bytes, contentType, limites);   // 400 con el mensaje de siempre
         ReencodadorDeImagen.Reencodada r = reencodador().reencodar(bytes, contentType);
 
-        // Con el diagrama bloqueado: la carrera de duplicados y la del tope se resuelven aqui.
+        // La transaccion es corta: candado, comprobar e insertar.
+        return transaccion.execute(estado -> guardar(diagramId, userId, sha, r));
+    }
+
+    private ResultadoDeSubida guardar(UUID diagramId, UUID userId, String sha, ReencodadorDeImagen.Reencodada r) {
+        // El candado del diagrama serializa las subidas: la carrera de duplicados y la del tope se resuelven aqui.
+        // Va justo antes de volver a buscar y de contar; dura hasta el fin de la transaccion.
         imagenes.bloquearDiagrama(diagramId);
-        yaEsta = imagenes.findByDiagramIdAndSha256AndDeletedAtIsNull(diagramId, sha);
+        Optional<ImagenDelChat> yaEsta = imagenes.findByDiagramIdAndSha256AndDeletedAtIsNull(diagramId, sha);
         if (yaEsta.isPresent()) return new ResultadoDeSubida(meta(yaEsta.get()), false);
 
         ImagenesRepository.Uso uso = imagenes.uso(diagramId);
@@ -117,15 +126,10 @@ public class ImagenesDelChat {
         UUID id = UUID.randomUUID();
         var nueva = new AlmacenDeImagenes.NuevaImagen(id, diagramId, userId, r.tipo(), r.ancho(), r.alto(), sha,
                 r.datos(), r.miniatura());
-        java.time.OffsetDateTime creada;
-        try {
-            creada = almacen().insertar(nueva);
-        } catch (DataIntegrityViolationException e) {
-            // Otra transaccion gano la carrera de duplicados (uq_ai_images_diagram_sha): se devuelve esa.
-            ImagenDelChat existente = imagenes.findByDiagramIdAndSha256AndDeletedAtIsNull(diagramId, sha)
-                    .orElseThrow(() -> e);
-            return new ResultadoDeSubida(meta(existente), false);
-        }
+        // Sin catch de DataIntegrityViolationException: con el candado tomado, una segunda subida espera, vuelve
+        // a buscar y ve la fila; el indice unico solo saltaria por un error real. Y en PostgreSQL, tras un INSERT
+        // fallido la transaccion queda abortada: leer dentro de un catch tambien fallaria.
+        java.time.OffsetDateTime creada = almacen().insertar(nueva);
         ImagenDelChat fila = new ImagenDelChat(id, diagramId, userId, r.tipo(), nueva.bytes(), r.ancho(),
                 r.alto(), sha, creada, null, null);
         return new ResultadoDeSubida(meta(fila), true);

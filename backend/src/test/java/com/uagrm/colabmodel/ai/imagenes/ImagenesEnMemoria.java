@@ -79,13 +79,13 @@ public class ImagenesEnMemoria {
     }
 
     public ImagenesDelChat servicio(int maxPorDiagrama, long maxBytesPorDiagrama) {
-        return new ImagenesDelChat(repo, datos.users, proveedor(almacen), proveedor(reencodador), maxPorDiagrama,
+        return new ImagenesDelChat(repo, datos.users, proveedor(almacen), proveedor(reencodador), org.springframework.transaction.support.TransactionOperations.withoutTransaction(), maxPorDiagrama,
                 maxBytesPorDiagrama, 8L * 1024 * 1024, 40_000_000L, 1600);
     }
 
     /** Sin almacen ni reencodador conectados: lo que pasa hoy en una instalacion sin su implementacion. */
     public ImagenesDelChat servicioSinCosturas() {
-        return new ImagenesDelChat(repo, datos.users, proveedor(null), proveedor(null), 100, 209_715_200L,
+        return new ImagenesDelChat(repo, datos.users, proveedor(null), proveedor(null), org.springframework.transaction.support.TransactionOperations.withoutTransaction(), 100, 209_715_200L,
                 8L * 1024 * 1024, 40_000_000L, 1600);
     }
 
