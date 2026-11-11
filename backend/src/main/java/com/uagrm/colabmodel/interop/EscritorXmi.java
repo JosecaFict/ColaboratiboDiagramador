@@ -176,6 +176,12 @@ public final class EscritorXmi {
             x.vacio("packagedElement", "xmi:type", "uml:Dependency", "xmi:id", id("r", r.getId()), "name", r.getName(),
                     "client", id("c", r.getSourceClassId()), "supplier", id("c", r.getTargetClassId()));
         }
+        // EA 16.1 solo crea el conector Realisation si la realizacion es un elemento propio del paquete.
+        if (ea) for (UmlRelationship r : realizaciones) {
+            x.vacio("packagedElement", "xmi:type", "uml:Realization", "xmi:id", id("r", r.getId()),
+                    "visibility", "public", "supplier", id("c", r.getTargetClassId()),
+                    "client", id("c", r.getSourceClassId()));
+        }
         // En EA los tipos primitivos NO van en el modelo: los define la Extension (`primitivetypes`).
         if (!ea) idTipo.forEach((nombre, id) -> {
             if (id.startsWith("t-")) x.vacio("packagedElement", "xmi:type", "uml:PrimitiveType", "xmi:id", id,
@@ -293,7 +299,8 @@ public final class EscritorXmi {
             }
         }
 
-        for (UmlRelationship r : realizaciones) {
+        // En EA la anidada NO crea conector (probado en EA 16.1, PRUEBA-B): sale a nivel de paquete.
+        if (!ea) for (UmlRelationship r : realizaciones) {
             if (r.getSourceClassId().equals(c.getId())) {
                 // client = quien realiza; supplier = contract = la interfaz (UML 2.5.1 §10.3.7).
                 x.vacio("interfaceRealization", "xmi:type", "uml:InterfaceRealization", "xmi:id", id("r", r.getId()),

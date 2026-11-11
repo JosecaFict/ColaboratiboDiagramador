@@ -218,18 +218,40 @@ class EscritorXmiInterfazTest {
 
         Element cliente = elementos(doc, "packagedElement").stream()
                 .filter(e -> idClase(perfil, CLIENTE).equals(e.getAttribute("xmi:id"))).findFirst().orElseThrow();
-        Element real = hijos(cliente, "interfaceRealization").stream().findFirst().orElseThrow();
-        assertThat(real.getAttribute("xmi:type")).isEqualTo("uml:InterfaceRealization");
-        assertThat(real.getAttribute("xmi:id")).isEqualTo(idRealizacion);
-        assertThat(real.getAttribute("client")).isEqualTo(idClase(perfil, CLIENTE));
-        assertThat(real.getAttribute("supplier")).isEqualTo(idClase(perfil, PAGABLE));
-        assertThat(real.getAttribute("contract")).isEqualTo(idClase(perfil, PAGABLE));
+        if (perfil == EscritorXmi.Perfil.ENTERPRISE_ARCHITECT) {
+            // EA 16.1 real (PRUEBA-B): la anidada no crea conector; la realizacion es un elemento del paquete.
+            assertThat(hijos(cliente, "interfaceRealization")).isEmpty();
+            assertThat(elementos(doc, "interfaceRealization")).isEmpty();
+            Element real = elementos(doc, "packagedElement").stream()
+                    .filter(e -> e.getAttribute("xmi:id").equals(idRealizacion)).findFirst().orElseThrow();
+            assertThat(real.getAttribute("xmi:type")).isEqualTo("uml:Realization");
+            assertThat(real.getAttribute("visibility")).isEqualTo("public");
+            assertThat(real.getAttribute("client")).isEqualTo(idClase(perfil, CLIENTE));
+            assertThat(real.getAttribute("supplier")).isEqualTo(idClase(perfil, PAGABLE));
+            assertThat(real.getParentNode()).isEqualTo(cliente.getParentNode());
+            assertThat(referenciasRotas(doc)).isEmpty();
+            ModeloLeido leido = new LectorXmi().leer(ex.xmi());
+            // El lector reconoce uml:Realization hacia una interfaz y la consume (diseno existente): las
+            // operaciones de la interfaz pasan a ser metodos del cliente, y no queda como relacion suelta.
+            assertThat(leido.clases()).filteredOn(c -> c.nombre().equals("Cliente")).singleElement()
+                    .satisfies(c -> assertThat(c.metodos()).extracting(ModeloLeido.MetodoLeido::nombre)
+                            .contains("pagar"));
+            assertThat(leido.relaciones()).noneMatch(r -> r.tipo() == RelationKind.DEPENDENCY
+                    && "pagar".equals(r.nombre()));
+        } else {
+            Element real = hijos(cliente, "interfaceRealization").stream().findFirst().orElseThrow();
+            assertThat(real.getAttribute("xmi:type")).isEqualTo("uml:InterfaceRealization");
+            assertThat(real.getAttribute("xmi:id")).isEqualTo(idRealizacion);
+            assertThat(real.getAttribute("client")).isEqualTo(idClase(perfil, CLIENTE));
+            assertThat(real.getAttribute("supplier")).isEqualTo(idClase(perfil, PAGABLE));
+            assertThat(real.getAttribute("contract")).isEqualTo(idClase(perfil, PAGABLE));
+            assertThat(elementos(doc, "packagedElement")).as("tampoco queda suelta en el paquete")
+                    .noneMatch(e -> e.getAttribute("xmi:id").equals(idRealizacion));
+        }
 
         assertThat(elementos(doc, "packagedElement")).as("una realizacion no es una asociacion")
                 .noneMatch(e -> "uml:Association".equals(e.getAttribute("xmi:type"))
                         && e.getAttribute("xmi:id").equals(idRealizacion));
-        assertThat(elementos(doc, "packagedElement")).as("tampoco queda suelta en el paquete")
-                .noneMatch(e -> e.getAttribute("xmi:id").equals(idRealizacion));
         assertThat(elementos(doc, "ownedEnd")).as("solo las dos asociaciones de la base tienen extremos")
                 .hasSize(4);
     }
