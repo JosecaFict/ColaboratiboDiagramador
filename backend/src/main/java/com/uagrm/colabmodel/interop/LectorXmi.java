@@ -297,6 +297,12 @@ public class LectorXmi implements LectorDeModelo {
             String id = n.idref();
             if (n.atr("scope") != null) etiqueta(id, "eascope", n.atr("scope"));
             for (Nodo h : n.hijos) {
+                // EA no escribe isStatic ni isAbstract en el ownedOperation: los guarda en <operation><type static= isAbstract=>.
+                // Con nombres propios para no chocar con `isabstract` de la clase.
+                if (n.esLocal("operation") && h.esLocal("type")) {
+                    if (h.atr("static") != null) etiqueta(id, "eaopstatic", h.atr("static"));
+                    if (h.atr("isAbstract") != null) etiqueta(id, "eaopabstract", h.atr("isAbstract"));
+                }
                 if (h.esLocal("initial") && h.atr("body") != null) etiqueta(id, "eainitial", h.atr("body"));
                 if (h.esLocal("properties")) {
                     h.atributos.forEach((k, v) -> etiqueta(id, "ea" + k, v));
@@ -532,6 +538,9 @@ public class LectorXmi implements LectorDeModelo {
             String nombre = nombreDe(c);
             if (nombre == null) throw new IllegalStateException("no tiene nombre");
             boolean abstracta = "true".equalsIgnoreCase(c.atr("isAbstract")) || tagVerdadero(c, "eaisabstract", "isabstract");
+            // Decision del usuario: el escritor de EA pone isAbstract=true en TODA interfaz a proposito, asi que
+            // en una interfaz esa bandera no dice nada. Lo abstracto son sus operaciones, no la interfaz.
+            if (esInterfaz(c)) abstracta = false;
 
             if (c.es("Enumeration") || tieneEst(c, "enumeration", "enum")) {
                 List<ModeloLeido.AtributoLeido> literales = new ArrayList<>();
@@ -643,8 +652,11 @@ public class LectorXmi implements LectorDeModelo {
                 }
                 String tipoRetorno = retorno != null ? tipoDe(retorno).nombre() : null;
                 if (tipoRetorno == null) tipoRetorno = tipoDe(op).nombre();
+                boolean estatico = "true".equalsIgnoreCase(op.atr("isStatic")) || "classifier".equalsIgnoreCase(op.atr("ownerScope"))
+                        || tagVerdadero(op, "eaopstatic");
+                boolean abstracto = "true".equalsIgnoreCase(op.atr("isAbstract")) || tagVerdadero(op, "eaopabstract");
                 metodos.add(new ModeloLeido.MetodoLeido(nombreOp.trim(), tipoRetorno == null ? "void" : tipoRetorno,
-                        List.copyOf(parametros)));
+                        List.copyOf(parametros), visibilidadDe(op), estatico, abstracto));
             }
             return metodos;
         }

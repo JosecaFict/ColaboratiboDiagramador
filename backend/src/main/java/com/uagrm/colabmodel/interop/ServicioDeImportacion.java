@@ -139,7 +139,8 @@ public class ServicioDeImportacion {
             List<PropuestaDeImportacion.MetodoPropuesto> metodosPropuestos = new ArrayList<>();
             for (ModeloLeido.MetodoLeido m : c.metodos()) {
                 metodosPropuestos.add(new PropuestaDeImportacion.MetodoPropuesto(m.nombre(), m.tipoRetorno(),
-                        m.parametros(), yaTieneMetodo.contains(firma(m))));
+                        m.parametros(), yaTieneMetodo.contains(firma(m)), m.visibilidad(), m.esEstatico(),
+                        m.esAbstracto()));
             }
             clases.add(new PropuestaDeImportacion.ClasePropuesta(c.clave(), figura.getId(), c.nombre(),
                     c.estereotipo(), c.abstracta(), existe ? figura.getId() : null, List.copyOf(atributos),
