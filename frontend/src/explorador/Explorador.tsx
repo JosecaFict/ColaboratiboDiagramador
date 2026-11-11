@@ -10,8 +10,8 @@ import {
  * paleta abajo.
  *
  * La paleta solo ofrece lo que el catalogo cerrado de comandos sabe crear
- * (ADR-014). Por eso no hay "Interfaz" ni "Realizacion": el metamodelo no los
- * tiene, y un boton que el servidor rechaza es peor que no tenerlo.
+ * (ADR-014). La interfaz es un CREATE_CLASS con estereotipo `interface` y la
+ * realizacion un tipo de relacion (D-15): el servidor ya los acepta.
  */
 
 /** Lo que esta armado en la paleta: nada (seleccionar) o un tipo de relacion. */
@@ -20,6 +20,7 @@ export type Herramienta = { tipo: 'SELECCIONAR' } | { tipo: 'RELACION'; kind: Re
 const ELEMENTOS: { tipo: TipoDeElemento; ayuda: string; icono: string }[] = [
   { tipo: 'CLASE', icono: '▭', ayuda: 'Una entidad con su propia tabla' },
   { tipo: 'ABSTRACTA', icono: '⬚', ayuda: 'Una clase que no se instancia: solo la heredan otras' },
+  { tipo: 'INTERFAZ', icono: '◌', ayuda: 'Un contrato de operaciones: no tiene tabla; las clases lo realizan' },
   { tipo: 'ENUM', icono: '☰', ayuda: 'Una lista cerrada de valores: se usa como tipo de un atributo' },
   { tipo: 'VALOR', icono: '▣', ayuda: 'Un valor embebido (@Embeddable): sin tabla propia, vive dentro de quien lo usa' },
 ]
@@ -30,10 +31,12 @@ const RELACIONES: { kind: RelationKind; nombre: string }[] = [
   { kind: 'COMPOSITION', nombre: 'composición' },
   { kind: 'GENERALIZATION', nombre: 'herencia' },
   { kind: 'DEPENDENCY', nombre: 'dependencia' },
+  { kind: 'REALIZATION', nombre: 'realización' },
 ]
 
 const PLACEHOLDER: Record<TipoDeElemento, string> = {
   CLASE: 'Nombre de la clase', ABSTRACTA: 'Nombre de la clase abstracta',
+  INTERFAZ: 'Nombre de la interfaz',
   ENUM: 'Nombre de la enumeración', VALOR: 'Nombre del valor (ej. Direccion)',
 }
 

@@ -235,6 +235,9 @@ export function Canvas({
         return { inicio: undefined, fin: 'url(#triangulo-hueco)', punteada: false }
       case 'DEPENDENCY':
         return { inicio: undefined, fin: 'url(#flecha-abierta)', punteada: true }
+      // UML 2.5.1: realizacion = linea discontinua con triangulo hueco hacia la interfaz.
+      case 'REALIZATION':
+        return { inicio: undefined, fin: 'url(#triangulo-hueco)', punteada: true }
       default:
         return { inicio: undefined, fin: undefined, punteada: false }
     }

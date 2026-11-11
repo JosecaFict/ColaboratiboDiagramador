@@ -1,5 +1,5 @@
 import {
-  SIMBOLO_VISIBILIDAD, esEmbebible, esEnumeracion,
+  SIMBOLO_VISIBILIDAD, esEmbebible, esEnumeracion, esInterfaz,
   type RelationKind, type UmlClass, type UmlRelationship,
 } from '../contracts/command'
 
@@ -9,16 +9,16 @@ import {
  */
 
 /** Que tipo de elemento es, como en la paleta. */
-export type TipoDeElemento = 'CLASE' | 'ABSTRACTA' | 'ENUM' | 'VALOR'
+export type TipoDeElemento = 'CLASE' | 'ABSTRACTA' | 'INTERFAZ' | 'ENUM' | 'VALOR'
 
 export const tipoDe = (c: UmlClass): TipoDeElemento =>
-  esEnumeracion(c) ? 'ENUM' : esEmbebible(c) ? 'VALOR' : c.isAbstract ? 'ABSTRACTA' : 'CLASE'
+  esEnumeracion(c) ? 'ENUM' : esEmbebible(c) ? 'VALOR' : esInterfaz(c) ? 'INTERFAZ' : c.isAbstract ? 'ABSTRACTA' : 'CLASE'
 
 /** La letra del icono, como la «C» de StarUML. */
-export const LETRA: Record<TipoDeElemento, string> = { CLASE: 'C', ABSTRACTA: 'A', ENUM: 'E', VALOR: 'V' }
+export const LETRA: Record<TipoDeElemento, string> = { CLASE: 'C', ABSTRACTA: 'A', INTERFAZ: 'I', ENUM: 'E', VALOR: 'V' }
 
 export const NOMBRE_DE_TIPO: Record<TipoDeElemento, string> = {
-  CLASE: 'Clase', ABSTRACTA: 'Clase abstracta', ENUM: 'Enumeración', VALOR: 'Valor embebido',
+  CLASE: 'Clase', ABSTRACTA: 'Clase abstracta', INTERFAZ: 'Interfaz', ENUM: 'Enumeración', VALOR: 'Valor embebido',
 }
 
 export interface NodoClase {
