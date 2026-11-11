@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uagrm.colabmodel.modelcore.command.*;
 import com.uagrm.colabmodel.modelcore.mapping.Ambiguedad;
+import com.uagrm.colabmodel.modelcore.mapping.Enumeraciones;
+import com.uagrm.colabmodel.modelcore.mapping.Incrustables;
+import com.uagrm.colabmodel.modelcore.mapping.Interfaces;
 import com.uagrm.colabmodel.modelcore.metamodel.*;
 import com.uagrm.colabmodel.project.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -154,6 +157,7 @@ public class CommandApplier {
                 // Como una clase nueva: si tenia SINGLE_TABLE, el lote que la
                 // restaura lo vuelve a marcar, igual que el espejo del cliente.
                 c.setInheritanceStrategy(InheritanceStrategy.JOINED);
+                validarEstereotipo(command, text(p, "stereotype"));
                 c.setStereotype(text(p, "stereotype"));
                 c.setAbstract(bool(p, "isAbstract", false));
                 c.setWeak(bool(p, "weak", false));
@@ -265,7 +269,9 @@ public class CommandApplier {
                 r.setDiagramId(command.diagramId());
                 r.setSourceClassId(srcId);
                 r.setTargetClassId(tgtId);
-                r.setKind(enumOrThrow(RelationKind.class, text(p, "kind"), command, "Tipo de relacion invalido"));
+                RelationKind tipo = enumOrThrow(RelationKind.class, text(p, "kind"), command, "Tipo de relacion invalido");
+                validarRelacion(command, tipo, findClass(command, srcId), findClass(command, tgtId));
+                r.setKind(tipo);
                 r.setName(text(p, "name"));
                 r.setSourceRole(text(p, "sourceRole"));
                 r.setTargetRole(text(p, "targetRole"));
@@ -282,7 +288,12 @@ public class CommandApplier {
                 UmlRelationship r = relationships.findById(requireUuid(command, "relationId"))
                         .filter(x -> x.getDeletedAt() == null)
                         .orElseThrow(() -> notFound(command, "La relacion no existe"));
-                if (p.has("kind")) r.setKind(enumOrThrow(RelationKind.class, p.get("kind").asText(), command, "Tipo de relacion invalido"));
+                if (p.has("kind")) {
+                    RelationKind tipo = enumOrThrow(RelationKind.class, p.get("kind").asText(), command, "Tipo de relacion invalido");
+                    validarRelacion(command, tipo, classes.findById(r.getSourceClassId()).orElse(null),
+                            classes.findById(r.getTargetClassId()).orElse(null));
+                    r.setKind(tipo);
+                }
                 if (p.has("name")) r.setName(p.get("name").isNull() ? null : p.get("name").asText());
                 if (p.has("sourceRole")) r.setSourceRole(p.get("sourceRole").isNull() ? null : p.get("sourceRole").asText());
                 if (p.has("targetRole")) r.setTargetRole(p.get("targetRole").isNull() ? null : p.get("targetRole").asText());
@@ -465,6 +476,48 @@ public class CommandApplier {
      * guarda basura, el proyecto generado no compila y el error aparece
      * recien cuando el usuario corre `mvn package`, lejos de la causa.
      */
+    /** V5: una clase no puede ser interfaz y, a la vez, enumeracion o valor embebido. */
+    private void validarEstereotipo(Command command, String estereotipo) {
+        if (estereotipo == null) return;
+        java.util.Set<String> marcas = new HashSet<>();
+        for (String marca : estereotipo.toLowerCase().split("[,;\s]+")) {
+            if (!marca.isBlank()) marcas.add(marca);
+        }
+        if (marcas.contains(Interfaces.ESTEREOTIPO)
+                && (marcas.contains(Enumeraciones.ESTEREOTIPO) || marcas.contains(Incrustables.ESTEREOTIPO))) {
+            throw invalid(command, "Una clase no puede ser interfaz y a la vez enumeracion o valor embebido: "
+                    + estereotipo);
+        }
+    }
+
+    /**
+     * V1 y V9. Las clases pueden ser null solo cuando se revalida una relacion cuyo
+     * extremo ya no esta: en ese caso no hay nada que comparar.
+     */
+    private void validarRelacion(Command command, RelationKind tipo, UmlClass origen, UmlClass destino) {
+        if (origen == null || destino == null) return;
+        if (tipo == RelationKind.REALIZATION) {
+            if (origen.getId().equals(destino.getId())) {
+                throw invalid(command, "Una clase no puede realizarse a si misma.");
+            }
+            if (Interfaces.es(origen)) {
+                throw invalid(command, origen.getName() + " es una interfaz: una interfaz no realiza a otra,"
+                        + " la extiende (generalizacion).");
+            }
+            if (Enumeraciones.es(origen)) {
+                throw invalid(command, origen.getName() + " es una enumeracion: no puede realizar una interfaz.");
+            }
+            if (!Interfaces.es(destino)) {
+                throw invalid(command, "Una realizacion termina en una interfaz y " + destino.getName()
+                        + " no lo es (estereotipo \"interface\").");
+            }
+        }
+        if (tipo == RelationKind.GENERALIZATION && Interfaces.es(origen) && !Interfaces.es(destino)) {
+            throw invalid(command, origen.getName() + " es una interfaz: solo puede extender a otra interfaz,"
+                    + " y " + destino.getName() + " no lo es.");
+        }
+    }
+
     private String parametrosValidados(Command command, JsonNode params) {
         if (params == null || params.isNull()) return "[]";
         if (!params.isArray()) throw invalid(command, "params debe ser una lista");
