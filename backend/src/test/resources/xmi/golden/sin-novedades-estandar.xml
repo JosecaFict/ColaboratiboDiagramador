@@ -1,28 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001" xmlns:uml="http://www.omg.org/spec/UML/20161101">
   <xmi:Documentation exporter="ColabModel" exporterVersion="1.0">
-    Perdidas declaradas (ADR-018): Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.
+    Perdidas declaradas (ADR-018): La multiplicidad de los atributos solo se exporta cuando son multivaluados: el dato «opcional» de los demas atributos no viaja y, al reimportar, un atributo sin multiplicidad se lee como obligatorio (1..1, el valor por omision de UML). | Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.
   </xmi:Documentation>
   <uml:Model xmi:type="uml:Model" xmi:id="modelo" name="Modelo">
     <packagedElement xmi:type="uml:Class" xmi:id="cc0000000-0000-4000-8000-000000000001" name="Persona" isAbstract="true">
       <ownedAttribute xmi:type="uml:Property" xmi:id="aa0000000-0000-4000-8000-000000000001" name="nombre" visibility="private">
         <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi#String"/>
-        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="aa0000000-0000-4000-8000-000000000001-lo"/>
-        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="aa0000000-0000-4000-8000-000000000001-up" value="1"/>
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="cc0000000-0000-4000-8000-000000000002" name="Cliente">
       <generalization xmi:type="uml:Generalization" xmi:id="rf0000000-0000-4000-8000-000000000001" general="cc0000000-0000-4000-8000-000000000001"/>
       <ownedAttribute xmi:type="uml:Property" xmi:id="aa0000000-0000-4000-8000-000000000002" name="codigo" visibility="private" isID="true">
         <type xmi:type="uml:PrimitiveType" href="http://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi#Integer"/>
-        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="aa0000000-0000-4000-8000-000000000002-lo" value="1"/>
-        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="aa0000000-0000-4000-8000-000000000002-up" value="1"/>
       </ownedAttribute>
     </packagedElement>
     <packagedElement xmi:type="uml:Class" xmi:id="cc0000000-0000-4000-8000-000000000003" name="Pedido">
       <ownedAttribute xmi:type="uml:Property" xmi:id="aa0000000-0000-4000-8000-000000000003" name="total" visibility="private" type="t-decimal">
-        <lowerValue xmi:type="uml:LiteralInteger" xmi:id="aa0000000-0000-4000-8000-000000000003-lo"/>
-        <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="aa0000000-0000-4000-8000-000000000003-up" value="1"/>
       </ownedAttribute>
       <ownedOperation xmi:type="uml:Operation" xmi:id="me0000000-0000-4000-8000-000000000001" name="calcular" visibility="public">
         <ownedParameter xmi:type="uml:Parameter" xmi:id="mpe0000000-0000-4000-8000-000000000001-0" name="descuento" direction="in" type="t-decimal">

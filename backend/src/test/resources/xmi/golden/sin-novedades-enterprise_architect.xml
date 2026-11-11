@@ -1,29 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <xmi:XMI xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1">
   <xmi:Documentation exporter="ColabModel" exporterVersion="1.0">
-    Perdidas declaradas (ADR-018): Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.
+    Perdidas declaradas (ADR-018): La multiplicidad de los atributos solo se exporta cuando son multivaluados: el dato «opcional» de los demas atributos no viaja y, al reimportar, un atributo sin multiplicidad se lee como obligatorio (1..1, el valor por omision de UML). | Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.
   </xmi:Documentation>
   <uml:Model xmi:type="uml:Model" xmi:id="EAPK_MODELO" name="EA_Model">
     <packagedElement xmi:type="uml:Package" xmi:id="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" name="ColabModel" visibility="public">
       <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000001" name="Persona" visibility="public" isAbstract="true">
         <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000001" name="nombre" visibility="private">
-          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000001_LO" value="0"/>
-          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000001_UP" value="1"/>
           <type xmi:idref="EAJava_string"/>
         </ownedAttribute>
       </packagedElement>
       <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000002" name="Cliente" visibility="public" isAbstract="false">
         <generalization xmi:type="uml:Generalization" xmi:id="EAID_F0000000_0000_4000_8000_000000000001" general="EAID_C0000000_0000_4000_8000_000000000001"/>
         <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000002" name="codigo" visibility="private" isID="true">
-          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000002_LO" value="1"/>
-          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000002_UP" value="1"/>
           <type xmi:idref="EAJava_int"/>
         </ownedAttribute>
       </packagedElement>
       <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000003" name="Pedido" visibility="public" isAbstract="false">
         <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000003" name="total" visibility="private">
-          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000003_LO" value="0"/>
-          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000003_UP" value="1"/>
           <type xmi:idref="EAJava_decimal"/>
         </ownedAttribute>
         <ownedOperation xmi:type="uml:Operation" xmi:id="EAID_E0000000_0000_4000_8000_000000000001" name="calcular" visibility="public">
@@ -81,7 +75,6 @@
         <attributes>
           <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000001" name="nombre" scope="Private">
             <properties type="string" derived="0" collection="false" changeability="changeable"/>
-            <bounds lower="0" upper="1"/>
           </attribute>
         </attributes>
       </element>
@@ -94,7 +87,6 @@
         <attributes>
           <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000002" name="codigo" scope="Private">
             <properties type="int" derived="0" collection="false" changeability="changeable"/>
-            <bounds lower="1" upper="1"/>
           </attribute>
         </attributes>
       </element>
@@ -107,7 +99,6 @@
         <attributes>
           <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000003" name="total" scope="Private">
             <properties type="decimal" derived="0" collection="false" changeability="changeable"/>
-            <bounds lower="0" upper="1"/>
           </attribute>
         </attributes>
       </element>

@@ -67,6 +67,25 @@ public final class EscritorXmi {
             "string", "String", "int", "Integer", "integer", "Integer", "boolean", "Boolean");
 
     private final boolean ea;
+    /** Nombre de cada clase del diagrama, para decidir si el rol de un extremo solo repite ese nombre. */
+    private final Map<UUID, String> nombresDeClase = new HashMap<>();
+
+    /**
+     * Un rol que es el nombre de la clase del extremo con la primera letra en minuscula, o ese nombre en plural
+     * (+s, +es), no dice nada que la clase no diga: no se exporta como nombre del extremo (decision del usuario
+     * tras verlo en EA). ColabModel lo sigue guardando; es solo la salida.
+     */
+    private boolean rolRedundante(String rol, UUID clase) {
+        String nombre = nombresDeClase.get(clase);
+        if (rol == null || rol.isBlank() || nombre == null || nombre.isBlank()) return false;
+        String base = Character.toLowerCase(nombre.charAt(0)) + nombre.substring(1);
+        return rol.equals(base) || rol.equals(base + "s") || rol.equals(base + "es");
+    }
+
+    /** El rol a escribir: null (sin nombre de extremo) cuando solo repite el nombre de la clase. */
+    private String rolExportable(String rol, UUID clase) {
+        return rolRedundante(rol, clase) ? null : rol;
+    }
     /** Solo para las fechas `created`/`modified` que EA escribe en su Extension; fijo en las pruebas. */
     private final java.time.Clock reloj;
 
@@ -115,7 +134,8 @@ public final class EscritorXmi {
 
         // Se calculan ANTES de escribir: asi viajan en el propio archivo, en
         // el `xmi:Documentation` del principio, y no solo en la respuesta HTTP.
-        List<String> perdidas = perdidasDe(clases, atributos, generalizaciones);
+        clases.forEach(c -> nombresDeClase.put(c.getId(), c.getName()));
+        List<String> perdidas = perdidasDe(clases, atributos, generalizaciones, asociaciones);
         Map<String, String> idTipo = ea ? tiposEa(clases, atributos, metodos) : tiposPrimitivos(atributos, metodos);
         String paquete = "EAPK_" + guid(UUID.nameUUIDFromBytes(("paquete" + clases.stream().map(UmlClass::getId)
                 .map(UUID::toString).sorted().toList()).getBytes(StandardCharsets.UTF_8)));
@@ -165,7 +185,8 @@ public final class EscritorXmi {
      * ni en el atributo, asi que ningun XMI las puede llevar).
      */
     private List<String> perdidasDe(List<UmlClass> clases, List<UmlAttribute> atributos,
-                                           List<UmlRelationship> generalizaciones) {
+                                           List<UmlRelationship> generalizaciones,
+                                           List<UmlRelationship> asociaciones) {
         List<String> perdidas = new ArrayList<>();
         Map<UUID, List<UmlAttribute>> atrsPorClase = agrupar(atributos, UmlAttribute::getClassId);
         for (UmlClass c : clases) {
@@ -198,6 +219,19 @@ public final class EscritorXmi {
                             + " no tiene equivalente en UML 2.5.1 estandar y no se exporta.");
                 }
             }
+        }
+        // Un solo aviso por cada una de estas dos salidas, no uno por relacion ni por atributo.
+        if (asociaciones.stream().anyMatch(r -> rolRedundante(r.getSourceRole(), r.getSourceClassId())
+                || rolRedundante(r.getTargetRole(), r.getTargetClassId()))) {
+            perdidas.add("Los roles de relacion que repiten el nombre de la clase del extremo (en minuscula o en"
+                    + " plural) no se exportan: ColabModel los conserva, pero en el XMI esos extremos quedan sin"
+                    + " rol. Un rol distinto se exporta igual.");
+        }
+        // Sin multiplicidad, UML asume 1..1: un atributo opcional se vuelve obligatorio al reimportar.
+        if (atributos.stream().anyMatch(a -> !a.isMultivalued() && !a.isRequired() && !a.isPk())) {
+            perdidas.add("La multiplicidad de los atributos solo se exporta cuando son multivaluados: el dato"
+                    + " «opcional» de los demas atributos no viaja y, al reimportar, un atributo sin multiplicidad"
+                    + " se lee como obligatorio (1..1, el valor por omision de UML).");
         }
         perdidas.add("Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de"
                 + " valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.");
@@ -263,7 +297,8 @@ public final class EscritorXmi {
                     "isID", a.isPk() ? "true" : null,
                     "isDerived", a.isDerived() ? "true" : null);
             if (!ea) tipoOmg(x, a.getDataType());
-            multiplicidad(x, ida, a.isRequired() || a.isPk() ? "1" : "0", a.isMultivalued() ? "*" : "1");
+            // Solo los multivaluados llevan multiplicidad: en los demas EA mostraba [0..1] en la caja.
+            if (a.isMultivalued()) multiplicidad(x, ida, a.isRequired() || a.isPk() ? "1" : "0", "*");
             // EA escribe el tipo DESPUES de lowerValue/upperValue y lo referencia por idref a un tipo definido
             // en la Extension (`primitivetypes`) o a una clase del modelo.
             if (ea && idTipo.containsKey(a.getDataType())) x.vacio("type", "xmi:idref", idTipo.get(a.getDataType()));
@@ -389,13 +424,15 @@ public final class EscritorXmi {
         x.abrir("packagedElement", "xmi:type", "uml:Association", "xmi:id", idr, "name", r.getName(),
                 "visibility", ea ? "public" : null, "memberEnd", origen + " " + destino, "navigableOwnedEnd", destino);
 
-        x.abrir("ownedEnd", "xmi:type", "uml:Property", "xmi:id", origen, "name", r.getSourceRole(),
+        x.abrir("ownedEnd", "xmi:type", "uml:Property", "xmi:id", origen,
+                "name", rolExportable(r.getSourceRole(), r.getSourceClassId()),
                 "type", id("c", r.getSourceClassId()), "association", idr);
         multiplicidadDe(x, origen, r.getSourceMultiplicity());
         x.cerrar("ownedEnd");
 
         boolean parte = r.getKind() == RelationKind.COMPOSITION || r.getKind() == RelationKind.AGGREGATION;
-        x.abrir("ownedEnd", "xmi:type", "uml:Property", "xmi:id", destino, "name", r.getTargetRole(),
+        x.abrir("ownedEnd", "xmi:type", "uml:Property", "xmi:id", destino,
+                "name", rolExportable(r.getTargetRole(), r.getTargetClassId()),
                 "type", id("c", r.getTargetClassId()), "association", idr,
                 "aggregation", !parte ? null : r.getKind() == RelationKind.COMPOSITION ? "composite" : "shared");
         multiplicidadDe(x, destino, r.getTargetMultiplicity());
@@ -558,8 +595,9 @@ public final class EscritorXmi {
                     // `type` es el nombre del tipo, como lo muestra EA (en un export real: type="date").
                     x.vacio("properties", "type", a.getDataType(), "derived", a.isDerived() ? "1" : "0",
                             "collection", a.isMultivalued() ? "true" : "false", "changeability", "changeable");
-                    x.vacio("bounds", "lower", a.isRequired() || a.isPk() ? "1" : "0",
-                            "upper", a.isMultivalued() ? "*" : "1");
+                    if (a.isMultivalued()) {
+                        x.vacio("bounds", "lower", a.isRequired() || a.isPk() ? "1" : "0", "upper", "*");
+                    }
                     x.cerrar("attribute");
                 }
                 x.cerrar("attributes");
@@ -685,9 +723,9 @@ public final class EscritorXmi {
             default -> "Association";
         };
         x.abrir("connector", "xmi:idref", id("r", r.getId()), "name", asociativa ? r.getName() : null);
-        extremoDeConector(x, "source", origen, localOrigen, asociativa, r.getSourceRole(), r.getSourceMultiplicity(),
+        extremoDeConector(x, "source", origen, localOrigen, asociativa, rolExportable(r.getSourceRole(), r.getSourceClassId()), r.getSourceMultiplicity(),
                 "none", false);
-        extremoDeConector(x, "target", destino, localDestino, asociativa, r.getTargetRole(), r.getTargetMultiplicity(),
+        extremoDeConector(x, "target", destino, localDestino, asociativa, rolExportable(r.getTargetRole(), r.getTargetClassId()), r.getTargetMultiplicity(),
                 k == RelationKind.COMPOSITION ? "composite" : k == RelationKind.AGGREGATION ? "shared" : "none", true);
         x.vacio("model", "ea_localid", String.valueOf(localConector));
         x.vacio("properties", "ea_type", tipoEa, "direction", "Source -> Destination");

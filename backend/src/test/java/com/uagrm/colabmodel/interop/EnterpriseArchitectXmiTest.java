@@ -32,6 +32,11 @@ class EnterpriseArchitectXmiTest {
 
     private final UUID diagramId = UUID.randomUUID();
 
+    /** Los atributos sin multiplicidad vuelven obligatorios (UML: 1..1): se compara el DDL sin esa restriccion. */
+    private static String sinNotNull(String ddl) {
+        return ddl.replace(" NOT NULL", "");
+    }
+
     private static List<DiagramLayout> enGrilla(List<UmlClass> clases) {
         List<DiagramLayout> r = new ArrayList<>();
         for (int i = 0; i < clases.size(); i++) {
@@ -69,7 +74,9 @@ class EnterpriseArchitectXmiTest {
         EscritorXmi.Exportado ex = ea(original, enGrilla(original.clases()));
 
         ModeloCanonico.Cargado vuelta = RevisionPorDefecto.aplicar(reimportar(ex.xmi()));
-        assertThat(LectorXmiTest.ddlDe(vuelta)).as(canonico).isEqualTo(LectorXmiTest.ddlDe(original));
+        // Sin multiplicidad UML asume 1..1: lo que era opcional vuelve NOT NULL (perdida declarada).
+        assertThat(sinNotNull(LectorXmiTest.ddlDe(vuelta))).as(canonico)
+                .isEqualTo(sinNotNull(LectorXmiTest.ddlDe(original)));
     }
 
     @Test

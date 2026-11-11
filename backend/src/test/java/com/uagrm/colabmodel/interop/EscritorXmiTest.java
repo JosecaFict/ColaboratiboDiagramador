@@ -34,6 +34,11 @@ class EscritorXmiTest {
 
     private final UUID diagramId = UUID.randomUUID();
 
+    /** Los atributos sin multiplicidad vuelven obligatorios (UML: 1..1): se compara el DDL sin esa restriccion. */
+    private static String sinNotNull(String ddl) {
+        return ddl.replace(" NOT NULL", "");
+    }
+
     private record IdaYVuelta(EscritorXmi.Exportado exportado, ModeloCanonico.Cargado reimportado,
                               PropuestaDeImportacion propuesta) { }
 
@@ -57,7 +62,9 @@ class EscritorXmiTest {
         ModeloCanonico.Cargado original = ModeloCanonico.cargar(canonico);
         IdaYVuelta v = idaYVuelta(original);
 
-        assertThat(LectorXmiTest.ddlDe(v.reimportado())).as(canonico).isEqualTo(LectorXmiTest.ddlDe(original));
+        // Sin multiplicidad UML asume 1..1: lo que era opcional vuelve NOT NULL (perdida declarada, ver abajo).
+        assertThat(sinNotNull(LectorXmiTest.ddlDe(v.reimportado()))).as(canonico)
+                .isEqualTo(sinNotNull(LectorXmiTest.ddlDe(original)));
         assertThat(v.exportado().xmi()).as("XMI 2.5.1 estandar, sin Extension de EA ni perfil propio")
                 .asString().contains("xmlns:uml=\"" + EscritorXmi.NS_UML + "\"")
                 .doesNotContain("xmi:version").doesNotContain("EAstereotype").doesNotContain("pathmap://");
@@ -150,10 +157,13 @@ class EscritorXmiTest {
         ModeloCanonico.Cargado m = ModeloCanonico.cargar("02-uno-a-muchos.json");
         EscritorXmi.Exportado ex = EscritorXmi.exportar(m.clases(), m.atributos(), m.metodos(), m.relaciones());
 
-        // La unica perdida siempre presente es la estructural (A-1..A-4): nada
-        // en este canonico dispara ademas estereotipo, ER o herencia.
-        assertThat(ex.perdidas()).hasSize(1);
-        assertThat(ex.perdidas().get(0)).contains("A-1..A-4");
+        // Nada en este canonico dispara estereotipo, ER ni herencia: quedan la estructural (A-1..A-4) y el aviso
+        // unico de roles que repiten el nombre de la clase (cliente, pedidos). Todos sus atributos son
+        // obligatorios, asi que no hay nada opcional que avisar.
+        assertThat(ex.perdidas()).hasSize(2);
+        assertThat(ex.perdidas()).filteredOn(p -> p.contains("A-1..A-4")).hasSize(1);
+        assertThat(ex.perdidas()).filteredOn(p -> p.contains("roles de relacion")).hasSize(1);
+        assertThat(ex.perdidas()).noneMatch(p -> p.contains("multiplicidad de los atributos"));
     }
 
     // ============================== T-05: enumeraciones y valores como UML estandar
