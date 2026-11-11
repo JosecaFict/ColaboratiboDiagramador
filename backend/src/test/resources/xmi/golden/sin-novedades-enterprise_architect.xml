@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xmi:XMI xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1" xmlns:xmi="http://schema.omg.org/spec/XMI/2.1">
+  <xmi:Documentation exporter="ColabModel" exporterVersion="1.0">
+    Perdidas declaradas (ADR-018): Las decisiones de mapeo OO-Datos (A-1..A-4: entidad debil, valor embebido, coleccion de valores, clase asociativa) no son UML: quedan en el panel de ambiguedades, no en el XMI.
+  </xmi:Documentation>
+  <uml:Model xmi:type="uml:Model" xmi:id="EAPK_MODELO" name="EA_Model">
+    <packagedElement xmi:type="uml:Package" xmi:id="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" name="ColabModel" visibility="public">
+      <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000001" name="Persona" visibility="public" isAbstract="true">
+        <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000001" name="nombre" visibility="private">
+          <type xmi:idref="EAnone_string"/>
+          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000001_LO" value="0"/>
+          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000001_UP" value="1"/>
+        </ownedAttribute>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000002" name="Cliente" visibility="public" isAbstract="false">
+        <generalization xmi:type="uml:Generalization" xmi:id="EAID_F0000000_0000_4000_8000_000000000001" general="EAID_C0000000_0000_4000_8000_000000000001"/>
+        <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000002" name="codigo" visibility="private" isID="true">
+          <type xmi:idref="EAnone_int"/>
+          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000002_LO" value="1"/>
+          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000002_UP" value="1"/>
+        </ownedAttribute>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Class" xmi:id="EAID_C0000000_0000_4000_8000_000000000003" name="Pedido" visibility="public" isAbstract="false">
+        <ownedAttribute xmi:type="uml:Property" xmi:id="EAID_A0000000_0000_4000_8000_000000000003" name="total" visibility="private">
+          <type xmi:idref="EAnone_decimal"/>
+          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_A0000000_0000_4000_8000_000000000003_LO" value="0"/>
+          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_A0000000_0000_4000_8000_000000000003_UP" value="1"/>
+        </ownedAttribute>
+        <ownedOperation xmi:type="uml:Operation" xmi:id="EAID_E0000000_0000_4000_8000_000000000001" name="calcular" visibility="public">
+          <ownedParameter xmi:type="uml:Parameter" xmi:id="EAID_E0000000_0000_4000_8000_000000000001_P0" name="descuento" direction="in">
+            <type xmi:idref="EAnone_decimal"/>
+          </ownedParameter>
+          <ownedParameter xmi:type="uml:Parameter" xmi:id="EAID_E0000000_0000_4000_8000_000000000001_RET" direction="return">
+            <type xmi:idref="EAnone_decimal"/>
+          </ownedParameter>
+        </ownedOperation>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Association" xmi:id="EAID_F0000000_0000_4000_8000_000000000002" name="hace" visibility="public" memberEnd="EAID_src00000_0000_4000_8000_000000000002 EAID_dst00000_0000_4000_8000_000000000002" navigableOwnedEnd="EAID_dst00000_0000_4000_8000_000000000002">
+        <ownedEnd xmi:type="uml:Property" xmi:id="EAID_src00000_0000_4000_8000_000000000002" type="EAID_C0000000_0000_4000_8000_000000000003" association="EAID_F0000000_0000_4000_8000_000000000002">
+          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_src00000_0000_4000_8000_000000000002_LO" value="0"/>
+          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_src00000_0000_4000_8000_000000000002_UP" value="*"/>
+        </ownedEnd>
+        <ownedEnd xmi:type="uml:Property" xmi:id="EAID_dst00000_0000_4000_8000_000000000002" type="EAID_C0000000_0000_4000_8000_000000000002" association="EAID_F0000000_0000_4000_8000_000000000002">
+          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_dst00000_0000_4000_8000_000000000002_LO" value="1"/>
+          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_dst00000_0000_4000_8000_000000000002_UP" value="1"/>
+        </ownedEnd>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Association" xmi:id="EAID_F0000000_0000_4000_8000_000000000003" visibility="public" memberEnd="EAID_src00000_0000_4000_8000_000000000003 EAID_dst00000_0000_4000_8000_000000000003" navigableOwnedEnd="EAID_dst00000_0000_4000_8000_000000000003">
+        <ownedEnd xmi:type="uml:Property" xmi:id="EAID_src00000_0000_4000_8000_000000000003" type="EAID_C0000000_0000_4000_8000_000000000003" association="EAID_F0000000_0000_4000_8000_000000000003">
+          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_src00000_0000_4000_8000_000000000003_LO" value="0"/>
+          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_src00000_0000_4000_8000_000000000003_UP" value="*"/>
+        </ownedEnd>
+        <ownedEnd xmi:type="uml:Property" xmi:id="EAID_dst00000_0000_4000_8000_000000000003" type="EAID_C0000000_0000_4000_8000_000000000002" association="EAID_F0000000_0000_4000_8000_000000000003" aggregation="composite">
+          <lowerValue xmi:type="uml:LiteralInteger" xmi:id="EAID_dst00000_0000_4000_8000_000000000003_LO" value="1"/>
+          <upperValue xmi:type="uml:LiteralUnlimitedNatural" xmi:id="EAID_dst00000_0000_4000_8000_000000000003_UP" value="1"/>
+        </ownedEnd>
+      </packagedElement>
+      <packagedElement xmi:type="uml:Dependency" xmi:id="EAID_F0000000_0000_4000_8000_000000000004" name="usa" client="EAID_C0000000_0000_4000_8000_000000000003" supplier="EAID_C0000000_0000_4000_8000_000000000001"/>
+    </packagedElement>
+  </uml:Model>
+  <xmi:Extension extender="Enterprise Architect" extenderID="6.5">
+    <elements>
+      <element xmi:idref="EAID_C0000000_0000_4000_8000_000000000001" xmi:type="uml:Class" name="Persona" scope="public">
+        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" ea_eleType="element"/>
+        <properties isSpecification="false" sType="Class" nType="0" scope="public" isAbstract="true"/>
+        <attributes>
+          <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000001" name="nombre" scope="Private">
+            <properties type="string" derived="0" collection="false" changeability="changeable"/>
+            <bounds lower="0" upper="1"/>
+          </attribute>
+        </attributes>
+      </element>
+      <element xmi:idref="EAID_C0000000_0000_4000_8000_000000000002" xmi:type="uml:Class" name="Cliente" scope="public">
+        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" ea_eleType="element"/>
+        <properties isSpecification="false" sType="Class" nType="0" scope="public" isAbstract="false"/>
+        <attributes>
+          <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000002" name="codigo" scope="Private">
+            <properties type="int" derived="0" collection="false" changeability="changeable"/>
+            <bounds lower="1" upper="1"/>
+          </attribute>
+        </attributes>
+      </element>
+      <element xmi:idref="EAID_C0000000_0000_4000_8000_000000000003" xmi:type="uml:Class" name="Pedido" scope="public">
+        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" ea_eleType="element"/>
+        <properties isSpecification="false" sType="Class" nType="0" scope="public" isAbstract="false"/>
+        <attributes>
+          <attribute xmi:idref="EAID_A0000000_0000_4000_8000_000000000003" name="total" scope="Private">
+            <properties type="decimal" derived="0" collection="false" changeability="changeable"/>
+            <bounds lower="0" upper="1"/>
+          </attribute>
+        </attributes>
+      </element>
+    </elements>
+    <diagrams>
+      <diagram xmi:id="EAID_3DBB54A5_6BB1_3E72_8623_EF27CD620D26">
+        <model package="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7" localID="1" owner="EAPK_F7050F0E_7962_34C7_A45F_D628950C56A7"/>
+        <properties name="Diagrama de clases" type="Logical"/>
+        <elements>
+          <element geometry="Left=40;Top=40;Right=210;Bottom=96;" subject="EAID_C0000000_0000_4000_8000_000000000001" seqno="1"/>
+          <element geometry="Left=290;Top=240;Right=460;Bottom=296;" subject="EAID_C0000000_0000_4000_8000_000000000002" seqno="2"/>
+          <element geometry="Left=540;Top=40;Right=710;Bottom=120;" subject="EAID_C0000000_0000_4000_8000_000000000003" seqno="3"/>
+        </elements>
+      </diagram>
+    </diagrams>
+  </xmi:Extension>
+</xmi:XMI>
