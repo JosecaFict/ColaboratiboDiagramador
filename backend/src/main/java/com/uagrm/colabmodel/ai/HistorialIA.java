@@ -2,12 +2,15 @@ package com.uagrm.colabmodel.ai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uagrm.colabmodel.ai.imagenes.ImagenMeta;
+import com.uagrm.colabmodel.ai.imagenes.ImagenesDelChat;
 import com.uagrm.colabmodel.iam.AppUser;
 import com.uagrm.colabmodel.iam.AppUserRepository;
 import com.uagrm.colabmodel.modelcore.command.CommandType;
 import com.uagrm.colabmodel.modelcore.command.Origin;
 import com.uagrm.colabmodel.project.DiagramOperation;
 import com.uagrm.colabmodel.project.DiagramOperationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,21 +31,41 @@ public class HistorialIA {
      */
     public static final String CLAVE_INTERACCION = "interaccionIA";
 
+    /**
+     * @param imagen la imagen del chat sobre la que trabajo el turno, o null (entonces no sale en el JSON). Si
+     *               fue eliminada llega con `eliminada = true` y sin bytes; nunca lleva bytes.
+     */
     public record Entrada(UUID id, UUID userId, String userName, ModoIA modo, String modelo,
                           String prompt, String respuesta, PropuestaDeIA propuesta,
-                          boolean aplicada, OffsetDateTime creadaEn) { }
+                          boolean aplicada, OffsetDateTime creadaEn, ImagenMeta imagen) {
+        /** Un turno sin imagen: todos los de antes de esta funcion. */
+        public Entrada(UUID id, UUID userId, String userName, ModoIA modo, String modelo,
+                       String prompt, String respuesta, PropuestaDeIA propuesta,
+                       boolean aplicada, OffsetDateTime creadaEn) {
+            this(id, userId, userName, modo, modelo, prompt, respuesta, propuesta, aplicada, creadaEn, null);
+        }
+    }
 
     private final InteraccionIARepository interactions;
     private final AppUserRepository users;
     private final DiagramOperationRepository operations;
     private final ObjectMapper mapper;
+    private final ImagenesDelChat imagenes;
 
+    @Autowired
     HistorialIA(InteraccionIARepository interactions, AppUserRepository users,
-                DiagramOperationRepository operations, ObjectMapper mapper) {
+                DiagramOperationRepository operations, ObjectMapper mapper, ImagenesDelChat imagenes) {
         this.interactions = interactions;
         this.users = users;
         this.operations = operations;
         this.mapper = mapper;
+        this.imagenes = imagenes;
+    }
+
+    /** Sin imagenes: los turnos salen sin `imagen`. Lo usan las pruebas anteriores a la funcion. */
+    HistorialIA(InteraccionIARepository interactions, AppUserRepository users,
+                DiagramOperationRepository operations, ObjectMapper mapper) {
+        this(interactions, users, operations, mapper, null);
     }
 
     @Transactional
@@ -71,7 +94,11 @@ public class HistorialIA {
         Map<UUID, String> nombres = users.findAllById(filas.stream().map(InteraccionIA::getUserId)
                         .filter(Objects::nonNull).collect(Collectors.toSet())).stream()
                 .collect(Collectors.toMap(AppUser::getId, AppUser::getFullName));
-        return filas.stream().map(f -> entradaDe(f, nombres.getOrDefault(f.getUserId(), "Usuario eliminado")))
+        // Las imagenes de TODOS los turnos en una sola consulta (sin N+1) y solo metadatos.
+        Map<UUID, ImagenMeta> metas = imagenes == null ? Map.of() : imagenes.metas(filas.stream()
+                .map(InteraccionIA::getImageId).filter(Objects::nonNull).collect(Collectors.toSet()));
+        return filas.stream().map(f -> entradaDe(f, nombres.getOrDefault(f.getUserId(), "Usuario eliminado"),
+                        f.getImageId() == null ? null : metas.get(f.getImageId())))
                 .toList();
     }
 
@@ -129,9 +156,15 @@ public class HistorialIA {
         return users.findById(userId).map(AppUser::getFullName).orElse("Usuario eliminado");
     }
 
+    /** Un turno suelto (registrar, marcarAplicada): su imagen, si la tiene, con una consulta. */
     private Entrada entradaDe(InteraccionIA f, String nombre) {
+        ImagenMeta imagen = imagenes == null || f.getImageId() == null ? null : imagenes.metaDe(f.getImageId());
+        return entradaDe(f, nombre, imagen);
+    }
+
+    private Entrada entradaDe(InteraccionIA f, String nombre, ImagenMeta imagen) {
         return new Entrada(f.getId(), f.getUserId(), nombre, f.getMode(), f.getModel(), f.getPrompt(),
-                f.getResponse(), leer(f.getProposal()), f.getAppliedAt() != null, f.getCreatedAt());
+                f.getResponse(), leer(f.getProposal()), f.getAppliedAt() != null, f.getCreatedAt(), imagen);
     }
 
     private String escribir(PropuestaDeIA propuesta) {

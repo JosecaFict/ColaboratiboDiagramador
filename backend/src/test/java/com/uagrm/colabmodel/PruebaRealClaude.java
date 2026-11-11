@@ -1,6 +1,6 @@
 package com.uagrm.colabmodel;
 
-import com.uagrm.colabmodel.ai.ClienteClaude;
+import com.uagrm.colabmodel.claude.ClienteClaude;
 import com.uagrm.colabmodel.ai.ComandoPropuestoIA;
 import com.uagrm.colabmodel.ai.EsquemaDeComandos;
 import com.uagrm.colabmodel.ai.ProveedorClaude;

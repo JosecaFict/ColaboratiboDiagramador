@@ -48,6 +48,10 @@ class InteraccionIA {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt = OffsetDateTime.now();
 
+    /** La imagen del chat sobre la que trabaja este turno (modo IMAGEN); null en los demas. */
+    @Column(name = "image_id")
+    private UUID imageId;
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
     public UUID getDiagramId() { return diagramId; }
@@ -70,5 +74,7 @@ class InteraccionIA {
     public void setAppliedBy(UUID appliedBy) { this.appliedBy = appliedBy; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+    public UUID getImageId() { return imageId; }
+    public void setImageId(UUID imageId) { this.imageId = imageId; }
 }
 

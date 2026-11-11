@@ -1,5 +1,6 @@
 package com.uagrm.colabmodel.ai;
 
+import com.uagrm.colabmodel.claude.ClienteClaude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
