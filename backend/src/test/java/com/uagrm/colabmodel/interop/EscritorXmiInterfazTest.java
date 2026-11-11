@@ -272,6 +272,27 @@ class EscritorXmiInterfazTest {
                 .as("el lector no toma el retorno por un parametro").noneMatch(p -> "return".equals(p.nombre()));
     }
 
+    @ParameterizedTest
+    @EnumSource(EscritorXmi.Perfil.class)
+    void un_tipo_que_es_una_clase_del_modelo_nunca_sale_como_primitivo_y_apunta_a_la_clase(EscritorXmi.Perfil perfil) {
+        // EA creaba un PrimitiveType suelto llamado Pedido por el retorno `Pedido` de `crear`.
+        UmlMethod crear = metodo(9, PERSONA, "crear", "Pedido", "[{\"name\":\"p\",\"type\":\"Cliente\"}]");
+        Modelo base = sinNovedades();
+        List<UmlMethod> metodos = new ArrayList<>(base.metodos());
+        metodos.add(crear);
+        EscritorXmi.Exportado ex = new Modelo(base.clases(), base.atributos(), metodos, base.relaciones())
+                .exportar(perfil);
+        Document doc = parsear(ex.xmi());
+
+        assertThat(elementos(doc, "packagedElement")).filteredOn(e -> "uml:PrimitiveType".equals(e.getAttribute("xmi:type")))
+                .extracting(e -> e.getAttribute("name")).doesNotContain("Pedido", "Cliente", "Persona");
+        Element op = elementos(doc, "ownedOperation").stream().filter(e -> e.getAttribute("name").equals("crear"))
+                .findFirst().orElseThrow();
+        assertThat(hijos(op, "ownedParameter")).extracting(p -> p.getAttribute("type"))
+                .containsExactly(idClase(perfil, CLIENTE), idClase(perfil, PEDIDO));
+        assertThat(referenciasRotas(doc)).isEmpty();
+    }
+
     @Test
     void el_perfil_estandar_no_lleva_extension_ni_conector() {
         String xmi = texto(conInterfaz().exportar(EscritorXmi.Perfil.ESTANDAR));

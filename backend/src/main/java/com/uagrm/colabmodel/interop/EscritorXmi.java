@@ -136,7 +136,7 @@ public final class EscritorXmi {
         // el `xmi:Documentation` del principio, y no solo en la respuesta HTTP.
         clases.forEach(c -> nombresDeClase.put(c.getId(), c.getName()));
         List<String> perdidas = perdidasDe(clases, atributos, generalizaciones, asociaciones);
-        Map<String, String> idTipo = ea ? tiposEa(clases, atributos, metodos) : tiposPrimitivos(atributos, metodos);
+        Map<String, String> idTipo = ea ? tiposEa(clases, atributos, metodos) : tiposPrimitivos(clases, atributos, metodos);
         String paquete = "EAPK_" + guid(UUID.nameUUIDFromBytes(("paquete" + clases.stream().map(UmlClass::getId)
                 .map(UUID::toString).sorted().toList()).getBytes(StandardCharsets.UTF_8)));
 
@@ -177,8 +177,10 @@ public final class EscritorXmi {
                     "client", id("c", r.getSourceClassId()), "supplier", id("c", r.getTargetClassId()));
         }
         // En EA los tipos primitivos NO van en el modelo: los define la Extension (`primitivetypes`).
-        if (!ea) idTipo.forEach((nombre, id) -> x.vacio("packagedElement", "xmi:type", "uml:PrimitiveType",
-                "xmi:id", id, "name", nombre));
+        if (!ea) idTipo.forEach((nombre, id) -> {
+            if (id.startsWith("t-")) x.vacio("packagedElement", "xmi:type", "uml:PrimitiveType", "xmi:id", id,
+                    "name", nombre);
+        });
 
         if (ea) x.cerrar("packagedElement");
         x.cerrar("uml:Model");
@@ -483,17 +485,26 @@ public final class EscritorXmi {
      * `text`...). Los que si estan van por `href` al URI oficial, no a un
      * `pathmap://` de Eclipse: ese URI lo resuelve cualquier herramienta.
      */
-    private static Map<String, String> tiposPrimitivos(List<UmlAttribute> atributos, List<UmlMethod> metodos) {
+    private static Map<String, String> tiposPrimitivos(List<UmlClass> clases, List<UmlAttribute> atributos,
+                                                      List<UmlMethod> metodos) {
         Map<String, String> idTipo = new LinkedHashMap<>();
-        for (UmlAttribute a : atributos) local(idTipo, a.getDataType());
+        // Un tipo que es una clase del modelo apunta al id de la clase; no es un primitivo (EA creaba un
+        // `PrimitiveType` suelto con el nombre de la clase).
+        Map<String, String> deClases = new HashMap<>();
+        for (UmlClass c : clases) deClases.putIfAbsent(c.getName(), "c" + c.getId());
+        for (UmlAttribute a : atributos) local(idTipo, deClases, a.getDataType());
         for (UmlMethod m : metodos) {
-            if (m.getReturnType() != null && !"void".equalsIgnoreCase(m.getReturnType())) local(idTipo, m.getReturnType());
-            for (JsonNode p : parametros(m)) local(idTipo, p.path("type").asText("string"));
+            if (m.getReturnType() != null && !"void".equalsIgnoreCase(m.getReturnType())) local(idTipo, deClases, m.getReturnType());
+            for (JsonNode p : parametros(m)) local(idTipo, deClases, p.path("type").asText("string"));
         }
         return idTipo;
     }
 
-    private static void local(Map<String, String> idTipo, String tipo) {
+    private static void local(Map<String, String> idTipo, Map<String, String> deClases, String tipo) {
+        if (tipo != null && deClases.containsKey(tipo)) {
+            idTipo.putIfAbsent(tipo, deClases.get(tipo));
+            return;
+        }
         if (tipo == null || PRIMITIVOS_OMG.containsKey(tipo.toLowerCase(Locale.ROOT))) return;
         idTipo.putIfAbsent(tipo, "t-" + tipo);
     }
